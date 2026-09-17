@@ -1,220 +1,162 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
+import React, { useState, useEffect, useCallback } from 'react';
+import { CommodityItem, NewsItem } from './types';
+import { COMMODITIES } from './data';
+import { LanguageProvider } from './context/LanguageContext';
+import { AdminDataProvider, useAdminData } from './context/AdminDataContext';
 
-import React, { useState, useEffect } from 'react';
+// Main BHP Layout Components
 import { Header } from './components/Header';
-import { SearchModal } from './components/SearchModal';
 import { HeroHeadline } from './components/HeroHeadline';
 import { HeroBanner } from './components/HeroBanner';
-import { CeoQuote } from './components/CeoQuote';
-import { BentoGrid } from './components/BentoGrid';
 import { WhatWeProduce } from './components/WhatWeProduce';
+import { BentoGrid } from './components/BentoGrid';
 import { LatestNews } from './components/LatestNews';
-import { LatestReports } from './components/LatestReports';
 import { UpcomingEvents } from './components/UpcomingEvents';
+import { LatestReports } from './components/LatestReports';
+import { CeoQuote } from './components/CeoQuote';
 import { NewsAlertsSignup } from './components/NewsAlertsSignup';
 import { Footer } from './components/Footer';
 
 // Modals
-import { CeoMessageModal } from './components/modals/CeoMessageModal';
-import { ContactUsModal } from './components/modals/ContactUsModal';
-import { CareersModal } from './components/modals/CareersModal';
-import { InvestorCentreModal } from './components/modals/InvestorCentreModal';
-import { SupplierModal } from './components/modals/SupplierModal';
 import { ProductModal } from './components/modals/ProductModal';
 import { ArticleModal } from './components/modals/ArticleModal';
+import { CareersModal } from './components/modals/CareersModal';
+import { ContactUsModal } from './components/modals/ContactUsModal';
+import { InvestorCentreModal } from './components/modals/InvestorCentreModal';
+import { SupplierModal } from './components/modals/SupplierModal';
 import { LegalModal, LegalDocType } from './components/modals/LegalModal';
+import { CeoMessageModal } from './components/modals/CeoMessageModal';
+import { SearchModal } from './components/SearchModal';
 import { CookieConsentModal } from './components/modals/CookieConsentModal';
 import { AdminPanelModal } from './components/admin/AdminPanelModal';
-import { AdminDataProvider } from './context/AdminDataContext';
 
-import { COMMODITIES } from './data';
-import { CommodityItem, NewsItem } from './types';
+function MainWebsiteContent() {
+  const { commodities, siteSettings } = useAdminData();
 
-function BHPAppContent() {
-  // Modal State Management
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isCeoModalOpen, setIsCeoModalOpen] = useState(false);
-  const [isContactOpen, setIsContactOpen] = useState(false);
-  const [isCareersOpen, setIsCareersOpen] = useState(false);
-  const [isInvestorOpen, setIsInvestorOpen] = useState(false);
-  const [investorTab, setInvestorTab] = useState<'overview' | 'dividends' | 'calendar' | 'reports'>('overview');
-  const [isSupplierOpen, setIsSupplierOpen] = useState(false);
+  // Modals state
   const [selectedCommodity, setSelectedCommodity] = useState<CommodityItem | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<NewsItem | null>(null);
-  const [legalModalType, setLegalModalType] = useState<LegalDocType | null>(null);
-  const [isCookieModalOpen, setIsCookieModalOpen] = useState(false);
-  
-  // URL-based Admin Routing (bhpnet.online/admin)
-  const checkIsAdminRoute = () => {
-    if (typeof window === 'undefined') return false;
-    const path = window.location.pathname.toLowerCase();
+  const [isCareersOpen, setIsCareersOpen] = useState(false);
+  const [isContactOpen, setIsContactOpen] = useState(false);
+  const [isInvestorOpen, setIsInvestorOpen] = useState(false);
+  const [isSupplierOpen, setIsSupplierOpen] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDocType | null>(null);
+  const [isCeoOpen, setIsCeoOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isCookieOpen, setIsCookieOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+
+  // Check URL route for /admin or #/admin
+  const checkIsAdminRoute = useCallback(() => {
+    const pathname = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase();
     const search = window.location.search.toLowerCase();
-    return (
-      path === '/admin' ||
-      path === '/admin/' ||
-      path.startsWith('/admin') ||
-      hash === '#admin' ||
-      search.includes('admin')
-    );
-  };
 
-  const [isAdminOpen, setIsAdminOpen] = useState(() => checkIsAdminRoute());
+    return (
+      pathname === '/admin' ||
+      pathname === '/admin/' ||
+      pathname.startsWith('/admin') ||
+      hash === '#/admin' ||
+      hash === '#admin' ||
+      search.includes('admin=true')
+    );
+  }, []);
 
   useEffect(() => {
-    const handleLocationChange = () => {
+    if (checkIsAdminRoute()) {
+      setIsAdminOpen(true);
+    }
+
+    const handleRouteChange = () => {
       setIsAdminOpen(checkIsAdminRoute());
     };
 
-    window.addEventListener('popstate', handleLocationChange);
-    window.addEventListener('hashchange', handleLocationChange);
-
-    // Secret shortcut Ctrl+Shift+A or Cmd+Shift+A for site administrator
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        openAdminRoute();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener('hashchange', handleRouteChange);
 
     return () => {
-      window.removeEventListener('popstate', handleLocationChange);
-      window.removeEventListener('hashchange', handleLocationChange);
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('popstate', handleRouteChange);
+      window.removeEventListener('hashchange', handleRouteChange);
     };
-  }, []);
+  }, [checkIsAdminRoute]);
 
-  const openAdminRoute = () => {
-    try {
-      window.history.pushState(null, '', '/admin');
-    } catch {
-      window.location.hash = 'admin';
-    }
+  const handleOpenAdmin = () => {
     setIsAdminOpen(true);
-  };
-
-  const closeAdminRoute = () => {
-    try {
-      window.history.pushState(null, '', '/');
-    } catch {
-      window.location.hash = '';
+    if (!window.location.pathname.includes('/admin')) {
+      window.history.pushState({}, '', '/admin');
     }
+  };
+
+  const handleCloseAdmin = () => {
     setIsAdminOpen(false);
+    if (window.location.pathname.includes('/admin') || window.location.hash.includes('admin')) {
+      window.history.pushState({}, '', '/');
+    }
   };
 
-  const handleOpenProduct = (commodityId: string) => {
-    const matched = COMMODITIES.find((c) => c.id === commodityId) || COMMODITIES[0];
-    setSelectedCommodity(matched);
-  };
-
-  const handleOpenInvestorCentre = (tab: 'overview' | 'dividends' | 'calendar' | 'reports' = 'overview') => {
-    setInvestorTab(tab);
-    setIsInvestorOpen(true);
+  const handleProductSelectById = (commodityId: string) => {
+    const pool = commodities.length > 0 ? commodities : COMMODITIES;
+    const found = pool.find((c) => c.id.toLowerCase() === commodityId.toLowerCase()) || pool[0];
+    if (found) {
+      setSelectedCommodity(found);
+    }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8F9FA] text-[#111315] selection:bg-[#F25C05] selection:text-white font-sans antialiased">
-      {/* 1. Header Navigation & Mega Menu */}
+    <div className="min-h-screen bg-[#F8F9FA] text-[#111315] flex flex-col font-sans selection:bg-[#F25C05] selection:text-white">
+      {/* Optional Top Announcement Bar */}
+      {siteSettings.announcementEnabled && siteSettings.announcementText && (
+        <div className="bg-[#F25C05] text-white text-xs font-semibold py-2 px-4 text-center tracking-wide">
+          {siteSettings.announcementText}
+        </div>
+      )}
+
+      {/* Global Navigation Header */}
       <Header
         onSearchClick={() => setIsSearchOpen(true)}
         onContactClick={() => setIsContactOpen(true)}
         onCareersClick={() => setIsCareersOpen(true)}
-        onInvestorClick={() => handleOpenInvestorCentre('overview')}
+        onInvestorClick={() => setIsInvestorOpen(true)}
         onSupplierClick={() => setIsSupplierOpen(true)}
-        onProductClick={handleOpenProduct}
-        onLegalClick={(type) => setLegalModalType(type)}
+        onProductClick={handleProductSelectById}
+        onLegalClick={(type) => setLegalDoc(type)}
+        onAdminClick={handleOpenAdmin}
       />
 
-      {/* Main Page Layout matching BHP.com */}
+      {/* Main Page Sections */}
       <main className="flex-1">
-        {/* Hero Display Headline */}
         <HeroHeadline />
-
-        {/* Hero Visual Media Banner */}
         <HeroBanner />
-
-        {/* CEO Brandon Craig Leadership Quote Banner */}
-        <CeoQuote onReadCeoMessage={() => setIsCeoModalOpen(true)} />
-
-        {/* Bento Grid: Making a Difference, Shareholder Hub, Careers, Live Stock Ticker, Where We Operate */}
+        <WhatWeProduce onCommoditySelect={(item) => setSelectedCommodity(item)} />
         <BentoGrid
-          onOpenInvestorHub={() => handleOpenInvestorCentre('overview')}
+          onOpenInvestorHub={() => setIsInvestorOpen(true)}
           onOpenCareers={() => setIsCareersOpen(true)}
         />
-
-        {/* What We Produce (Copper, Iron Ore, Steelmaking Coal, Potash) */}
-        <WhatWeProduce
-          onCommoditySelect={(commodity) => setSelectedCommodity(commodity)}
-        />
-
-        {/* Latest News & Press Releases */}
-        <LatestNews
-          onArticleSelect={(article) => setSelectedArticle(article)}
-        />
-
-        {/* Latest Reports & Financial Presentations */}
-        <LatestReports
-          onOpenReports={() => handleOpenInvestorCentre('reports')}
-        />
-
-        {/* Upcoming Events & Calendar */}
-        <UpcomingEvents
-          onOpenCalendar={() => handleOpenInvestorCentre('calendar')}
-        />
-
-        {/* Media Alerts & Email Subscriptions */}
+        <LatestNews onArticleSelect={(article) => setSelectedArticle(article)} />
+        <UpcomingEvents onOpenCalendar={() => setIsInvestorOpen(true)} />
+        <LatestReports onOpenReports={() => setIsInvestorOpen(true)} />
+        <CeoQuote onReadCeoMessage={() => setIsCeoOpen(true)} />
         <NewsAlertsSignup />
       </main>
 
-      {/* Footer with Legal, Navigation & Cookie Links */}
+      {/* Global Footer */}
       <Footer
-        onOpenPrivacy={() => setLegalModalType('privacy')}
-        onOpenModernSlavery={() => setLegalModalType('modern-slavery')}
-        onOpenTerms={() => setLegalModalType('terms')}
-        onOpenCookies={() => setIsCookieModalOpen(true)}
-        onOpenAbout={() => setIsCeoModalOpen(true)}
-        onOpenInvestors={() => handleOpenInvestorCentre('overview')}
+        onOpenPrivacy={() => setLegalDoc('privacy')}
+        onOpenModernSlavery={() => setLegalDoc('modern-slavery')}
+        onOpenTerms={() => setLegalDoc('terms')}
+        onOpenCookies={() => setIsCookieOpen(true)}
+        onOpenAbout={() => {
+          const el = document.getElementById('bento-grid-section');
+          el?.scrollIntoView({ behavior: 'smooth' });
+        }}
+        onOpenInvestors={() => setIsInvestorOpen(true)}
         onOpenCareers={() => setIsCareersOpen(true)}
         onOpenSuppliers={() => setIsSupplierOpen(true)}
         onOpenContact={() => setIsContactOpen(true)}
+        onOpenAdmin={handleOpenAdmin}
       />
 
-      {/* Interactive Global Modals */}
-      <SearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-      />
-
-      <CeoMessageModal
-        isOpen={isCeoModalOpen}
-        onClose={() => setIsCeoModalOpen(false)}
-      />
-
-      <ContactUsModal
-        isOpen={isContactOpen}
-        onClose={() => setIsContactOpen(false)}
-      />
-
-      <CareersModal
-        isOpen={isCareersOpen}
-        onClose={() => setIsCareersOpen(false)}
-      />
-
-      <InvestorCentreModal
-        isOpen={isInvestorOpen}
-        initialTab={investorTab}
-        onClose={() => setIsInvestorOpen(false)}
-      />
-
-      <SupplierModal
-        isOpen={isSupplierOpen}
-        onClose={() => setIsSupplierOpen(false)}
-      />
-
+      {/* Interactive Modals */}
       <ProductModal
         commodity={selectedCommodity}
         onClose={() => setSelectedCommodity(null)}
@@ -225,29 +167,63 @@ function BHPAppContent() {
         onClose={() => setSelectedArticle(null)}
       />
 
+      <CareersModal
+        isOpen={isCareersOpen}
+        onClose={() => setIsCareersOpen(false)}
+      />
+
+      <ContactUsModal
+        isOpen={isContactOpen}
+        onClose={() => setIsContactOpen(false)}
+      />
+
+      <InvestorCentreModal
+        isOpen={isInvestorOpen}
+        onClose={() => setIsInvestorOpen(false)}
+      />
+
+      <SupplierModal
+        isOpen={isSupplierOpen}
+        onClose={() => setIsSupplierOpen(false)}
+      />
+
       <LegalModal
-        type={legalModalType}
-        onClose={() => setLegalModalType(null)}
+        type={legalDoc}
+        onClose={() => setLegalDoc(null)}
+      />
+
+      <CeoMessageModal
+        isOpen={isCeoOpen}
+        onClose={() => setIsCeoOpen(false)}
+      />
+
+      <SearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
       />
 
       <CookieConsentModal
-        isOpen={isCookieModalOpen}
-        onClose={() => setIsCookieModalOpen(false)}
+        isOpen={isCookieOpen}
+        onClose={() => setIsCookieOpen(false)}
       />
 
-      {/* BHP Admin Panel (Accessible via /admin route or Ctrl+Shift+A) */}
+      {/* Admin Panel (accessible via /admin URL or direct link) */}
       <AdminPanelModal
         isOpen={isAdminOpen}
-        onClose={closeAdminRoute}
+        onClose={handleCloseAdmin}
       />
     </div>
   );
 }
 
-export default function App() {
+export function App() {
   return (
-    <AdminDataProvider>
-      <BHPAppContent />
-    </AdminDataProvider>
+    <LanguageProvider>
+      <AdminDataProvider>
+        <MainWebsiteContent />
+      </AdminDataProvider>
+    </LanguageProvider>
   );
 }
+
+export default App;

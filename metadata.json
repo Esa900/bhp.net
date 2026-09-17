@@ -1,6 +1,6 @@
 {
   "name": "BHP",
-  "description": "Resources that make the future possible. Official BHP homepage recreation with exact design, interactive stock ticker, news, and operations.",
+  "description": "BHP - A leading global resources company producing copper, iron ore, steelmaking coal, and potash essential for the world's future.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
