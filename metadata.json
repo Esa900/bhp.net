@@ -1,0 +1,6 @@
+{
+  "name": "BHP",
+  "description": "Resources that make the future possible. Official BHP homepage recreation with exact design, interactive stock ticker, news, and operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
