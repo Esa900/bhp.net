@@ -30,9 +30,13 @@ import {
   ChevronRight,
   EyeOff,
   LogOut,
+  Award,
+  UserCheck,
 } from 'lucide-react';
 import { useAdminData, AdminRole, JobPosting, ContactSubmission } from '../../context/AdminDataContext';
 import { CommodityItem, NewsItem, ReportItem, EventItem, StockMarketData } from '../../types';
+import { PositiveListOccupation } from '../../types/portal';
+import { ClientProfileManagementTab } from './ClientProfileManagementTab';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -41,6 +45,8 @@ interface AdminPanelModalProps {
 
 type AdminTab =
   | 'dashboard'
+  | 'client-profiles'
+  | 'positive-list'
   | 'products'
   | 'news'
   | 'investor'
@@ -94,11 +100,41 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
     adminRole,
     setAdminRole,
     changeAdminPassword,
+    positiveList,
+    addPositiveListOccupation,
+    updatePositiveListOccupation,
+    deletePositiveListOccupation,
+    resetPositiveList,
     analytics,
   } = useAdminData();
 
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Positive List State
+  const [positiveListSearch, setPositiveListSearch] = useState('');
+  const [positiveListSectorFilter, setPositiveListSectorFilter] = useState('ALL');
+  const [showPositiveListModal, setShowPositiveListModal] = useState(false);
+  const [editingOccupation, setEditingOccupation] = useState<PositiveListOccupation | null>(null);
+  const [occupationForm, setOccupationForm] = useState<{
+    anzscoCode: string;
+    title: string;
+    sector: string;
+    skillLevel: string;
+    eligibleVisas: string;
+    assessingAuthority: string;
+    minSalaryAUD: string;
+    priorityStatus: string;
+  }>({
+    anzscoCode: '',
+    title: '',
+    sector: 'Mining & Resources',
+    skillLevel: 'Skill Level 1 (Bachelor degree or higher)',
+    eligibleVisas: '482, 186, 189, 190, 491',
+    assessingAuthority: 'Engineers Australia',
+    minSalaryAUD: '$135,000 AUD',
+    priorityStatus: 'Critical Skills Priority',
+  });
 
   // Security Auth Gate States
   const [enteredPassword, setEnteredPassword] = useState('');
@@ -298,6 +334,90 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
     addJob(newJob);
     showToast(`Job opening "${newJob.title}" posted.`);
     setShowJobModal(false);
+  };
+
+  // Positive List Handlers
+  const handleOpenAddOccupation = () => {
+    setEditingOccupation(null);
+    setOccupationForm({
+      anzscoCode: '',
+      title: '',
+      sector: 'Mining & Resources',
+      skillLevel: 'Skill Level 1 (Bachelor degree or higher)',
+      eligibleVisas: '482, 186, 189, 190, 491',
+      assessingAuthority: 'Engineers Australia',
+      minSalaryAUD: '$135,000 AUD',
+      priorityStatus: 'Critical Skills Priority',
+    });
+    setShowPositiveListModal(true);
+  };
+
+  const handleOpenEditOccupation = (item: PositiveListOccupation) => {
+    setEditingOccupation(item);
+    setOccupationForm({
+      anzscoCode: item.anzscoCode,
+      title: item.title,
+      sector: item.sector,
+      skillLevel: item.skillLevel || 'Skill Level 1 (Bachelor degree or higher)',
+      eligibleVisas: item.eligibleVisas.join(', '),
+      assessingAuthority: item.assessingAuthority,
+      minSalaryAUD: item.minSalaryAUD || item.minimumSalary || '$110,000 AUD',
+      priorityStatus: item.priorityStatus || item.demandStatus || 'Critical Skills Priority',
+    });
+    setShowPositiveListModal(true);
+  };
+
+  const handleSaveOccupation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!occupationForm.anzscoCode.trim() || !occupationForm.title.trim()) {
+      showToast('Error: ANZSCO Code and Title are required.');
+      return;
+    }
+
+    const visas = occupationForm.eligibleVisas
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean);
+
+    const item: PositiveListOccupation = {
+      anzscoCode: occupationForm.anzscoCode.trim(),
+      title: occupationForm.title.trim(),
+      sector: occupationForm.sector,
+      skillLevel: occupationForm.skillLevel,
+      eligibleVisas: visas.length > 0 ? visas : ['482', '186'],
+      assessingAuthority: occupationForm.assessingAuthority.trim() || 'VETASSESS',
+      minimumSalary: occupationForm.minSalaryAUD.trim() || '$110,000 AUD',
+      minSalaryAUD: occupationForm.minSalaryAUD.trim() || '$110,000 AUD',
+      demandStatus: occupationForm.priorityStatus.trim() || 'Critical Shortage',
+      priorityStatus: occupationForm.priorityStatus.trim() || 'Critical Skills Priority',
+      australianStates: ['WA', 'QLD', 'NSW', 'SA', 'NT'],
+      description: `Commonwealth skilled work listed occupation for ${occupationForm.title.trim()}.`,
+    };
+
+    if (editingOccupation) {
+      updatePositiveListOccupation(editingOccupation.anzscoCode, item);
+      showToast(`Occupation "${item.title}" (${item.anzscoCode}) updated successfully.`);
+    } else {
+      addPositiveListOccupation(item);
+      showToast(`New Occupation "${item.title}" (${item.anzscoCode}) added to Positive List.`);
+    }
+
+    setShowPositiveListModal(false);
+    setEditingOccupation(null);
+  };
+
+  const handleDeleteOccupation = (anzscoCode: string, title: string) => {
+    if (window.confirm(`Are you sure you want to remove "${title}" (ANZSCO: ${anzscoCode}) from the Positive List?`)) {
+      deletePositiveListOccupation(anzscoCode);
+      showToast(`Occupation "${title}" removed from Positive List.`);
+    }
+  };
+
+  const handleResetPositiveList = () => {
+    if (window.confirm('Reset Positive List to Commonwealth standard default occupations? This will restore original list entries.')) {
+      resetPositiveList();
+      showToast('Positive List restored to standard official occupations.');
+    }
   };
 
   // API Test
@@ -654,6 +774,23 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   <span>7. Settings & SEO</span>
                 </div>
                 {!canAccessSettings && <Lock className="w-3 h-3 text-gray-500" />}
+              </button>
+
+              <button
+                onClick={() => setActiveTab('positive-list')}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'positive-list'
+                    ? 'bg-[#F25C05] text-white shadow-sm'
+                    : 'text-gray-300 hover:bg-[#23262D] hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Award className="w-4 h-4 shrink-0 text-[#FFCD00]" />
+                  <span>8. Positive List</span>
+                </div>
+                <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-black/40 text-[#FFCD00]">
+                  {positiveList.length}
+                </span>
               </button>
             </nav>
 
@@ -1915,6 +2052,178 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               </div>
             )}
 
+            {/* MODULE 8: POSITIVE LIST FOR SKILLED WORK */}
+            {activeTab === 'positive-list' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Module Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#1C1E23] p-6 rounded-xl border border-[#2B2F38]">
+                  <div>
+                    <div className="flex items-center gap-2 text-xs font-bold text-[#FFCD00] uppercase tracking-wider mb-1">
+                      <Award className="w-4 h-4 text-[#FFCD00]" />
+                      <span>ANZSCO Priority Migration Skilled Occupation List (PMSOL)</span>
+                    </div>
+                    <h3 className="text-xl sm:text-2xl font-black text-white">
+                      Positive List for Skilled Work Management
+                    </h3>
+                    <p className="text-xs sm:text-sm text-gray-400 mt-1 max-w-2xl">
+                      Add, edit, or remove approved Australian skilled occupations. Changes synchronize in real-time with the client Document Verification Portal.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleResetPositiveList}
+                      className="px-3.5 py-2 bg-[#262A33] hover:bg-[#323742] text-gray-300 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border border-[#3A404E]"
+                      title="Restore original standard occupations"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Reset Standard List</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenAddOccupation}
+                      className="px-4 py-2 bg-[#F25C05] hover:bg-[#d84e00] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Add New Occupation</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search & Sector Filters */}
+                <div className="bg-[#1C1E23] p-4 rounded-xl border border-[#2B2F38] flex flex-col sm:flex-row gap-3 items-center justify-between">
+                  <div className="relative w-full sm:w-80">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={positiveListSearch}
+                      onChange={(e) => setPositiveListSearch(e.target.value)}
+                      placeholder="Search occupation title, ANZSCO code, or authority..."
+                      className="w-full pl-9 pr-3 py-2 bg-[#15171A] border border-[#2E323D] rounded-lg text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#F25C05]"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                    <span className="text-xs text-gray-400 font-medium whitespace-nowrap hidden md:inline">Sector:</span>
+                    {['ALL', 'Mining & Resources', 'Engineering', 'Construction & Trades', 'IT & Technology', 'Healthcare'].map((sec) => (
+                      <button
+                        key={sec}
+                        type="button"
+                        onClick={() => setPositiveListSectorFilter(sec)}
+                        className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                          positiveListSectorFilter === sec
+                            ? 'bg-[#FFCD00] text-black font-bold'
+                            : 'bg-[#15171A] text-gray-400 hover:text-white border border-[#2E323D]'
+                        }`}
+                      >
+                        {sec}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Occupations Table */}
+                <div className="bg-[#1C1E23] rounded-xl border border-[#2B2F38] overflow-hidden">
+                  <div className="px-5 py-3.5 border-b border-[#2B2F38] flex items-center justify-between">
+                    <div className="text-xs font-bold text-gray-300">
+                      Approved Occupations Database ({positiveList.length} total)
+                    </div>
+                    <div className="text-[11px] text-gray-400">
+                      Live sync to Portal: Row 2 Item 4 & Positive List Section
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs text-gray-300">
+                      <thead className="bg-[#15171A] text-gray-400 uppercase text-[10px] font-bold border-b border-[#2B2F38]">
+                        <tr>
+                          <th className="px-4 py-3">ANZSCO</th>
+                          <th className="px-4 py-3">Occupation Title</th>
+                          <th className="px-4 py-3">Sector</th>
+                          <th className="px-4 py-3">Eligible Visas</th>
+                          <th className="px-4 py-3">Assessing Body</th>
+                          <th className="px-4 py-3">Min Salary</th>
+                          <th className="px-4 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#262932]">
+                        {positiveList
+                          .filter((item) => {
+                            const q = positiveListSearch.toLowerCase();
+                            const matchesSearch =
+                              item.title.toLowerCase().includes(q) ||
+                              item.anzscoCode.includes(q) ||
+                              item.assessingAuthority.toLowerCase().includes(q);
+                            const matchesSector =
+                              positiveListSectorFilter === 'ALL' || item.sector === positiveListSectorFilter;
+                            return matchesSearch && matchesSector;
+                          })
+                          .map((item) => (
+                            <tr key={item.anzscoCode} className="hover:bg-[#20232A] transition-colors">
+                              <td className="px-4 py-3 font-mono font-bold text-white whitespace-nowrap">
+                                <span className="bg-[#15171A] px-2 py-0.5 rounded border border-[#2E323D]">
+                                  {item.anzscoCode}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 font-semibold text-white">
+                                <div>{item.title}</div>
+                                <span className="text-[10px] text-emerald-400 font-medium">
+                                  {item.priorityStatus}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
+                                <div>{item.sector}</div>
+                                <div className="text-[10px] text-gray-500">{item.skillLevel.split('(')[0]}</div>
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <div className="flex flex-wrap gap-1">
+                                  {item.eligibleVisas.map((v) => (
+                                    <span
+                                      key={v}
+                                      className="px-1.5 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/40 text-[10px] font-mono font-bold"
+                                    >
+                                      {v}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-gray-300 whitespace-nowrap font-medium">
+                                {item.assessingAuthority}
+                              </td>
+                              <td className="px-4 py-3 text-amber-300 font-mono font-bold whitespace-nowrap">
+                                {item.minSalaryAUD}
+                              </td>
+                              <td className="px-4 py-3 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditOccupation(item)}
+                                    className="p-1.5 text-gray-300 hover:text-white bg-[#252830] hover:bg-[#323640] rounded transition-colors cursor-pointer"
+                                    title="Edit Occupation"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteOccupation(item.anzscoCode, item.title)}
+                                    className="p-1.5 text-gray-300 hover:text-red-300 bg-[#252830] hover:bg-red-950/70 rounded transition-colors cursor-pointer"
+                                    title="Remove from Positive List"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </main>
         </div>
 
@@ -2436,6 +2745,176 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     className="px-5 py-2 bg-[#F25C05] hover:bg-[#d84e00] text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-sm"
                   >
                     Save New Password
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: Positive List Add / Edit Dialog */}
+        {showPositiveListModal && (
+          <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-[#1C1E23] border border-[#3A3F4C] text-white w-full max-w-xl rounded-xl p-6 shadow-2xl space-y-4 my-8 animate-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b border-[#2C303B] pb-3">
+                <div className="flex items-center gap-2">
+                  <Award className="w-5 h-5 text-[#FFCD00]" />
+                  <h4 className="font-bold text-base text-white">
+                    {editingOccupation
+                      ? `Edit Occupation: ${editingOccupation.title} (${editingOccupation.anzscoCode})`
+                      : 'Add New Skilled Occupation (নতুন পেশা যোগ করুন)'}
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPositiveListModal(false)}
+                  className="text-gray-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveOccupation} className="space-y-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      ANZSCO Code <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 233611"
+                      value={occupationForm.anzscoCode}
+                      onChange={(e) => setOccupationForm({ ...occupationForm, anzscoCode: e.target.value })}
+                      disabled={!!editingOccupation}
+                      className="w-full bg-[#15171A] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white disabled:opacity-50 focus:outline-none focus:border-[#F25C05]"
+                    />
+                    {editingOccupation && (
+                      <span className="text-[10px] text-gray-400">ANZSCO code is unique identifier.</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      Priority Status
+                    </label>
+                    <select
+                      value={occupationForm.priorityStatus}
+                      onChange={(e) => setOccupationForm({ ...occupationForm, priorityStatus: e.target.value })}
+                      className="w-full bg-[#15171A] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F25C05]"
+                    >
+                      <option value="Critical Skills Priority">Critical Skills Priority</option>
+                      <option value="High Demand">High Demand</option>
+                      <option value="Regional Priority">Regional Priority</option>
+                      <option value="Medium Demand">Medium Demand</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">
+                    Occupation Title <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Mining & Petroleum Engineer"
+                    value={occupationForm.title}
+                    onChange={(e) => setOccupationForm({ ...occupationForm, title: e.target.value })}
+                    className="w-full bg-[#15171A] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F25C05]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      Industry Sector
+                    </label>
+                    <select
+                      value={occupationForm.sector}
+                      onChange={(e) => setOccupationForm({ ...occupationForm, sector: e.target.value })}
+                      className="w-full bg-[#15171A] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F25C05]"
+                    >
+                      <option value="Mining & Resources">Mining & Resources</option>
+                      <option value="Engineering">Engineering</option>
+                      <option value="Construction & Trades">Construction & Trades</option>
+                      <option value="IT & Technology">IT & Technology</option>
+                      <option value="Healthcare">Healthcare</option>
+                      <option value="Agriculture & Environment">Agriculture & Environment</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      Skill Level
+                    </label>
+                    <select
+                      value={occupationForm.skillLevel}
+                      onChange={(e) => setOccupationForm({ ...occupationForm, skillLevel: e.target.value })}
+                      className="w-full bg-[#15171A] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F25C05]"
+                    >
+                      <option value="Skill Level 1 (Bachelor degree or higher)">Skill Level 1 (Bachelor degree or higher)</option>
+                      <option value="Skill Level 2 (Associate degree / Diploma)">Skill Level 2 (Associate degree / Diploma)</option>
+                      <option value="Skill Level 3 (Certificate IV / III + experience)">Skill Level 3 (Certificate IV / III + experience)</option>
+                      <option value="Skill Level 4 (Certificate II / III)">Skill Level 4 (Certificate II / III)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      Eligible Visas (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 482, 186, 189, 190, 491"
+                      value={occupationForm.eligibleVisas}
+                      onChange={(e) => setOccupationForm({ ...occupationForm, eligibleVisas: e.target.value })}
+                      className="w-full bg-[#15171A] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F25C05]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-300 mb-1">
+                      Assessing Authority Body
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Engineers Australia / VETASSESS"
+                      value={occupationForm.assessingAuthority}
+                      onChange={(e) => setOccupationForm({ ...occupationForm, assessingAuthority: e.target.value })}
+                      className="w-full bg-[#15171A] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F25C05]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">
+                    Minimum Base Salary Threshold (AUD)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. $135,000 AUD"
+                    value={occupationForm.minSalaryAUD}
+                    onChange={(e) => setOccupationForm({ ...occupationForm, minSalaryAUD: e.target.value })}
+                    className="w-full bg-[#15171A] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#F25C05]"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2C303B]">
+                  <button
+                    type="button"
+                    onClick={() => setShowPositiveListModal(false)}
+                    className="px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-300 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-[#F25C05] hover:bg-[#d84e00] text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shadow-sm"
+                  >
+                    {editingOccupation ? 'Save Changes' : 'Add to Positive List'}
                   </button>
                 </div>
               </form>
