@@ -12,7 +12,6 @@ interface FooterProps {
   onOpenSuppliers?: () => void;
   onOpenContact?: () => void;
   onOpenAdmin?: () => void;
-  onOpenPortal?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -26,7 +25,6 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenSuppliers,
   onOpenContact,
   onOpenAdmin,
-  onOpenPortal,
 }) => {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -277,15 +275,6 @@ export const Footer: React.FC<FooterProps> = ({
               >
                 Cookie Preferences
               </button>
-              {onOpenPortal && (
-                <button
-                  type="button"
-                  onClick={onOpenPortal}
-                  className="text-[#FFCD00] hover:underline transition-colors cursor-pointer font-bold flex items-center gap-1"
-                >
-                  <span>ImmiAccount Document Verification</span>
-                </button>
-              )}
             </div>
 
           </div>

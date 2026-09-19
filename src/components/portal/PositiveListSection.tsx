@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Award, Search, Filter, CheckCircle2, ChevronRight, Briefcase, DollarSign, Building, AlertTriangle, Info } from 'lucide-react';
-import { useAdminData } from '../../context/AdminDataContext';
+import { POSITIVE_LIST_DATA } from '../../data/portalData';
 import { PositiveListOccupation } from '../../types/portal';
 
 interface PositiveListSectionProps {
@@ -10,7 +10,6 @@ interface PositiveListSectionProps {
 export const PositiveListSection: React.FC<PositiveListSectionProps> = ({
   onSelectOccupation,
 }) => {
-  const { positiveList } = useAdminData();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [selectedVisa, setSelectedVisa] = useState<string>('ALL');
@@ -20,7 +19,7 @@ export const PositiveListSection: React.FC<PositiveListSectionProps> = ({
   const visaOptions = ['ALL', '482', '186', '189', '190', '491'];
 
   const filteredList = useMemo(() => {
-    return (positiveList || []).filter((item) => {
+    return POSITIVE_LIST_DATA.filter((item) => {
       const matchesSearch =
         item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.anzscoCode.includes(searchQuery) ||
@@ -31,7 +30,7 @@ export const PositiveListSection: React.FC<PositiveListSectionProps> = ({
 
       return matchesSearch && matchesSector && matchesVisa;
     });
-  }, [positiveList, searchQuery, selectedSector, selectedVisa]);
+  }, [searchQuery, selectedSector, selectedVisa]);
 
   return (
     <div id="positive-list-section" className="bg-white rounded-xl shadow-sm border border-[#D5D9DE] overflow-hidden mb-8">
@@ -54,7 +53,7 @@ export const PositiveListSection: React.FC<PositiveListSectionProps> = ({
           <div className="flex items-center gap-3">
             <div className="bg-[#001D33] px-4 py-2.5 rounded-lg border border-[#0A3D63] text-right">
               <div className="text-[10px] uppercase font-bold text-gray-400">Total Approved Roles</div>
-              <div className="text-lg font-black text-[#FFCD00]">{positiveList.length} Occupations</div>
+              <div className="text-lg font-black text-[#FFCD00]">{POSITIVE_LIST_DATA.length} Occupations</div>
             </div>
           </div>
         </div>

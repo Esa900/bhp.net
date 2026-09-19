@@ -29,7 +29,6 @@ import { CeoMessageModal } from './components/modals/CeoMessageModal';
 import { SearchModal } from './components/SearchModal';
 import { CookieConsentModal } from './components/modals/CookieConsentModal';
 import { AdminPanelModal } from './components/admin/AdminPanelModal';
-import { DocumentVerificationPortal } from './components/portal/DocumentVerificationPortal';
 
 function MainWebsiteContent() {
   const { commodities, siteSettings } = useAdminData();
@@ -46,7 +45,6 @@ function MainWebsiteContent() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCookieOpen, setIsCookieOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [isPortalOpen, setIsPortalOpen] = useState(false);
 
   // Check URL route for /admin or #/admin
   const checkIsAdminRoute = useCallback(() => {
@@ -64,36 +62,13 @@ function MainWebsiteContent() {
     );
   }, []);
 
-  // Check URL route for /portal or #/portal
-  const checkIsPortalRoute = useCallback(() => {
-    const pathname = window.location.pathname.toLowerCase();
-    const hash = window.location.hash.toLowerCase();
-    const search = window.location.search.toLowerCase();
-
-    return (
-      pathname === '/portal' ||
-      pathname === '/portal/' ||
-      pathname.startsWith('/portal') ||
-      pathname.startsWith('/verify') ||
-      pathname.startsWith('/dvs') ||
-      hash === '#/portal' ||
-      hash === '#portal' ||
-      search.includes('portal=true') ||
-      search.includes('verify=true')
-    );
-  }, []);
-
   useEffect(() => {
     if (checkIsAdminRoute()) {
       setIsAdminOpen(true);
     }
-    if (checkIsPortalRoute()) {
-      setIsPortalOpen(true);
-    }
 
     const handleRouteChange = () => {
       setIsAdminOpen(checkIsAdminRoute());
-      setIsPortalOpen(checkIsPortalRoute());
     };
 
     window.addEventListener('popstate', handleRouteChange);
@@ -103,7 +78,7 @@ function MainWebsiteContent() {
       window.removeEventListener('popstate', handleRouteChange);
       window.removeEventListener('hashchange', handleRouteChange);
     };
-  }, [checkIsAdminRoute, checkIsPortalRoute]);
+  }, [checkIsAdminRoute]);
 
   const handleOpenAdmin = () => {
     setIsAdminOpen(true);
@@ -115,24 +90,8 @@ function MainWebsiteContent() {
   const handleCloseAdmin = () => {
     setIsAdminOpen(false);
     if (window.location.pathname.includes('/admin') || window.location.hash.includes('admin')) {
-      window.history.pushState({}, '', isPortalOpen ? '/portal' : '/');
-    }
-  };
-
-  const handleOpenPortal = () => {
-    setIsPortalOpen(true);
-    if (!window.location.pathname.includes('/portal')) {
-      window.history.pushState({}, '', '/portal');
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleClosePortal = () => {
-    setIsPortalOpen(false);
-    if (window.location.pathname.includes('/portal') || window.location.hash.includes('portal')) {
       window.history.pushState({}, '', '/');
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleProductSelectById = (commodityId: string) => {
@@ -142,23 +101,6 @@ function MainWebsiteContent() {
       setSelectedCommodity(found);
     }
   };
-
-  // If user navigated to or toggled the Document Verification Portal view
-  if (isPortalOpen) {
-    return (
-      <div className="min-h-screen bg-[#F0F2F5]">
-        <DocumentVerificationPortal
-          onBackToWebsite={handleClosePortal}
-          onOpenAdmin={handleOpenAdmin}
-        />
-        {/* Admin Panel (accessible directly from within the portal) */}
-        <AdminPanelModal
-          isOpen={isAdminOpen}
-          onClose={handleCloseAdmin}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-[#111315] flex flex-col font-sans selection:bg-[#F25C05] selection:text-white">
@@ -179,7 +121,6 @@ function MainWebsiteContent() {
         onProductClick={handleProductSelectById}
         onLegalClick={(type) => setLegalDoc(type)}
         onAdminClick={handleOpenAdmin}
-        onPortalClick={handleOpenPortal}
       />
 
       {/* Main Page Sections */}
@@ -213,7 +154,6 @@ function MainWebsiteContent() {
         onOpenSuppliers={() => setIsSupplierOpen(true)}
         onOpenContact={() => setIsContactOpen(true)}
         onOpenAdmin={handleOpenAdmin}
-        onOpenPortal={handleOpenPortal}
       />
 
       {/* Interactive Modals */}

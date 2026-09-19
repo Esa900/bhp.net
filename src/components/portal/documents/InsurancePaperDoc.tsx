@@ -4,33 +4,31 @@ import { ShieldCheck, HeartPulse, Plane, CheckCircle2, AlertCircle } from 'lucid
 
 interface DocumentProps {
   profile: ApplicantProfile;
-  variant?: 'insurance-paper' | 'travel-insurance';
 }
 
-export const InsurancePaperDoc: React.FC<DocumentProps> = ({ profile, variant = 'insurance-paper' }) => {
-  const isTravel = variant === 'travel-insurance';
+export const InsurancePaperDoc: React.FC<DocumentProps> = ({ profile }) => {
   return (
     <div className="bg-white text-gray-900 font-sans p-6 sm:p-10 max-w-4xl mx-auto border border-gray-300 shadow-sm relative overflow-hidden print:p-0 print:border-none">
       {/* Insurer Header (Bupa Global / Medibank Australian Health & Travel Cover) */}
       <div className="border-b-2 border-emerald-700 pb-5 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-emerald-700 text-white flex items-center justify-center font-bold text-base rounded-md">
-            {isTravel ? <Plane className="w-7 h-7" /> : <HeartPulse className="w-7 h-7" />}
+            <HeartPulse className="w-7 h-7" />
           </div>
           <div>
             <div className="text-xl font-black tracking-tight text-emerald-900">
               Bupa Global <span className="text-gray-400 font-light">|</span> Australia
             </div>
             <p className="text-xs text-gray-500">
-              {isTravel ? 'Official International Travel Insurance & Repatriation Underwriter' : 'Approved Overseas Visitor Health Cover (OVHC) & Comprehensive Medical Insurer'}
+              Approved Overseas Visitor Health Cover (OVHC) & Comprehensive Travel Insurer
             </p>
           </div>
         </div>
 
         <div className="text-right">
-          <div className="text-[10px] uppercase font-bold text-gray-400">{isTravel ? 'Travel Policy Ref' : 'Policy Certificate No.'}</div>
+          <div className="text-[10px] uppercase font-bold text-gray-400">Policy Certificate No.</div>
           <div className="font-mono text-sm font-extrabold text-emerald-800">
-            {isTravel ? `TRV-INS-${profile.referenceNumber.replace('-', '')}` : `BUPA-AU-${profile.referenceNumber.replace('-', '')}`}
+            BUPA-AU-{profile.referenceNumber.replace('-', '')}
           </div>
           <div className="text-[10px] text-gray-500">Effective: {profile.grantDate}</div>
         </div>
@@ -43,16 +41,16 @@ export const InsurancePaperDoc: React.FC<DocumentProps> = ({ profile, variant = 
             Department of Home Affairs Regulatory Standard
           </span>
           <h2 className="text-lg font-black text-emerald-950">
-            {isTravel ? 'Official Travel Insurance Letter & Transit Guarantee (Condition 8501 Compliant)' : 'Certificate of Health & Insurance Paper (Condition 8501 Compliant)'}
+            Certificate of Health & Travel Insurance (Condition 8501 Compliant)
           </h2>
           <p className="text-xs text-emerald-800">
-            {isTravel ? 'Including emergency air-ambulance medical evacuation, international repatriation, and 24/7 travel assistance.' : 'Fully satisfying mandatory health insurance requirements for Visa Subclasses 482, 186, and 491.'}
+            Fully satisfying mandatory health insurance requirements for Visa Subclasses 482, 186, and 491.
           </p>
         </div>
 
         <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-700 text-white shrink-0">
           <ShieldCheck className="w-4 h-4" />
-          <span>{isTravel ? 'Travel Cover Verified' : 'Active & In Force'}</span>
+          <span>Active & In Force</span>
         </span>
       </div>
 

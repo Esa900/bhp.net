@@ -71,20 +71,14 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         return <EmploymentOfferDoc profile={profile} />;
       case 'job-confirmation':
         return <JobConfirmationDoc profile={profile} />;
-      case 'work-permit':
-        return <WorkPermitDoc profile={profile} />;
-      case 'income-tax':
-        return <TaxCertificateDoc profile={profile} variant="income-tax" />;
-      case 'tax-certificate':
-        return <TaxCertificateDoc profile={profile} variant="tax-return" />;
-      case 'insurance-paper':
-        return <InsurancePaperDoc profile={profile} variant="insurance-paper" />;
-      case 'travel-insurance':
-        return <InsurancePaperDoc profile={profile} variant="travel-insurance" />;
       case 'insurance-travel':
-        return <InsurancePaperDoc profile={profile} variant="insurance-paper" />;
+        return <InsurancePaperDoc profile={profile} />;
       case 'health-certificate':
         return <HealthCertificateDoc profile={profile} />;
+      case 'tax-certificate':
+        return <TaxCertificateDoc profile={profile} />;
+      case 'work-permit':
+        return <WorkPermitDoc profile={profile} />;
       case 'visa-received':
         return <VisaReceivedDoc profile={profile} />;
       case 'visa-granted':

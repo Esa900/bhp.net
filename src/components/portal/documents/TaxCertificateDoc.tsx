@@ -4,11 +4,9 @@ import { Receipt, CheckCircle2, ShieldCheck, DollarSign } from 'lucide-react';
 
 interface DocumentProps {
   profile: ApplicantProfile;
-  variant?: 'income-tax' | 'tax-return';
 }
 
-export const TaxCertificateDoc: React.FC<DocumentProps> = ({ profile, variant = 'income-tax' }) => {
-  const isIncomeTax = variant === 'income-tax';
+export const TaxCertificateDoc: React.FC<DocumentProps> = ({ profile }) => {
   return (
     <div className="bg-white text-gray-900 font-sans p-6 sm:p-10 max-w-4xl mx-auto border border-gray-300 shadow-sm relative overflow-hidden print:p-0 print:border-none">
       {/* Official ATO Header */}
@@ -22,17 +20,17 @@ export const TaxCertificateDoc: React.FC<DocumentProps> = ({ profile, variant = 
               Australian Government • Australian Taxation Office
             </div>
             <h1 className="text-xl font-black tracking-tight text-gray-950">
-              {isIncomeTax ? 'Notice of Assessment & Income Tax Returned Certificate' : 'Official Tax Returned Certificate & Lodgement Statement'}
+              Notice of Assessment & Income Tax Certificate
             </h1>
             <p className="text-xs text-gray-600">
-              {isIncomeTax ? 'PAYG Withholding & Commonwealth Tax Compliance Statement' : 'ATO Certified Individual Tax Return (ITR) Compliance & Lodgement Verification'}
+              PAYG Withholding & Commonwealth Tax Compliance Statement
             </p>
           </div>
         </div>
 
         <div className="text-right">
-          <div className="text-[10px] uppercase font-bold text-gray-400">{isIncomeTax ? 'ATO Notice No.' : 'ATO Lodgement Ref'}</div>
-          <div className="font-mono text-sm font-bold text-gray-900">{isIncomeTax ? `ATO-NOA-${profile.referenceNumber.replace('-', '')}` : `ATO-TRC-${profile.tfnNumber.replace(/\s+/g, '')}`}</div>
+          <div className="text-[10px] uppercase font-bold text-gray-400">ATO Notice No.</div>
+          <div className="font-mono text-sm font-bold text-gray-900">ATO-NOA-{profile.referenceNumber.replace('-', '')}</div>
           <div className="text-[10px] text-gray-500">Financial Year: 2025–2026</div>
         </div>
       </div>
@@ -44,7 +42,7 @@ export const TaxCertificateDoc: React.FC<DocumentProps> = ({ profile, variant = 
             Australian Tax File Number Status
           </span>
           <h2 className="text-base font-bold text-gray-900">
-            {isIncomeTax ? 'Compliant & Active Income Tax Returned Record' : 'Official ATO Tax Return Lodged & Verified'}
+            Compliant & Active Tax Assessment Record
           </h2>
           <p className="text-xs text-gray-600">
             Validated for Department of Home Affairs Employer Sponsorship Verification.
@@ -53,7 +51,7 @@ export const TaxCertificateDoc: React.FC<DocumentProps> = ({ profile, variant = 
 
         <div className="flex items-center gap-1 px-3 py-1.5 bg-emerald-100 text-emerald-900 rounded-full font-bold text-xs">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-          <span>{isIncomeTax ? 'ATO Income Tax Cleared' : 'ATO Tax Returned Registered'}</span>
+          <span>ATO Registered</span>
         </div>
       </div>
 
