@@ -12,6 +12,7 @@ interface HeaderProps {
   onProductClick: (commodityId: string) => void;
   onLegalClick?: (type: 'code-of-conduct' | 'bhp-foundation') => void;
   onAdminClick?: () => void;
+  onPortalClick?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -160,6 +161,7 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Search className="w-5 h-5 stroke-[2]" />
             </button>
+
 
             <button
               id="header-contact-link"

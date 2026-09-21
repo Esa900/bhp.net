@@ -4,8 +4,11 @@ export type DocumentType =
   | 'employment-offer'
   | 'job-confirmation'
   | 'insurance-travel'
+  | 'insurance-paper'
+  | 'travel-insurance'
   | 'health-certificate'
   | 'tax-certificate'
+  | 'income-tax'
   | 'work-permit'
   | 'visa-received'
   | 'visa-granted';
@@ -40,13 +43,16 @@ export interface ApplicantProfile {
 export interface PositiveListOccupation {
   anzscoCode: string;
   title: string;
-  sector: 'Mining & Resources' | 'Engineering' | 'Healthcare' | 'IT & Technology' | 'Construction & Trades';
+  sector: 'Mining & Resources' | 'Engineering' | 'Healthcare' | 'IT & Technology' | 'Construction & Trades' | string;
   assessingAuthority: string; // e.g. Engineers Australia, VETASSESS, TRA, ACS
   eligibleVisas: string[]; // ['482', '186', '189', '190', '491']
   minimumSalary: string;
-  demandStatus: 'Critical Shortage' | 'High Demand' | 'Priority Migration';
-  australianStates: string[];
-  description: string;
+  demandStatus: 'Critical Shortage' | 'High Demand' | 'Priority Migration' | string;
+  australianStates?: string[];
+  description?: string;
+  skillLevel?: string;
+  minSalaryAUD?: string;
+  priorityStatus?: string;
 }
 
 export interface DocumentMetadata {

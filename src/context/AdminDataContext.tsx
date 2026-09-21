@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CommodityItem, NewsItem, ReportItem, EventItem, StockMarketData } from '../types';
 import { COMMODITIES, NEWS_ARTICLES, REPORTS, UPCOMING_EVENTS, STOCK_DATA } from '../data';
+import { PositiveListOccupation } from '../types/portal';
+import { POSITIVE_LIST_DATA } from '../data/portalData';
 
 export interface JobPosting {
   id: string;
@@ -147,6 +149,13 @@ interface AdminDataContextType {
 
   adminRole: AdminRole;
   setAdminRole: (role: AdminRole) => void;
+
+  // Positive List for Skilled Work Management
+  positiveList: PositiveListOccupation[];
+  addPositiveListOccupation: (item: PositiveListOccupation) => void;
+  updatePositiveListOccupation: (anzscoCode: string, updated: Partial<PositiveListOccupation>) => void;
+  deletePositiveListOccupation: (anzscoCode: string) => void;
+  resetPositiveList: () => void;
 
   // Analytics
   analytics: {
@@ -369,6 +378,22 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   });
 
+  // Positive List for Skilled Work State
+  const [positiveList, setPositiveList] = useState<PositiveListOccupation[]>(() => {
+    try {
+      const saved = localStorage.getItem('bhp_admin_positive_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+      return POSITIVE_LIST_DATA;
+    } catch {
+      return POSITIVE_LIST_DATA;
+    }
+  });
+
   const [adminRole, setAdminRole] = useState<AdminRole>('Super Admin');
   const [adminPassword, setAdminPassword] = useState<string>(() => {
     const saved = localStorage.getItem('bhp_admin_pwd');
@@ -447,6 +472,33 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => { localStorage.setItem('bhp_admin_site_settings', JSON.stringify(siteSettings)); }, [siteSettings]);
   useEffect(() => { localStorage.setItem('bhp_admin_seo_settings', JSON.stringify(seoSettings)); }, [seoSettings]);
   useEffect(() => { localStorage.setItem('bhp_admin_stock_config', JSON.stringify(stockApiConfig)); }, [stockApiConfig]);
+  useEffect(() => { localStorage.setItem('bhp_admin_positive_list', JSON.stringify(positiveList)); }, [positiveList]);
+
+  // Positive List Actions
+  const addPositiveListOccupation = (item: PositiveListOccupation) => {
+    setPositiveList((prev) => {
+      const exists = prev.some((o) => o.anzscoCode === item.anzscoCode);
+      if (exists) {
+        return prev.map((o) => (o.anzscoCode === item.anzscoCode ? item : o));
+      }
+      return [item, ...prev];
+    });
+  };
+
+  const updatePositiveListOccupation = (anzscoCode: string, updated: Partial<PositiveListOccupation>) => {
+    setPositiveList((prev) =>
+      prev.map((item) => (item.anzscoCode === anzscoCode ? { ...item, ...updated } : item))
+    );
+  };
+
+  const deletePositiveListOccupation = (anzscoCode: string) => {
+    setPositiveList((prev) => prev.filter((item) => item.anzscoCode !== anzscoCode));
+  };
+
+  const resetPositiveList = () => {
+    setPositiveList(POSITIVE_LIST_DATA);
+    localStorage.setItem('bhp_admin_positive_list', JSON.stringify(POSITIVE_LIST_DATA));
+  };
 
   // Actions: Commodities
   const addCommodity = (item: CommodityItem) => {
@@ -663,6 +715,11 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         testStockApiConnection,
         adminRole,
         setAdminRole,
+        positiveList,
+        addPositiveListOccupation,
+        updatePositiveListOccupation,
+        deletePositiveListOccupation,
+        resetPositiveList,
         analytics,
       }}
     >
