@@ -21,6 +21,7 @@ import {
 import { ApplicantProfile, DocumentType } from '../../types/portal';
 import { SAMPLE_PROFILES } from '../../data/portalData';
 import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from '../../data/menuNavigationItems';
+import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from '../../utils/menuItemsStorage';
 
 interface VerificationSearchProps {
   currentProfile: ApplicantProfile;
@@ -41,8 +42,24 @@ export const VerificationSearch: React.FC<VerificationSearchProps> = ({
   onSelectMenuItem,
   onOpenDocumentModal,
 }) => {
+  const [menuItems, setMenuItems] = useState<DocumentMenuItem[]>(() => getStoredMenuItems());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setMenuItems(getStoredMenuItems());
+    };
+
+    window.addEventListener(MENU_ITEMS_UPDATED_EVENT, handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    return () => {
+      window.removeEventListener(MENU_ITEMS_UPDATED_EVENT, handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
+
   const activeItem =
-    DOCUMENT_MENU_ITEMS.find((item) => item.id === activeMenuItemId) || DOCUMENT_MENU_ITEMS[0];
+    menuItems.find((item) => item.id === activeMenuItemId) || menuItems[0] || DOCUMENT_MENU_ITEMS[0];
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -135,14 +152,14 @@ export const VerificationSearch: React.FC<VerificationSearchProps> = ({
         </div>
       </div>
 
-      {/* 11 Categories Quick Navigation Strip */}
+      {/* Categories Quick Navigation Strip */}
       <div className="bg-[#F4F6F8] border-b border-[#D5D9DE] px-4 sm:px-6 py-2.5 overflow-x-auto">
         <div className="flex items-center gap-2 min-w-max">
           <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
-            Verification Categories (11 Items):
+            Verification Categories ({menuItems.length} Items):
           </span>
           <div className="flex items-center gap-1.5">
-            {DOCUMENT_MENU_ITEMS.map((item, index) => {
+            {menuItems.map((item, index) => {
               const isSelected = item.id === activeItem.id;
               return (
                 <button

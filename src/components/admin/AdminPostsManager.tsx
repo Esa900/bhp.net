@@ -29,6 +29,7 @@ import {
   AlertCircle,
   FileCheck,
   Maximize2,
+  Lock,
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
 import { NewsItem } from '../../types';
@@ -181,6 +182,9 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   useEffect(() => {
     try {
       localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: posts }));
+      }
     } catch (e) {
       console.error(e);
     }
@@ -497,7 +501,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       }
     } else {
       setPosts((prev) => [postToSave, ...prev]);
-      showToast(`New post "${postToSave.title}" created successfully.`);
+      showToast(`Post published! Searchable by ID/Ref: "${postToSave.refNumber}"`);
 
       if (postToSave.status === 'Published') {
         addNews({
@@ -1665,18 +1669,10 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                             </div>
                           </div>
                         </div>
-                        {doc.dataUrl && doc.dataUrl !== '#' && (
-                          <a
-                            href={doc.dataUrl}
-                            download={doc.name}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-3 py-1.5 bg-[#0284c7] hover:bg-[#0369a1] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            <span>Download PDF</span>
-                          </a>
-                        )}
+                        <div className="px-2.5 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs font-semibold rounded-lg flex items-center gap-1.5">
+                          <Lock className="w-3 h-3 text-amber-400" />
+                          <span>Protected (Download Disabled)</span>
+                        </div>
                       </div>
                     ))}
                   </div>

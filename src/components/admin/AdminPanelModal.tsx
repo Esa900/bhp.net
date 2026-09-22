@@ -34,11 +34,13 @@ import {
   Pin,
   ChevronDown,
   Tag,
+  Menu,
 } from 'lucide-react';
 import { useAdminData, AdminRole, JobPosting, ContactSubmission } from '../../context/AdminDataContext';
 import { CommodityItem, NewsItem, ReportItem, EventItem, StockMarketData } from '../../types';
 import { PositiveListOccupation } from '../../types/portal';
 import { AdminPostsManager } from './AdminPostsManager';
+import { AdminMenuItemsManager } from './AdminMenuItemsManager';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -56,7 +58,8 @@ type AdminTab =
   | 'positive-list'
   | 'posts-all'
   | 'posts-new'
-  | 'posts-categories';
+  | 'posts-categories'
+  | 'menu-manager';
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose }) => {
   const {
@@ -872,6 +875,24 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   {positiveList.length}
                 </span>
               </button>
+
+              {/* 9. 3-Line Menu Manager */}
+              <button
+                onClick={() => setActiveTab('menu-manager')}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'menu-manager'
+                    ? 'bg-[#F25C05] text-white shadow-sm'
+                    : 'text-gray-300 hover:bg-[#23262D] hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Menu className="w-4 h-4 shrink-0 text-[#38bdf8]" />
+                  <span>9. 3-Line Menu (মেনু)</span>
+                </div>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/40 text-[#FF8E4D]">
+                  Search
+                </span>
+              </button>
             </nav>
 
             <div className="p-3 bg-[#131416] rounded-lg border border-[#26282E] text-[11px] text-gray-400 space-y-1">
@@ -890,6 +911,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                 onSwitchSubView={(v) => setActiveTab(`posts-${v}` as AdminTab)}
                 showToast={showToast}
               />
+            )}
+
+            {/* 3-LINE HAMBURGER MENU MANAGER */}
+            {activeTab === 'menu-manager' && (
+              <AdminMenuItemsManager showToast={showToast} />
             )}
 
             {/* MODULE 1: DASHBOARD */}

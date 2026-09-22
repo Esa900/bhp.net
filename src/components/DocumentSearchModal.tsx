@@ -1,8 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, X, AlertCircle, ShieldCheck, FileText, Printer, RotateCcw } from 'lucide-react';
+import {
+  Search,
+  X,
+  AlertCircle,
+  ShieldCheck,
+  FileText,
+  RotateCcw,
+  Copy,
+  Check,
+  Eye,
+  Calendar,
+  User,
+  Tag,
+  Paperclip,
+  Image as ImageIcon,
+  Sparkles,
+  Lock,
+  ShieldAlert,
+  AlertTriangle,
+} from 'lucide-react';
 import { DocumentMenuItem } from '../data/menuNavigationItems';
 import { SAMPLE_PROFILES } from '../data/portalData';
 import { ApplicantProfile } from '../types/portal';
+import { AdminPost, AttachedDoc } from '../types';
+import { getStoredAdminPosts, findAdminPostByQuery } from '../utils/postsStorage';
 
 interface DocumentSearchModalProps {
   isOpen: boolean;
@@ -17,45 +38,190 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [matchedAdminPost, setMatchedAdminPost] = useState<AdminPost | null>(null);
   const [matchedProfile, setMatchedProfile] = useState<ApplicantProfile | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [copiedRef, setCopiedRef] = useState(false);
+
+  // Available admin posts from localStorage
+  const [adminPosts, setAdminPosts] = useState<AdminPost[]>([]);
+
+  // PDF Preview Modal State (View Only - No Download)
+  const [previewingDoc, setPreviewingDoc] = useState<AttachedDoc | null>(null);
+
+  // Anti-Screenshot & Screen Capture Protection States
+  const [screenshotAttempted, setScreenshotAttempted] = useState(false);
+  const [isWindowBlurred, setIsWindowBlurred] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Load and subscribe to admin posts updates
+  useEffect(() => {
+    const loadPosts = () => {
+      const posts = getStoredAdminPosts();
+      setAdminPosts(posts);
+    };
+
+    loadPosts();
+
+    const handlePostsUpdated = () => {
+      loadPosts();
+    };
+
+    window.addEventListener('bhp_posts_updated', handlePostsUpdated);
+    window.addEventListener('storage', handlePostsUpdated);
+
+    return () => {
+      window.removeEventListener('bhp_posts_updated', handlePostsUpdated);
+      window.removeEventListener('storage', handlePostsUpdated);
+    };
+  }, []);
 
   // When activeItem changes or modal opens, reset search and focus input
   useEffect(() => {
     if (isOpen) {
       setQuery('');
       setHasSearched(false);
+      setMatchedAdminPost(null);
       setMatchedProfile(null);
+      setPreviewingDoc(null);
+      setScreenshotAttempted(false);
+      setIsWindowBlurred(false);
       setTimeout(() => inputRef.current?.focus(), 80);
     }
   }, [isOpen, activeItem]);
 
-  // Handle ESC key to close
+  // Anti-Screenshot & Keyboard Capture Blocker
   useEffect(() => {
+    if (!isOpen) return;
+
+    const triggerScreenshotAlert = () => {
+      setScreenshotAttempted(true);
+      // Clear clipboard to erase potential screen capture data
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          navigator.clipboard.writeText('⚠️ PROTECTED: BHP Document Capture Restricted');
+        } catch {
+          // ignore if clipboard permission denied
+        }
+      }
+      setTimeout(() => {
+        setScreenshotAttempted(false);
+      }, 5000);
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
+      // ESC key to close
+      if (e.key === 'Escape') {
+        if (previewingDoc !== null) {
+          setPreviewingDoc(null);
+        } else {
+          onClose();
+        }
+        return;
+      }
+
+      // PrintScreen key pressed
+      if (e.key === 'PrintScreen') {
+        e.preventDefault();
+        triggerScreenshotAlert();
+        return;
+      }
+
+      // Ctrl+P / Cmd+P (Print to PDF / Printer)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        triggerScreenshotAlert();
+        return;
+      }
+
+      // Ctrl+S / Cmd+S (Save webpage)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        triggerScreenshotAlert();
+        return;
+      }
+
+      // Screenshot shortcuts: Win+Shift+S, Cmd+Shift+3/4/5
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'S' || e.key === 's' || e.key === '3' || e.key === '4' || e.key === '5')) {
+        e.preventDefault();
+        triggerScreenshotAlert();
+        return;
+      }
+
+      // Developer Tools shortcuts: F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+      if (
+        e.key === 'F12' ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
+        ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U'))
+      ) {
+        e.preventDefault();
+        triggerScreenshotAlert();
+        return;
       }
     };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'PrintScreen') {
+        triggerScreenshotAlert();
+      }
+    };
+
+    // Screen-blur protection when window loses focus (e.g. Snipping tool opened or external screenshot app activated)
+    const handleBlur = () => {
+      setIsWindowBlurred(true);
+    };
+
+    const handleFocus = () => {
+      setIsWindowBlurred(false);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setIsWindowBlurred(true);
+      } else {
+        setIsWindowBlurred(false);
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isOpen, onClose, previewingDoc]);
 
   if (!isOpen || !activeItem) return null;
 
   const handleSearch = (overrideQuery?: string) => {
-    const searchTerm = (overrideQuery !== undefined ? overrideQuery : query).trim().toLowerCase();
+    const searchTerm = (overrideQuery !== undefined ? overrideQuery : query).trim();
     if (!searchTerm) return;
 
     setIsSearching(true);
     setHasSearched(true);
+    setMatchedAdminPost(null);
+    setMatchedProfile(null);
 
-    // Simulate instant search with quick feedback
     setTimeout(() => {
-      const cleanTerm = searchTerm.replace(/[-\s]/g, '');
+      // 1. Search in Admin Posts first (User's primary requirement)
+      const foundPost = findAdminPostByQuery(searchTerm, adminPosts);
+      if (foundPost) {
+        setMatchedAdminPost(foundPost);
+        setIsSearching(false);
+        return;
+      }
 
-      const found = SAMPLE_PROFILES.find((p) => {
+      // 2. Fallback search in SAMPLE_PROFILES (for existing sample verifications)
+      const cleanTerm = searchTerm.toLowerCase().replace(/[-\s]/g, '');
+      const foundProfile = SAMPLE_PROFILES.find((p) => {
         const refMatch = p.referenceNumber.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
         const edMatch = p.edNumber?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
         const docMatch = p.documentNumber?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
@@ -65,8 +231,8 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         const insMatch = p.insuranceNo?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
         const immiMatch = p.immiCardNo?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
         const tfnMatch = p.tfnNumber?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const nameMatch = p.fullName.toLowerCase().includes(searchTerm);
-        const visaSubMatch = p.visaSubclass.toLowerCase().includes(searchTerm);
+        const nameMatch = p.fullName.toLowerCase().includes(searchTerm.toLowerCase());
+        const visaSubMatch = p.visaSubclass.toLowerCase().includes(searchTerm.toLowerCase());
 
         return (
           refMatch ||
@@ -83,233 +249,767 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         );
       });
 
-      setMatchedProfile(found || null);
+      if (foundProfile) {
+        setMatchedProfile(foundProfile);
+      }
+
       setIsSearching(false);
-    }, 200);
+    }, 350);
   };
 
-  const handleApplySample = () => {
-    setQuery(activeItem.sampleValue);
-    handleSearch(activeItem.sampleValue);
+  const handleCopyRef = (refNum: string) => {
+    navigator.clipboard.writeText(refNum);
+    setCopiedRef(true);
+    setTimeout(() => setCopiedRef(false), 2000);
+  };
+
+  const handleApplySample = (sampleVal?: string) => {
+    const val = sampleVal || activeItem.sampleValue;
+    setQuery(val);
+    handleSearch(val);
   };
 
   const handleReset = () => {
     setQuery('');
     setHasSearched(false);
+    setMatchedAdminPost(null);
     setMatchedProfile(null);
-    inputRef.current?.focus();
+    setTimeout(() => inputRef.current?.focus(), 50);
   };
 
   return (
-    <div
-      id="document-search-modal-backdrop"
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-150"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <>
       <div
-        id="document-search-modal-panel"
-        className="w-full max-w-2xl bg-[#161718] border border-[#2F3136] rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto animate-in zoom-in-95 duration-200"
+        id="doc-search-modal-backdrop"
+        className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col items-center pt-10 sm:pt-14 px-3 sm:px-6 overflow-y-auto no-print"
+        onClick={onClose}
       >
-        {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-[#26282B] flex items-start justify-between bg-[#1A1C1E]">
-          <div className="pr-4">
-            <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#FF8E4D] block mb-1">
-              {activeItem.mainTitle}
-            </span>
-            <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-              <FileText className="w-5 h-5 text-[#F25C05] shrink-0" />
-              <span>{activeItem.subMenu}</span>
-            </h2>
-          </div>
-          <button
-            id="close-document-search-modal"
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-[#25282D] rounded-lg transition-colors cursor-pointer"
-            aria-label="Close search"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Modal Body */}
-        <div className="p-6 space-y-6">
-          {/* Search Box Card */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label htmlFor="doc-search-input" className="text-xs font-semibold text-gray-300 uppercase tracking-wide">
-                Search by <span className="text-[#FF8E4D]">{activeItem.fieldLabel}</span>
-              </label>
+        <div
+          id="doc-search-modal-container"
+          className="w-full max-w-4xl bg-[#17181B] rounded-2xl border border-[#2D3036] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 mb-12 relative protected-content"
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {/* Top Anti-Screenshot & Screen Capture Warning Banner (triggers on PrintScreen/shortcuts) */}
+          {screenshotAttempted && (
+            <div className="bg-red-600 text-white px-4 py-3 flex items-center justify-between gap-3 text-xs sm:text-sm font-bold animate-in slide-in-from-top duration-200 z-50 border-b border-red-700">
+              <div className="flex items-center gap-2.5">
+                <ShieldAlert className="w-5 h-5 text-white shrink-0 animate-bounce" />
+                <span>
+                  স্ক্রিনশট ও ডাউনলোড নিষেধ: এই ডকুমেন্টের কোনো স্ক্রিনশট বা ডাউনলোড করার অনুমতি নেই। (Screenshots and downloading are restricted by BHP Security Policy).
+                </span>
+              </div>
               <button
                 type="button"
-                onClick={handleApplySample}
-                className="text-[11px] text-gray-400 hover:text-[#F25C05] underline transition-colors cursor-pointer"
+                onClick={() => setScreenshotAttempted(false)}
+                className="p-1 hover:bg-red-700 rounded text-white cursor-pointer"
               >
-                Sample: <strong className="font-mono text-gray-200">{activeItem.sampleValue}</strong>
+                <X className="w-4 h-4" />
               </button>
             </div>
+          )}
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSearch();
-              }}
-              className="flex flex-col sm:flex-row gap-2"
-            >
-              <div className="relative flex-1">
-                <Search className="w-5 h-5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  ref={inputRef}
-                  id="doc-search-input"
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={activeItem.placeholder}
-                  className="w-full bg-[#202226] border border-[#34373D] focus:border-[#F25C05] rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#F25C05] transition-all"
-                />
-                {query && (
-                  <button
-                    type="button"
-                    onClick={() => setQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1"
-                    aria-label="Clear"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+          {/* Window Blur Capture Protection Overlay */}
+          {isWindowBlurred && (hasSearched && (matchedAdminPost || matchedProfile)) && (
+            <div className="absolute inset-0 z-40 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 mb-3">
+                <Lock className="w-8 h-8" />
               </div>
+              <h4 className="text-base sm:text-lg font-bold text-white mb-1">
+                সুরক্ষার জন্য ডকুমেন্ট সাময়িকভাবে লুকানো হয়েছে
+              </h4>
+              <p className="text-xs sm:text-sm text-gray-300 max-w-md">
+                স্ক্রিন ক্যাপচার বা অন্য উইন্ডোতে থাকায় কনটেন্ট প্রটেক্ট করা হয়েছে। আবার দেখতে উইন্ডোর উপর ক্লিক করুন।
+              </p>
+              <span className="mt-3 px-3 py-1 rounded-full bg-[#24272E] text-gray-400 text-xs font-mono">
+                BHP Protected Document Protocol
+              </span>
+            </div>
+          )}
 
-              <button
-                type="submit"
-                disabled={!query.trim() || isSearching}
-                className="px-6 py-3 bg-[#F25C05] hover:bg-[#D94F04] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-md"
-              >
-                {isSearching ? (
-                  <span>Searching...</span>
-                ) : (
-                  <>
-                    <Search className="w-4 h-4" />
-                    <span>Search</span>
-                  </>
-                )}
-              </button>
-            </form>
+          {/* Modal Header Bar */}
+          <div className="bg-[#1F2228] px-5 py-4 border-b border-[#2C3038] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="p-2 rounded-xl bg-[#F25C05]/15 text-[#F25C05] border border-[#F25C05]/30 shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div className="overflow-hidden">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#FF8E4D] uppercase tracking-wider">
+                    {activeItem.mainTitle}
+                  </span>
+                  <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                    Live DVS Search
+                  </span>
+                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/20">
+                    <Lock className="w-2.5 h-2.5" />
+                    No Download / Protected
+                  </span>
+                </div>
+                <h2 className="text-base sm:text-lg font-bold text-white truncate mt-0.5">
+                  {activeItem.fieldLabel} Verification Search
+                </h2>
+              </div>
+            </div>
+
+            <button
+              id="doc-search-modal-close"
+              type="button"
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-[#2B2F38] transition-colors cursor-pointer"
+              aria-label="Close modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          {/* Search Result Display */}
-          {hasSearched && (
-            <div className="pt-2">
-              {matchedProfile ? (
-                /* Found Result Card */
-                <div className="bg-[#1C1E22] border border-[#2D3036] rounded-xl p-5 space-y-4 animate-in fade-in duration-200 shadow-lg">
-                  {/* Result Header Badge */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#2A2C31]">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                      <div>
-                        <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide block">
-                          Official Record Verified
-                        </span>
-                        <span className="text-xs text-gray-400">Commonwealth Department of Home Affairs & BHP Database</span>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-semibold">
-                      Status: Active & Valid
-                    </span>
-                  </div>
+          {/* Security & Anti-Capture Watermark Header Notice */}
+          <div className="bg-[#121417] px-5 py-2 border-b border-[#26282E] flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-400">
+            <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
+              <Lock className="w-3.5 h-3.5" />
+              <span>কনটেন্ট সিকিউরিটি: ছবি জুম বা যেকোনো ফাইল ডাউনলোড সম্পূর্ণ বন্ধ রয়েছে। স্ক্রিনশট নেওয়া নিষেধ।</span>
+            </div>
+            <span className="font-mono text-gray-500">Security Mode: Active</span>
+          </div>
 
-                  {/* Details Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
-                    <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
-                      <span className="text-gray-400 block text-[11px] mb-0.5">Holder Full Name</span>
-                      <strong className="text-white text-sm font-semibold">{matchedProfile.fullName}</strong>
-                    </div>
+          {/* Search Box Form */}
+          <div className="p-5 sm:p-6 space-y-6">
+            <div className="space-y-2">
+              <label
+                htmlFor="doc-search-input"
+                className="block text-xs font-bold uppercase tracking-wider text-gray-300"
+              >
+                Enter {activeItem.fieldLabel} / Reference Number / ID:
+              </label>
 
-                    <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
-                      <span className="text-gray-400 block text-[11px] mb-0.5">Reference Number</span>
-                      <strong className="text-[#FF8E4D] font-mono text-sm font-semibold">{matchedProfile.referenceNumber}</strong>
-                    </div>
-
-                    <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
-                      <span className="text-gray-400 block text-[11px] mb-0.5">Nationality & Passport</span>
-                      <span className="text-gray-200">{matchedProfile.nationality} ({matchedProfile.documentNumber})</span>
-                    </div>
-
-                    <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
-                      <span className="text-gray-400 block text-[11px] mb-0.5">Visa Subclass</span>
-                      <span className="text-gray-200">{matchedProfile.visaSubclass}</span>
-                    </div>
-
-                    <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
-                      <span className="text-gray-400 block text-[11px] mb-0.5">Nominated Occupation</span>
-                      <span className="text-gray-200">{matchedProfile.nominatedOccupation} (ANZSCO {matchedProfile.anzscoCode})</span>
-                    </div>
-
-                    <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
-                      <span className="text-gray-400 block text-[11px] mb-0.5">Sponsoring Employer</span>
-                      <span className="text-gray-200">{matchedProfile.sponsorName}</span>
-                    </div>
-
-                    <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
-                      <span className="text-gray-400 block text-[11px] mb-0.5">Work Location</span>
-                      <span className="text-gray-200">{matchedProfile.workLocation}</span>
-                    </div>
-
-                    <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
-                      <span className="text-gray-400 block text-[11px] mb-0.5">Validity / Expiry Date</span>
-                      <span className="text-gray-200">{matchedProfile.visaExpiryDate}</span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center justify-between pt-2 border-t border-[#26282B]">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSearch();
+                }}
+                className="flex flex-col sm:flex-row gap-2"
+              >
+                <div className="relative flex-1">
+                  <Search className="w-5 h-5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    ref={inputRef}
+                    id="doc-search-input"
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Enter Reference Number or ID (যেমন: BHP-DOC-2026-0089 বা টাইটেল)..."
+                    className="w-full bg-[#121316] border border-[#34373D] focus:border-[#F25C05] rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#F25C05] transition-all font-mono"
+                  />
+                  {query && (
                     <button
                       type="button"
-                      onClick={() => window.print()}
-                      className="px-3.5 py-1.5 rounded-lg bg-[#25282D] hover:bg-[#2F3238] text-gray-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      onClick={() => setQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1 cursor-pointer"
+                      aria-label="Clear"
                     >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Print Summary</span>
+                      <X className="w-4 h-4" />
                     </button>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!query.trim() || isSearching}
+                  className="px-6 py-3 bg-[#F25C05] hover:bg-[#D94F04] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-md"
+                >
+                  {isSearching ? (
+                    <span>Searching...</span>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4" />
+                      <span>Search Document</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Quick Clickable Suggestions from Admin Posts */}
+              {adminPosts.length > 0 && (
+                <div className="pt-2 border-t border-[#2A2C31] flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="text-gray-400 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-400" />
+                    <span>Recent Post References:</span>
+                  </span>
+                  {adminPosts.slice(0, 3).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleApplySample(p.refNumber)}
+                      className="px-2 py-0.5 rounded bg-[#25282F] hover:bg-[#30353E] text-[#FF8E4D] hover:text-white border border-[#3A3F4B] font-mono cursor-pointer transition-colors"
+                      title={p.title}
+                    >
+                      {p.refNumber}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* =========================================================================
+                RESULT VIEW A: MATCHED ADMIN POST (Exact documents, pictures & description)
+               ========================================================================= */}
+            {hasSearched && matchedAdminPost && (
+              <div className="bg-[#1C1E22] border border-[#2D3036] rounded-xl overflow-hidden animate-in fade-in duration-200 shadow-xl space-y-0 relative">
+                {/* Diagonal Repeating Security Watermark across the document */}
+                <div
+                  className="absolute inset-0 pointer-events-none select-none z-10 opacity-[0.035] overflow-hidden flex flex-wrap gap-12 rotate-[-25deg] scale-125 items-center justify-center"
+                  aria-hidden="true"
+                >
+                  {Array.from({ length: 30 }).map((_, i) => (
+                    <div key={i} className="text-lg font-black text-white whitespace-nowrap tracking-widest uppercase">
+                      BHP SECURE RECORD • DO NOT COPY • DO NOT CAPTURE
+                    </div>
+                  ))}
+                </div>
+
+                {/* Official Verification Banner */}
+                <div className="bg-gradient-to-r from-[#17252A] via-[#142328] to-[#1C1E22] p-4 sm:p-5 border-b border-[#2C3B38] flex flex-wrap items-center justify-between gap-3 relative z-20">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider">
+                          Official Record Verified & Authenticated
+                        </span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                      </div>
+                      <p className="text-[11px] text-gray-300 mt-0.5">
+                        BHP Global Verification System & Corporate Documentation Registry
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-bold tracking-wide">
+                      Status: {matchedAdminPost.status || 'Active & Valid'}
+                    </span>
+                    <span className="px-2.5 py-1 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full text-xs font-semibold flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      <span>Protected</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-5 sm:p-6 space-y-6 relative z-20">
+                  {/* Reference Number & Category Bar */}
+                  <div className="bg-[#151618] p-4 rounded-xl border border-[#27292E] flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[11px] text-gray-400 uppercase tracking-wider font-semibold block">
+                        Official Reference / Document ID
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg sm:text-xl font-mono font-extrabold text-[#FF8E4D] tracking-wide select-all">
+                          {matchedAdminPost.refNumber}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyRef(matchedAdminPost.refNumber)}
+                          className="p-1.5 rounded-lg bg-[#222428] hover:bg-[#2F3238] text-gray-300 hover:text-white transition-colors cursor-pointer"
+                          title="Copy Reference"
+                        >
+                          {copiedRef ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-lg bg-[#25282E] text-gray-300 border border-[#34373D] text-xs font-semibold flex items-center gap-1.5">
+                        <Tag className="w-3 h-3 text-[#FF8E4D]" />
+                        <span>{matchedAdminPost.category}</span>
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-[#25282E] text-gray-300 border border-[#34373D] text-xs font-mono flex items-center gap-1.5">
+                        <Calendar className="w-3 h-3 text-gray-400" />
+                        <span>{matchedAdminPost.date}</span>
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-[#25282E] text-gray-300 border border-[#34373D] text-xs flex items-center gap-1.5">
+                        <User className="w-3 h-3 text-gray-400" />
+                        <span>{matchedAdminPost.author}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] text-gray-400 uppercase tracking-wider font-bold">
+                      Document Title (টাইটেল)
+                    </span>
+                    <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight leading-snug select-text">
+                      {matchedAdminPost.title}
+                    </h3>
+                    {matchedAdminPost.badges && matchedAdminPost.badges.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {matchedAdminPost.badges.map((b, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide bg-[#F25C05]/15 text-[#FF8E4D] border border-[#F25C05]/30"
+                          >
+                            {b}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Description / Content Body */}
+                  <div className="space-y-2 bg-[#141517] p-4 sm:p-5 rounded-xl border border-[#26282B]">
+                    <div className="flex items-center justify-between pb-2 border-b border-[#25272B]">
+                      <span className="text-xs font-bold text-gray-300 uppercase tracking-wide flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-[#38bdf8]" />
+                        <span>Official Description & Content (বিস্তারিত বিবরণ)</span>
+                      </span>
+                      <span className="text-[11px] text-gray-400 font-mono">
+                        {matchedAdminPost.readTime || 'Official Circular'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-200 leading-relaxed whitespace-pre-line pt-2 font-sans select-text">
+                      {matchedAdminPost.content}
+                    </div>
+                  </div>
+
+                  {/* ===============================================================
+                      PICTURE GALLERY (NO ZOOM, NO DOWNLOAD, PROTECTED DISPLAY)
+                     =============================================================== */}
+                  {matchedAdminPost.galleryImages && matchedAdminPost.galleryImages.length > 0 && (
+                    <div className="space-y-3 bg-[#141517] p-4 sm:p-5 rounded-xl border border-[#26282B]">
+                      <div className="flex items-center justify-between pb-2 border-b border-[#25272B]">
+                        <span className="text-xs font-bold text-gray-200 uppercase tracking-wide flex items-center gap-1.5">
+                          <ImageIcon className="w-4 h-4 text-[#38bdf8]" />
+                          <span>
+                            Document Photos & Gallery (ছবি গ্যালারি - {matchedAdminPost.galleryImages.length} Pictures)
+                          </span>
+                        </span>
+                        <span className="text-[11px] text-amber-400/90 font-medium flex items-center gap-1">
+                          <Lock className="w-3 h-3" />
+                          <span>View-only (জুম ও ডাউনলোড বন্ধ)</span>
+                        </span>
+                      </div>
+
+                      {/* Clean Protected Gallery Grid - No Zoom click, No download, Drag disabled */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-1">
+                        {matchedAdminPost.galleryImages.map((img, idx) => (
+                          <div
+                            key={idx}
+                            className="relative h-32 sm:h-36 rounded-lg overflow-hidden border border-[#31353E] bg-[#0c0d0e] select-none"
+                            onContextMenu={(e) => e.preventDefault()}
+                          >
+                            <img
+                              src={img}
+                              alt={`${matchedAdminPost.title} - Photo ${idx + 1}`}
+                              className="w-full h-full object-cover protected-image select-none pointer-events-none"
+                              draggable={false}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src =
+                                  'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=400&q=80';
+                              }}
+                            />
+                            {/* Protective transparent glass layer blocking direct right-click or drag */}
+                            <div
+                              className="absolute inset-0 select-none cursor-default bg-transparent"
+                              onContextMenu={(e) => e.preventDefault()}
+                              draggable={false}
+                            />
+                            {/* Security Watermark Badge on each photo */}
+                            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/75 text-gray-300 flex items-center gap-1 border border-white/10 pointer-events-none">
+                              <Lock className="w-2.5 h-2.5 text-amber-400" />
+                              <span>BHP SECURE</span>
+                            </div>
+                            <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/80 text-white pointer-events-none">
+                              #{idx + 1}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ===============================================================
+                      ATTACHED PDF & OFFICIAL DOCUMENTS (VIEW-ONLY, NO DOWNLOAD)
+                     =============================================================== */}
+                  {matchedAdminPost.attachedDocuments &&
+                    matchedAdminPost.attachedDocuments.length > 0 && (
+                      <div className="space-y-3 bg-[#141517] p-4 sm:p-5 rounded-xl border border-[#26282B]">
+                        <div className="flex items-center justify-between pb-2 border-b border-[#25272B]">
+                          <span className="text-xs font-bold text-gray-200 uppercase tracking-wide flex items-center gap-1.5">
+                            <Paperclip className="w-4 h-4 text-red-400" />
+                            <span>
+                              Attached PDF & Official Documents (পিডিএফ ও ডকুমেন্ট ফাইল -{' '}
+                              {matchedAdminPost.attachedDocuments.length} Documents)
+                            </span>
+                          </span>
+                          <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Signed & Sealed</span>
+                          </span>
+                        </div>
+
+                        <div className="space-y-2.5 pt-1">
+                          {matchedAdminPost.attachedDocuments.map((doc) => (
+                            <div
+                              key={doc.id}
+                              className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[#1A1C1F] border border-[#2B2E35] hover:border-[#3D424D] transition-colors gap-3 select-none"
+                              onContextMenu={(e) => e.preventDefault()}
+                            >
+                              <div className="flex items-center gap-3 overflow-hidden">
+                                <div
+                                  className={`p-2.5 rounded-xl shrink-0 ${
+                                    doc.type === 'pdf'
+                                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                      : 'bg-[#0284c7]/20 text-[#38bdf8] border border-[#0284c7]/30'
+                                  }`}
+                                >
+                                  <FileText className="w-5 h-5" />
+                                </div>
+                                <div className="overflow-hidden">
+                                  <div className="text-xs sm:text-sm font-bold text-white truncate">
+                                    {doc.name}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
+                                    <span className="uppercase font-mono text-[10px] font-bold text-red-400">
+                                      {doc.type}
+                                    </span>
+                                    <span>•</span>
+                                    <span>{doc.size}</span>
+                                    <span>•</span>
+                                    <span>Uploaded: {doc.uploadDate}</span>
+                                    <span>•</span>
+                                    <span className="text-amber-400 font-semibold flex items-center gap-0.5">
+                                      <Lock className="w-2.5 h-2.5" />
+                                      View Only
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Only View Document Button - NO Download Button */}
+                              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewingDoc(doc)}
+                                  className="px-4 py-2 bg-[#25282F] hover:bg-[#313640] text-gray-100 hover:text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer border border-[#373C47] shadow-sm"
+                                >
+                                  <Eye className="w-4 h-4 text-[#38bdf8]" />
+                                  <span>View Document (প্রিভিউ)</span>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Actions Bottom Bar (Printing and Download disabled) */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-[#26282B]">
+                    <div className="flex items-center gap-2">
+                      <div className="px-3.5 py-2 rounded-xl bg-[#141517] border border-[#2A2D33] text-gray-300 text-xs font-semibold flex items-center gap-2 select-none">
+                        <Lock className="w-4 h-4 text-emerald-400" />
+                        <span>Screenshot & Download Protected</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopyRef(matchedAdminPost.refNumber)}
+                        className="px-4 py-2 rounded-xl bg-[#25282D] hover:bg-[#2F3238] text-gray-200 hover:text-white text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer border border-[#34373E]"
+                      >
+                        {copiedRef ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-400" />
+                            <span>Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 text-gray-400" />
+                            <span>Copy Ref No</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
 
                     <button
                       type="button"
                       onClick={handleReset}
-                      className="px-3.5 py-1.5 rounded-lg text-gray-400 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-4 py-2 rounded-xl text-gray-400 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Search Another</span>
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Search Another Document</span>
                     </button>
                   </div>
                 </div>
-              ) : (
-                /* Not Found Card */
-                <div className="bg-[#1F1915] border border-[#4A2B18] rounded-xl p-5 text-center space-y-3">
-                  <AlertCircle className="w-8 h-8 text-[#FF8E4D] mx-auto" />
-                  <div>
-                    <h3 className="text-sm font-bold text-white mb-1">
-                      No Record Found for "{query}"
-                    </h3>
-                    <p className="text-xs text-gray-300 max-w-md mx-auto">
-                      No document was found matching the entered {activeItem.fieldLabel}. Please verify your input and try again.
-                    </p>
+              </div>
+            )}
+
+            {/* =========================================================================
+                RESULT VIEW B: MATCHED APPLICANT PROFILE (Sample Database)
+               ========================================================================= */}
+            {hasSearched && !matchedAdminPost && matchedProfile && (
+              <div
+                className="bg-[#1C1E22] border border-[#2D3036] rounded-xl p-5 space-y-4 animate-in fade-in duration-200 shadow-lg relative"
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#2A2C31]">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                    <div>
+                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide block">
+                        Official Record Verified
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        Commonwealth Department of Home Affairs & BHP Database
+                      </span>
+                    </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-semibold">
+                      Status: Active & Valid
+                    </span>
+                    <span className="px-2 py-0.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full text-[11px] font-semibold flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5" />
+                      Protected
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+                  <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
+                    <span className="text-gray-400 block text-[11px] mb-0.5">Holder Full Name</span>
+                    <strong className="text-white text-sm font-semibold">
+                      {matchedProfile.fullName}
+                    </strong>
+                  </div>
+
+                  <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
+                    <span className="text-gray-400 block text-[11px] mb-0.5">Reference Number</span>
+                    <strong className="text-[#FF8E4D] font-mono text-sm font-semibold">
+                      {matchedProfile.referenceNumber}
+                    </strong>
+                  </div>
+
+                  <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
+                    <span className="text-gray-400 block text-[11px] mb-0.5">
+                      Nationality & Passport
+                    </span>
+                    <span className="text-gray-200">
+                      {matchedProfile.nationality} ({matchedProfile.documentNumber})
+                    </span>
+                  </div>
+
+                  <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
+                    <span className="text-gray-400 block text-[11px] mb-0.5">Visa Subclass</span>
+                    <span className="text-gray-200">{matchedProfile.visaSubclass}</span>
+                  </div>
+
+                  <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
+                    <span className="text-gray-400 block text-[11px] mb-0.5">
+                      Nominated Occupation
+                    </span>
+                    <span className="text-gray-200">
+                      {matchedProfile.nominatedOccupation} (ANZSCO {matchedProfile.anzscoCode})
+                    </span>
+                  </div>
+
+                  <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
+                    <span className="text-gray-400 block text-[11px] mb-0.5">Sponsoring Employer</span>
+                    <span className="text-gray-200">{matchedProfile.sponsorName}</span>
+                  </div>
+
+                  <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
+                    <span className="text-gray-400 block text-[11px] mb-0.5">Work Location</span>
+                    <span className="text-gray-200">{matchedProfile.workLocation}</span>
+                  </div>
+
+                  <div className="bg-[#151618] p-3 rounded-lg border border-[#26282B]">
+                    <span className="text-gray-400 block text-[11px] mb-0.5">
+                      Validity / Expiry Date
+                    </span>
+                    <span className="text-gray-200">{matchedProfile.visaExpiryDate}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-[#26282B]">
+                  <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Download & Screenshot restricted</span>
+                  </span>
+
                   <button
                     type="button"
-                    onClick={handleApplySample}
+                    onClick={handleReset}
+                    className="px-3.5 py-1.5 rounded-lg text-gray-400 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Search Another</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* =========================================================================
+                RESULT VIEW C: NOT FOUND
+               ========================================================================= */}
+            {hasSearched && !matchedAdminPost && !matchedProfile && (
+              <div className="bg-[#1F1915] border border-[#4A2B18] rounded-xl p-5 text-center space-y-3">
+                <AlertCircle className="w-8 h-8 text-[#FF8E4D] mx-auto" />
+                <div>
+                  <h3 className="text-sm font-bold text-white mb-1">
+                    No Record Found for "{query}"
+                  </h3>
+                  <p className="text-xs text-gray-300 max-w-md mx-auto">
+                    No post or document was found matching the entered reference or ID number.
+                    Please check the reference number posted from the Admin Panel or try with a sample.
+                  </p>
+                </div>
+                {adminPosts.length > 0 ? (
+                  <div className="pt-2 flex flex-col items-center gap-2">
+                    <span className="text-[11px] text-gray-400 font-semibold">
+                      Or click an active reference from Admin Panel:
+                    </span>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {adminPosts.slice(0, 3).map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => handleApplySample(p.refNumber)}
+                          className="px-3 py-1.5 bg-[#2B231D] hover:bg-[#382C22] border border-[#593922] text-[#FF8E4D] rounded-lg text-xs font-mono font-semibold transition-colors cursor-pointer"
+                        >
+                          {p.refNumber}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleApplySample()}
                     className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#2B231D] hover:bg-[#382C22] border border-[#593922] text-[#FF8E4D] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                   >
                     <span>Try with sample number:</span>
                     <strong className="font-mono text-white">{activeItem.sampleValue}</strong>
                   </button>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* =========================================================================
+          PDF & DOCUMENT PREVIEW MODAL (VIEW-ONLY, NO DOWNLOAD, SCREENSHOT PROTECTED)
+         ========================================================================= */}
+      {previewingDoc && (
+        <div
+          id="pdf-preview-modal"
+          className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150 no-print"
+          onClick={() => setPreviewingDoc(null)}
+        >
+          <div
+            className="w-full max-w-3xl bg-[#181A1D] border border-[#31353E] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] relative protected-content"
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {/* Watermark across the preview modal */}
+            <div
+              className="absolute inset-0 pointer-events-none select-none z-10 opacity-[0.04] overflow-hidden flex flex-wrap gap-12 rotate-[-25deg] scale-125 items-center justify-center"
+              aria-hidden="true"
+            >
+              {Array.from({ length: 24 }).map((_, i) => (
+                <div key={i} className="text-sm font-black text-white whitespace-nowrap tracking-widest uppercase">
+                  CONFIDENTIAL • BHP REGISTRY • DO NOT COPY • DO NOT CAPTURE
+                </div>
+              ))}
+            </div>
+
+            {/* Header */}
+            <div className="p-4 bg-[#202328] border-b border-[#2C3038] flex items-center justify-between relative z-20">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <div className="p-2 rounded-lg bg-red-500/20 text-red-400">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div className="overflow-hidden">
+                  <h4 className="text-sm font-bold text-white truncate">{previewingDoc.name}</h4>
+                  <div className="flex items-center gap-2 text-[11px] text-gray-400 font-mono">
+                    <span>Size: {previewingDoc.size}</span>
+                    <span>•</span>
+                    <span>Uploaded: {previewingDoc.uploadDate}</span>
+                    <span>•</span>
+                    <span className="text-amber-400 font-semibold flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      View Only
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewingDoc(null)}
+                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#2C3038] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Document Content View (No Download link, No save) */}
+            <div className="p-5 flex-1 overflow-y-auto space-y-4 relative z-20">
+              {previewingDoc.dataUrl && previewingDoc.dataUrl.startsWith('data:image') ? (
+                <div
+                  className="flex justify-center bg-black/50 rounded-xl p-3 border border-[#2C3038] relative select-none"
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  <img
+                    src={previewingDoc.dataUrl}
+                    alt={previewingDoc.name}
+                    className="max-h-[55vh] object-contain protected-image select-none pointer-events-none"
+                    draggable={false}
+                  />
+                  <div
+                    className="absolute inset-0 bg-transparent select-none"
+                    onContextMenu={(e) => e.preventDefault()}
+                  />
+                </div>
+              ) : previewingDoc.dataUrl && previewingDoc.dataUrl.startsWith('data:application/pdf') ? (
+                <div className="h-[55vh] w-full rounded-xl overflow-hidden border border-[#2C3038] bg-black relative">
+                  <iframe
+                    src={`${previewingDoc.dataUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                    title={previewingDoc.name}
+                    className="w-full h-full border-none select-none"
+                  />
+                </div>
+              ) : (
+                /* Fallback preview view */
+                <div className="p-8 text-center bg-[#121316] rounded-xl border border-[#272A30] space-y-4">
+                  <div className="w-16 h-16 rounded-2xl bg-red-500/20 text-red-400 mx-auto flex items-center justify-center border border-red-500/30">
+                    <FileText className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h5 className="text-base font-bold text-white mb-1">{previewingDoc.name}</h5>
+                    <p className="text-xs text-gray-400 max-w-md mx-auto">
+                      অফিসিয়াল ডকুমেন্ট BHP কর্পোরেট রেজিস্ট্রি দ্বারা অনুমোদিত। সুরক্ষার স্বার্থে এই ডকুমেন্টের ডাউনলোড ও স্ক্রিনশট বন্ধ রাখা হয়েছে।
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Bottom Security Footer in Preview (Explaining View-Only Security Policy) */}
+              <div className="p-3 rounded-xl bg-[#121316] border border-[#26282E] flex items-center justify-between text-xs text-gray-400">
+                <div className="flex items-center gap-2 text-amber-400 font-semibold">
+                  <Lock className="w-4 h-4" />
+                  <span>Secure In-App Viewer: ডাউনলোড ও সেভ অপশন সম্পূর্ণ নিষ্ক্রিয়</span>
+                </div>
+                <span className="text-[11px] text-gray-500">Read-Only Mode</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };

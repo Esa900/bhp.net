@@ -55,3 +55,35 @@ export interface EventItem {
   location: string;
   status: 'Upcoming' | 'Webcast Available' | 'Completed';
 }
+
+export interface AttachedDoc {
+  id: string;
+  name: string;
+  size: string;
+  type: 'pdf' | 'image' | 'other';
+  dataUrl: string; // Base64 or external URL
+  uploadDate: string;
+}
+
+export interface AdminPost {
+  id: string;
+  title: string;
+  refNumber: string;
+  content: string; // Description
+  category: string;
+  author: string;
+  date: string;
+  status: 'Published' | 'Draft';
+  imageUrl: string; // Primary featured image
+  galleryImages: string[]; // All uploaded pictures
+  attachedDocuments: AttachedDoc[]; // PDF & Document upload option
+  readTime: string;
+  badges: string[];
+}
+
+export interface PostCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+}

@@ -32,6 +32,7 @@ import { AdminPanelModal } from './components/admin/AdminPanelModal';
 import { DocumentVerificationPortal } from './components/portal/DocumentVerificationPortal';
 import { DocumentSearchModal } from './components/DocumentSearchModal';
 import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from './data/menuNavigationItems';
+import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from './utils/menuItemsStorage';
 
 function MainWebsiteContent() {
   const { commodities, siteSettings } = useAdminData();
@@ -51,7 +52,10 @@ function MainWebsiteContent() {
   const [isPortalOpen, setIsPortalOpen] = useState(false);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('australia-work-permit');
   const [isDocSearchOpen, setIsDocSearchOpen] = useState(false);
-  const [selectedDocItem, setSelectedDocItem] = useState<DocumentMenuItem>(DOCUMENT_MENU_ITEMS[0]);
+  const [selectedDocItem, setSelectedDocItem] = useState<DocumentMenuItem>(() => {
+    const items = getStoredMenuItems();
+    return items[0] || DOCUMENT_MENU_ITEMS[0];
+  });
 
   // Check URL route for /admin or #/admin
   const checkIsAdminRoute = useCallback(() => {
@@ -148,10 +152,33 @@ function MainWebsiteContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSelectMenuItem = (menuItemId: string) => {
-    // Directly open the designated document search option modal in BHP's theme (no separate alien portal)
-    const item = DOCUMENT_MENU_ITEMS.find((d) => d.id === menuItemId) || DOCUMENT_MENU_ITEMS[0];
-    setSelectedDocItem(item);
+  useEffect(() => {
+    const handleMenuUpdated = () => {
+      const allItems = getStoredMenuItems();
+      setSelectedDocItem((prev) => {
+        const found = allItems.find((d) => d.id === prev.id);
+        return found || allItems[0] || prev;
+      });
+    };
+
+    window.addEventListener(MENU_ITEMS_UPDATED_EVENT, handleMenuUpdated);
+    window.addEventListener('storage', handleMenuUpdated);
+
+    return () => {
+      window.removeEventListener(MENU_ITEMS_UPDATED_EVENT, handleMenuUpdated);
+      window.removeEventListener('storage', handleMenuUpdated);
+    };
+  }, []);
+
+  const handleSelectMenuItem = (menuItemId: string, initialQuery?: string) => {
+    // Directly open the designated document search option modal in BHP's theme
+    const allItems = getStoredMenuItems();
+    const item = allItems.find((d) => d.id === menuItemId) || allItems[0] || DOCUMENT_MENU_ITEMS[0];
+    if (initialQuery) {
+      setSelectedDocItem({ ...item, sampleValue: initialQuery });
+    } else {
+      setSelectedDocItem(item);
+    }
     setIsDocSearchOpen(true);
   };
 
@@ -290,6 +317,9 @@ function MainWebsiteContent() {
       <SearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
+        onOpenDocumentSearch={(menuItemId, queryText) => {
+          handleSelectMenuItem(menuItemId || 'australia-work-permit', queryText);
+        }}
       />
 
       <CookieConsentModal

@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Menu, X, Search, ChevronDown, ArrowRight, Globe, ExternalLink, Mail, FileCheck, ShieldCheck, ChevronRight } from 'lucide-react';
 import { useLanguage, Language } from '../context/LanguageContext';
 import { useAdminData } from '../context/AdminDataContext';
-import { DOCUMENT_MENU_ITEMS } from '../data/menuNavigationItems';
+import { DocumentMenuItem, DOCUMENT_MENU_ITEMS } from '../data/menuNavigationItems';
+import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from '../utils/menuItemsStorage';
 
 interface HeaderProps {
   onSearchClick: () => void;
@@ -31,8 +32,23 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
+  const [docMenuItems, setDocMenuItems] = useState<DocumentMenuItem[]>(() => getStoredMenuItems());
   const { language, setLanguage, t } = useLanguage();
   const { siteSettings } = useAdminData();
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setDocMenuItems(getStoredMenuItems());
+    };
+
+    window.addEventListener(MENU_ITEMS_UPDATED_EVENT, handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    return () => {
+      window.removeEventListener(MENU_ITEMS_UPDATED_EVENT, handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
 
   const languages: { id: Language; label: string; flag: string }[] = [
     { id: 'en', label: 'English', flag: 'EN' },
@@ -43,8 +59,8 @@ export const Header: React.FC<HeaderProps> = ({
   const currentLangLabel = languages.find((l) => l.id === language)?.label || 'English';
 
   const megaMenu = [
-    // 11 Requested Document Navigation Items (in the exact clean design shown in Image 2)
-    ...DOCUMENT_MENU_ITEMS.map((item) => ({
+    // Dynamic Document Navigation Items (managed via Admin Panel 3-Line Menu Manager)
+    ...docMenuItems.map((item) => ({
       title: item.mainTitle,
       links: [
         {
