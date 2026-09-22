@@ -1,6 +1,6 @@
 import { DocumentMenuItem, DOCUMENT_MENU_ITEMS } from '../data/menuNavigationItems';
 
-const STORAGE_KEY = 'bhp_custom_menu_items_v2';
+const STORAGE_KEY = 'bhp_custom_menu_items_v3';
 export const MENU_ITEMS_UPDATED_EVENT = 'bhp_menu_items_updated';
 
 /**
@@ -8,15 +8,37 @@ export const MENU_ITEMS_UPDATED_EVENT = 'bhp_menu_items_updated';
  */
 export function getStoredMenuItems(): DocumentMenuItem[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      // First time initialization: store defaults
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DOCUMENT_MENU_ITEMS));
-      return DOCUMENT_MENU_ITEMS;
+      // Check previous storage key if present
+      const oldRaw = localStorage.getItem('bhp_custom_menu_items_v2');
+      if (oldRaw) {
+        raw = oldRaw;
+      } else {
+        // First time initialization: store defaults
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(DOCUMENT_MENU_ITEMS));
+        return DOCUMENT_MENU_ITEMS;
+      }
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+      // Normalize any subMenu ending in " C" to " See"
+      let hasChanges = false;
+      const normalized = parsed.map((item: DocumentMenuItem) => {
+        if (item.subMenu && (item.subMenu.endsWith(' C') || item.subMenu.endsWith(' c'))) {
+          hasChanges = true;
+          return {
+            ...item,
+            subMenu: item.subMenu.slice(0, -2) + ' See',
+          };
+        }
+        return item;
+      });
+
+      if (hasChanges || !localStorage.getItem(STORAGE_KEY)) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+      }
+      return normalized;
     }
   } catch (err) {
     console.warn('Failed to parse stored menu items from localStorage:', err);

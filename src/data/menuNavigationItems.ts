@@ -18,7 +18,7 @@ export const DOCUMENT_MENU_ITEMS: DocumentMenuItem[] = [
   {
     id: 'australia-work-permit',
     mainTitle: 'Australia Work Permit Documents',
-    subMenu: 'Employment Application Document C',
+    subMenu: 'Employment Application Document See',
     fieldLabel: 'TIN / Reference Number',
     fieldKey: 'tinOrRef',
     placeholder: 'Enter TIN (e.g. 782 190 442) or Reference Number (e.g. REF-928410)...',
@@ -31,7 +31,7 @@ export const DOCUMENT_MENU_ITEMS: DocumentMenuItem[] = [
   {
     id: 'offer-letter-pending',
     mainTitle: 'Offer Letter of Employment Pending',
-    subMenu: 'Offer Letter of Employment C',
+    subMenu: 'Offer Letter of Employment See',
     fieldLabel: 'ID Number',
     fieldKey: 'idNumber',
     placeholder: 'Enter ID Number (e.g. ED-78412-WA or GBR5829104)...',

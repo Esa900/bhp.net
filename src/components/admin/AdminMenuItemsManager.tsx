@@ -537,7 +537,7 @@ export const AdminMenuItemsManager: React.FC<AdminMenuItemsManagerProps> = ({
                     required
                     value={formData.subMenu}
                     onChange={(e) => setFormData({ ...formData, subMenu: e.target.value })}
-                    placeholder="যেমন: Work Permit Documents Pending See বা Employment Application Document C"
+                    placeholder="যেমন: Work Permit Documents Pending See বা Employment Application Document See"
                     className="w-full bg-[#101114] border border-[#2F323A] focus:border-[#F25C05] rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#F25C05]"
                   />
                   <p className="text-[11px] text-gray-500">
