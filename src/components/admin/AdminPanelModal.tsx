@@ -31,10 +31,14 @@ import {
   EyeOff,
   LogOut,
   Award,
+  Pin,
+  ChevronDown,
+  Tag,
 } from 'lucide-react';
 import { useAdminData, AdminRole, JobPosting, ContactSubmission } from '../../context/AdminDataContext';
 import { CommodityItem, NewsItem, ReportItem, EventItem, StockMarketData } from '../../types';
 import { PositiveListOccupation } from '../../types/portal';
+import { AdminPostsManager } from './AdminPostsManager';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -49,7 +53,10 @@ type AdminTab =
   | 'careers'
   | 'leads'
   | 'settings'
-  | 'positive-list';
+  | 'positive-list'
+  | 'posts-all'
+  | 'posts-new'
+  | 'posts-categories';
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClose }) => {
   const {
@@ -107,6 +114,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
 
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isPostsMenuOpen, setIsPostsMenuOpen] = useState(true);
 
   // Positive List State
   const [positiveListSearch, setPositiveListSearch] = useState('');
@@ -675,6 +683,81 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                 </span>
               </button>
 
+              {/* Posts Menu Item (WordPress style with 3 sub-options: Add New Post, All Posts, Categories) */}
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPostsMenuOpen(!isPostsMenuOpen);
+                    if (!isPostsMenuOpen && !activeTab.startsWith('posts-')) {
+                      setActiveTab('posts-new');
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                    activeTab.startsWith('posts-')
+                      ? 'bg-[#135e96] text-white shadow-sm'
+                      : 'text-gray-300 hover:bg-[#23262D] hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Pin className="w-4 h-4 shrink-0 text-[#38bdf8]" />
+                    <span>Posts</span>
+                  </div>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                      isPostsMenuOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {/* 3 Sub-menu items: Add New Post, All Posts, Categories */}
+                {isPostsMenuOpen && (
+                  <div className="ml-3 pl-3 py-1 space-y-1 border-l-2 border-[#135e96] bg-[#16181b] rounded-r-lg">
+                    {/* 1. Add New Post */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('posts-new')}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold transition-colors cursor-pointer text-left ${
+                        activeTab === 'posts-new'
+                          ? 'bg-[#0284c7] text-white font-bold'
+                          : 'text-[#7dd3fc] hover:text-white hover:bg-[#22262d]'
+                      }`}
+                    >
+                      <Plus className="w-3 h-3 text-[#38bdf8]" />
+                      <span>Add New Post</span>
+                    </button>
+
+                    {/* 2. All Posts */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('posts-all')}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold transition-colors cursor-pointer text-left ${
+                        activeTab === 'posts-all'
+                          ? 'bg-[#0284c7] text-white font-bold'
+                          : 'text-[#7dd3fc] hover:text-white hover:bg-[#22262d]'
+                      }`}
+                    >
+                      <FileText className="w-3 h-3 text-gray-300" />
+                      <span>All Posts</span>
+                    </button>
+
+                    {/* 3. Categories */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('posts-categories')}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs font-semibold transition-colors cursor-pointer text-left ${
+                        activeTab === 'posts-categories'
+                          ? 'bg-[#0284c7] text-white font-bold'
+                          : 'text-[#7dd3fc] hover:text-white hover:bg-[#22262d]'
+                      }`}
+                    >
+                      <Tag className="w-3 h-3 text-amber-400" />
+                      <span>Categories</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <button
                 disabled={!canAccessNews}
                 onClick={() => setActiveTab('news')}
@@ -800,6 +883,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           {/* Main Work Area */}
           <main className="flex-1 bg-[#141517] overflow-y-auto p-4 sm:p-8">
             
+            {/* POSTS MODULE (ADD NEW POST, ALL POSTS, CATEGORIES) */}
+            {activeTab.startsWith('posts-') && (
+              <AdminPostsManager
+                subView={activeTab === 'posts-new' ? 'new' : activeTab === 'posts-categories' ? 'categories' : 'all'}
+                onSwitchSubView={(v) => setActiveTab(`posts-${v}` as AdminTab)}
+                showToast={showToast}
+              />
+            )}
+
             {/* MODULE 1: DASHBOARD */}
             {activeTab === 'dashboard' && (
               <div className="space-y-8 max-w-6xl">

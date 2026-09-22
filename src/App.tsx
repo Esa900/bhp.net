@@ -30,6 +30,8 @@ import { SearchModal } from './components/SearchModal';
 import { CookieConsentModal } from './components/modals/CookieConsentModal';
 import { AdminPanelModal } from './components/admin/AdminPanelModal';
 import { DocumentVerificationPortal } from './components/portal/DocumentVerificationPortal';
+import { DocumentSearchModal } from './components/DocumentSearchModal';
+import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from './data/menuNavigationItems';
 
 function MainWebsiteContent() {
   const { commodities, siteSettings } = useAdminData();
@@ -47,6 +49,9 @@ function MainWebsiteContent() {
   const [isCookieOpen, setIsCookieOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isPortalOpen, setIsPortalOpen] = useState(false);
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('australia-work-permit');
+  const [isDocSearchOpen, setIsDocSearchOpen] = useState(false);
+  const [selectedDocItem, setSelectedDocItem] = useState<DocumentMenuItem>(DOCUMENT_MENU_ITEMS[0]);
 
   // Check URL route for /admin or #/admin
   const checkIsAdminRoute = useCallback(() => {
@@ -91,9 +96,21 @@ function MainWebsiteContent() {
       setIsPortalOpen(true);
     }
 
+    const params = new URLSearchParams(window.location.search);
+    const itemParam = params.get('item');
+    if (itemParam) {
+      setSelectedMenuItemId(itemParam);
+    }
+
     const handleRouteChange = () => {
       setIsAdminOpen(checkIsAdminRoute());
-      setIsPortalOpen(checkIsPortalRoute());
+      const portalActive = checkIsPortalRoute();
+      setIsPortalOpen(portalActive);
+      const curParams = new URLSearchParams(window.location.search);
+      const curItem = curParams.get('item');
+      if (curItem) {
+        setSelectedMenuItemId(curItem);
+      }
     };
 
     window.addEventListener('popstate', handleRouteChange);
@@ -119,12 +136,23 @@ function MainWebsiteContent() {
     }
   };
 
-  const handleOpenPortal = () => {
+  const handleOpenPortal = (menuItemId?: string) => {
+    if (menuItemId) {
+      setSelectedMenuItemId(menuItemId);
+    }
     setIsPortalOpen(true);
+    const targetUrl = menuItemId ? `/portal?item=${menuItemId}` : '/portal';
     if (!window.location.pathname.includes('/portal')) {
-      window.history.pushState({}, '', '/portal');
+      window.history.pushState({}, '', targetUrl);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectMenuItem = (menuItemId: string) => {
+    // Directly open the designated document search option modal in BHP's theme (no separate alien portal)
+    const item = DOCUMENT_MENU_ITEMS.find((d) => d.id === menuItemId) || DOCUMENT_MENU_ITEMS[0];
+    setSelectedDocItem(item);
+    setIsDocSearchOpen(true);
   };
 
   const handleClosePortal = () => {
@@ -150,6 +178,7 @@ function MainWebsiteContent() {
         <DocumentVerificationPortal
           onBackToWebsite={handleClosePortal}
           onOpenAdmin={handleOpenAdmin}
+          initialMenuItemId={selectedMenuItemId}
         />
         {/* Admin Panel (accessible directly from within the portal) */}
         <AdminPanelModal
@@ -179,6 +208,8 @@ function MainWebsiteContent() {
         onProductClick={handleProductSelectById}
         onLegalClick={(type) => setLegalDoc(type)}
         onAdminClick={handleOpenAdmin}
+        onPortalClick={() => handleOpenPortal()}
+        onSelectMenuItem={handleSelectMenuItem}
       />
 
       {/* Main Page Sections */}
@@ -264,6 +295,13 @@ function MainWebsiteContent() {
       <CookieConsentModal
         isOpen={isCookieOpen}
         onClose={() => setIsCookieOpen(false)}
+      />
+
+      {/* 11 Document Search Option Modal in BHP theme */}
+      <DocumentSearchModal
+        isOpen={isDocSearchOpen}
+        onClose={() => setIsDocSearchOpen(false)}
+        activeItem={selectedDocItem}
       />
 
       {/* Admin Panel (accessible via /admin URL or direct link) */}

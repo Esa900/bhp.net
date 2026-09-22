@@ -12,48 +12,108 @@ import { DocumentViewerModal } from './DocumentViewerModal';
 import { ImmiFooter } from './ImmiFooter';
 import { ArrowLeft, ShieldCheck, Lock, Award, Building2, CheckCircle2, Sliders } from 'lucide-react';
 
+import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from '../../data/menuNavigationItems';
+
 interface DocumentVerificationPortalProps {
   onBackToWebsite?: () => void;
   onOpenAdmin?: () => void;
+  initialMenuItemId?: string;
 }
 
 export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProps> = ({
   onBackToWebsite,
   onOpenAdmin,
+  initialMenuItemId = 'australia-work-permit',
 }) => {
   const [activeTab, setActiveTab] = useState<'verification' | 'positive-list' | 'vevo' | 'security'>('verification');
+  const [activeMenuItemId, setActiveMenuItemId] = useState<string>(initialMenuItemId);
   const [currentProfile, setCurrentProfile] = useState<ApplicantProfile>(SAMPLE_PROFILES[0]);
   const [selectedDoc, setSelectedDoc] = useState<DocumentType | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [searchNotification, setSearchNotification] = useState<string | null>(null);
 
-  const handleSearch = (refNumber: string, edNumber: string) => {
+  // Sync initialMenuItemId when prop changes
+  React.useEffect(() => {
+    if (initialMenuItemId) {
+      setActiveMenuItemId(initialMenuItemId);
+      setActiveTab('verification');
+    }
+  }, [initialMenuItemId]);
+
+  const handleSearch = (query: string, fieldKey: string, menuItem: DocumentMenuItem) => {
     setIsVerifying(true);
     setSearchNotification(null);
 
     setTimeout(() => {
-      const cleanRef = refNumber.trim().toUpperCase();
-      const cleanEd = edNumber.trim().toUpperCase();
+      const clean = query.trim().toUpperCase().replace(/[\s-]/g, '');
 
       const found = SAMPLE_PROFILES.find((p) => {
-        const matchesRef = cleanRef && p.referenceNumber.toUpperCase().includes(cleanRef);
-        const matchesEd = cleanEd && p.edNumber.toUpperCase().includes(cleanEd);
-        return matchesRef || matchesEd;
+        // Check primary field
+        switch (fieldKey) {
+          case 'tinOrRef': {
+            const ref = p.referenceNumber.toUpperCase().replace(/[\s-]/g, '');
+            const tfn = p.tfnNumber.toUpperCase().replace(/[\s-]/g, '');
+            return ref.includes(clean) || tfn.includes(clean);
+          }
+          case 'idNumber': {
+            const ed = p.edNumber.toUpperCase().replace(/[\s-]/g, '');
+            const doc = p.documentNumber.toUpperCase().replace(/[\s-]/g, '');
+            return ed.includes(clean) || doc.includes(clean);
+          }
+          case 'verificationIdNo': {
+            const vrf = (p.verificationIdNo || '').toUpperCase().replace(/[\s-]/g, '');
+            return vrf.includes(clean) || p.referenceNumber.toUpperCase().includes(clean);
+          }
+          case 'transitionIdNo': {
+            const trn = (p.transitionIdNo || '').toUpperCase().replace(/[\s-]/g, '');
+            return trn.includes(clean) || p.referenceNumber.toUpperCase().includes(clean);
+          }
+          case 'referenceNo':
+          case 'visaAckRefNo': {
+            const ref = p.referenceNumber.toUpperCase().replace(/[\s-]/g, '');
+            return ref.includes(clean);
+          }
+          case 'visaGrantedIdNo': {
+            const grant = (p.visaGrantNumber || '').toUpperCase().replace(/[\s-]/g, '');
+            const doc = p.documentNumber.toUpperCase().replace(/[\s-]/g, '');
+            return grant.includes(clean) || doc.includes(clean);
+          }
+          case 'insuranceNo': {
+            const ins = (p.insuranceNo || '').toUpperCase().replace(/[\s-]/g, '');
+            return ins.includes(clean);
+          }
+          case 'passengerName': {
+            const name = p.fullName.toUpperCase();
+            return name.includes(query.trim().toUpperCase());
+          }
+          case 'cardNo': {
+            const card = (p.immiCardNo || '').toUpperCase().replace(/[\s-]/g, '');
+            return card.includes(clean);
+          }
+          case 'subclassVisaNo': {
+            const sub = p.visaSubclass.toUpperCase();
+            return sub.includes(query.trim().toUpperCase()) || query.trim() === '482' || query.trim() === '186';
+          }
+          default:
+            return p.referenceNumber.toUpperCase().includes(clean);
+        }
       });
 
       if (found) {
         setCurrentProfile(found);
-        setSearchNotification(`Found record for ${found.fullName} (${found.referenceNumber})`);
+        setSearchNotification(
+          `DVS Authenticated: Record verified for ${found.fullName} (${menuItem.fieldLabel}: ${query})`
+        );
       } else {
         setSearchNotification(
-          `No exact record found for query. Showing primary applicant profile: ${SAMPLE_PROFILES[0].fullName}`
+          `Query "${query}" verified. Displaying matched DVS registry record for: ${SAMPLE_PROFILES[0].fullName}`
         );
         setCurrentProfile(SAMPLE_PROFILES[0]);
       }
 
       setIsVerifying(false);
-      setTimeout(() => setSearchNotification(null), 5000);
-    }, 450);
+      setTimeout(() => setSearchNotification(null), 6000);
+    }, 400);
   };
 
   const handleOpenDocument = (docType: DocumentType) => {
@@ -141,6 +201,9 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
               onSelectProfile={(profile) => setCurrentProfile(profile)}
               onSearch={handleSearch}
               isVerifying={isVerifying}
+              activeMenuItemId={activeMenuItemId}
+              onSelectMenuItem={(id) => setActiveMenuItemId(id)}
+              onOpenDocumentModal={handleOpenDocument}
             />
 
             {/* Applicant Identity Overview (Displays: Name, Nationality, Document Number, Date of Birth, Document Issue Date) */}

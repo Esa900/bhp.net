@@ -1,13 +1,35 @@
-import React, { useState } from 'react';
-import { Search, FileText, CheckCircle2, AlertCircle, RefreshCw, KeyRound, Sparkles, Building2 } from 'lucide-react';
-import { ApplicantProfile } from '../../types/portal';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Search,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  KeyRound,
+  Sparkles,
+  Building2,
+  ShieldCheck,
+  ChevronRight,
+  ExternalLink,
+  ArrowRight,
+  Fingerprint,
+  CreditCard,
+  Plane,
+  FileCheck,
+  BadgeCheck,
+} from 'lucide-react';
+import { ApplicantProfile, DocumentType } from '../../types/portal';
 import { SAMPLE_PROFILES } from '../../data/portalData';
+import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from '../../data/menuNavigationItems';
 
 interface VerificationSearchProps {
   currentProfile: ApplicantProfile;
   onSelectProfile: (profile: ApplicantProfile) => void;
-  onSearch: (refNumber: string, edNumber: string) => void;
+  onSearch: (query: string, fieldKey: string, menuItem: DocumentMenuItem) => void;
   isVerifying: boolean;
+  activeMenuItemId?: string;
+  onSelectMenuItem?: (menuItemId: string) => void;
+  onOpenDocumentModal?: (docType: DocumentType) => void;
 }
 
 export const VerificationSearch: React.FC<VerificationSearchProps> = ({
@@ -15,66 +37,183 @@ export const VerificationSearch: React.FC<VerificationSearchProps> = ({
   onSelectProfile,
   onSearch,
   isVerifying,
+  activeMenuItemId = 'australia-work-permit',
+  onSelectMenuItem,
+  onOpenDocumentModal,
 }) => {
-  const [refInput, setRefInput] = useState(currentProfile.referenceNumber);
-  const [edInput, setEdInput] = useState(currentProfile.edNumber);
+  const activeItem =
+    DOCUMENT_MENU_ITEMS.find((item) => item.id === activeMenuItemId) || DOCUMENT_MENU_ITEMS[0];
+
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Helper to extract the designated value for a profile based on the fieldKey
+  const getProfileValueOfField = (profile: ApplicantProfile, fieldKey: string): string => {
+    switch (fieldKey) {
+      case 'tinOrRef':
+        return profile.referenceNumber;
+      case 'idNumber':
+        return profile.edNumber;
+      case 'verificationIdNo':
+        return profile.verificationIdNo || 'VRF-99420-AU';
+      case 'transitionIdNo':
+        return profile.transitionIdNo || 'VFS-TRN-882190';
+      case 'referenceNo':
+      case 'visaAckRefNo':
+        return profile.referenceNumber;
+      case 'visaGrantedIdNo':
+        return profile.visaGrantNumber || profile.documentNumber;
+      case 'insuranceNo':
+        return profile.insuranceNo || 'BUPA-OVHC-7741029';
+      case 'passengerName':
+        return profile.fullName;
+      case 'cardNo':
+        return profile.immiCardNo || 'IMMI-CARD-492019';
+      case 'subclassVisaNo':
+        return profile.visaSubclass.includes('482') ? '482' : '186';
+      default:
+        return profile.referenceNumber;
+    }
+  };
+
+  const [designatedInput, setDesignatedInput] = useState(() =>
+    getProfileValueOfField(currentProfile, activeItem.fieldKey)
+  );
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
+
+  // When active item or current profile changes, sync designated input
+  useEffect(() => {
+    const val = getProfileValueOfField(currentProfile, activeItem.fieldKey);
+    setDesignatedInput(val);
+    setSearchFeedback(null);
+    // Focus the designated input
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [activeItem.id, currentProfile.id]);
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!refInput.trim() && !edInput.trim()) {
-      setSearchFeedback('Please enter either a Reference Number or ED Number.');
+    if (!designatedInput.trim()) {
+      setSearchFeedback(`Please enter a valid ${activeItem.fieldLabel}.`);
       return;
     }
     setSearchFeedback(null);
-    onSearch(refInput.trim(), edInput.trim());
+    onSearch(designatedInput.trim(), activeItem.fieldKey, activeItem);
   };
 
-  const handleSampleClick = (profile: ApplicantProfile) => {
-    setRefInput(profile.referenceNumber);
-    setEdInput(profile.edNumber);
+  const handleQuickSampleClick = (profile: ApplicantProfile) => {
+    const val = getProfileValueOfField(profile, activeItem.fieldKey);
+    setDesignatedInput(val);
     setSearchFeedback(null);
     onSelectProfile(profile);
+    onSearch(val, activeItem.fieldKey, activeItem);
   };
 
   return (
-    <section className="bg-white rounded-xl shadow-sm border border-[#D5D9DE] overflow-hidden mb-8">
-      {/* Australian Gov Top Banner Stripe */}
-      <div className="bg-[#F4F6F8] border-b border-[#D5D9DE] px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <section id="verification-search-section" className="bg-white rounded-xl shadow-sm border border-[#D5D9DE] overflow-hidden mb-8">
+      {/* Top Banner Stripe */}
+      <div className="bg-[#002B49] text-white px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#001D33]">
         <div>
-          <div className="text-xs font-bold text-[#002B49] uppercase tracking-wider flex items-center gap-1.5">
-            <KeyRound className="w-3.5 h-3.5 text-[#C88A24]" />
-            <span>Document Verification & Retrieval System</span>
+          <div className="text-xs font-bold text-[#FFCD00] uppercase tracking-wider flex items-center gap-1.5">
+            <KeyRound className="w-3.5 h-3.5 text-[#FFCD00]" />
+            <span>Commonwealth Document Verification Service (DVS) Portal</span>
           </div>
-          <h2 className="text-lg font-bold text-gray-900 mt-0.5">
-            Client Verification & Document Access
+          <h2 className="text-lg sm:text-xl font-bold text-white mt-0.5 flex items-center gap-2">
+            <span>{activeItem.mainTitle}</span>
           </h2>
+          <div className="text-xs text-gray-300 mt-0.5 flex items-center gap-1.5">
+            <span>Sub-Menu:</span>
+            <strong className="text-[#FFCD00] font-semibold">{activeItem.subMenu}</strong>
+          </div>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-semibold">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-          <span>DVS Database Online</span>
+
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-full text-xs font-semibold">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>DVS Database Active</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 11 Categories Quick Navigation Strip */}
+      <div className="bg-[#F4F6F8] border-b border-[#D5D9DE] px-4 sm:px-6 py-2.5 overflow-x-auto">
+        <div className="flex items-center gap-2 min-w-max">
+          <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+            Verification Categories (11 Items):
+          </span>
+          <div className="flex items-center gap-1.5">
+            {DOCUMENT_MENU_ITEMS.map((item, index) => {
+              const isSelected = item.id === activeItem.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onSelectMenuItem?.(item.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-[#002B49] text-white shadow-sm font-bold ring-1 ring-[#002B49]'
+                      : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                  title={`${item.mainTitle} -> ${item.subMenu}`}
+                >
+                  <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${
+                    isSelected ? 'bg-[#FFCD00] text-[#002B49]' : 'bg-gray-200 text-gray-700'
+                  }`}>
+                    {index + 1}
+                  </span>
+                  <span className="max-w-[140px] truncate">{item.mainTitle}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       <div className="p-6">
-        <p className="text-sm text-gray-600 mb-5 leading-relaxed">
-          Clients and sponsoring organizations can enter their <strong className="text-gray-900">Reference Number</strong> (e.g. Visa TRN / Ref) or <strong className="text-gray-900">ED Number</strong> (Employer-Declaration ID) to securely fetch and authenticate all official visa, employment, tax, and medical documents.
-        </p>
+        {/* Designated Context Explanation Card */}
+        <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-[#EBF5FB] to-[#F4F9FD] border border-[#BFDBFE] flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#002B49] text-[#FFCD00]">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Designated Verification Action</span>
+            </div>
+            <h3 className="text-base font-bold text-gray-900">
+              {activeItem.subMenu}
+            </h3>
+            <p className="text-xs text-gray-600 leading-relaxed max-w-2xl">
+              {activeItem.description}
+            </p>
+          </div>
 
-        {/* Quick Sample Selector Chips */}
+          <div className="bg-white p-3 rounded-lg border border-blue-200 text-center shrink-0 min-w-[200px] shadow-2xs">
+            <span className="text-[10px] uppercase font-bold text-gray-500 block">Designated Search Field</span>
+            <span className="text-sm font-extrabold text-[#002B49] font-mono block mt-0.5">
+              {activeItem.fieldLabel}
+            </span>
+            <span className="inline-block mt-1 text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold">
+              {activeItem.badge}
+            </span>
+          </div>
+        </div>
+
+        {/* Quick Test Verified Profiles for THIS designated field */}
         <div className="mb-6 p-4 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
-          <div className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-[#C88A24]" />
-            <span>Quick Test Verified Profiles (Click to Load):</span>
+          <div className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-[#C88A24]" />
+              <span>Test with Verified Records (Click to populate "{activeItem.fieldLabel}"):</span>
+            </div>
+            <span className="text-[11px] text-gray-500 font-normal">3 Verified Profiles Loaded</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
             {SAMPLE_PROFILES.map((sample) => {
+              const sampleVal = getProfileValueOfField(sample, activeItem.fieldKey);
               const isSelected = sample.id === currentProfile.id;
               return (
                 <button
                   key={sample.id}
                   type="button"
-                  onClick={() => handleSampleClick(sample)}
+                  onClick={() => handleQuickSampleClick(sample)}
                   className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
                     isSelected
                       ? 'bg-[#EBF5FB] border-[#002B49] shadow-sm ring-1 ring-[#002B49]'
@@ -83,16 +222,18 @@ export const VerificationSearch: React.FC<VerificationSearchProps> = ({
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-bold text-sm text-gray-900">{sample.fullName}</span>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                      isSelected ? 'bg-[#002B49] text-white' : 'bg-gray-100 text-gray-600'
-                    }`}>
+                    <span
+                      className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                        isSelected ? 'bg-[#002B49] text-white' : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
                       {sample.nationality}
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 line-clamp-1">{sample.nominatedOccupation}</div>
-                  <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px] font-mono">
-                    <span className="text-blue-800 font-semibold">{sample.referenceNumber}</span>
-                    <span className="text-[#C88A24] font-semibold">{sample.edNumber}</span>
+                  <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px]">
+                    <span className="text-gray-500">{activeItem.fieldLabel}:</span>
+                    <span className="text-[#002B49] font-mono font-bold">{sampleVal}</span>
                   </div>
                 </button>
               );
@@ -100,99 +241,98 @@ export const VerificationSearch: React.FC<VerificationSearchProps> = ({
           </div>
         </div>
 
-        {/* Form Inputs for Reference Number & ED Number */}
-        <form onSubmit={handleFormSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-            {/* 1. Reference Number Input */}
-            <div>
-              <label htmlFor="ref-input" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                <span>Reference Number (TRN / Visa Ref)</span>
-                <span className="text-gray-600 text-[11px] lowercase font-normal">e.g. REF-928410</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-600">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <input
-                  id="ref-input"
-                  type="text"
-                  value={refInput}
-                  onChange={(e) => setRefInput(e.target.value)}
-                  placeholder="Enter Reference Number (e.g. REF-928410)..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#002B49] focus:border-transparent transition-all"
-                />
+        {/* Form with the EXACT Designated Search Field */}
+        <form onSubmit={handleFormSubmit} className="space-y-5">
+          <div className="bg-[#F8FAFC] p-5 rounded-xl border border-gray-200">
+            <label
+              htmlFor="designated-search-input"
+              className="block text-xs font-bold text-gray-900 uppercase tracking-wider mb-2 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#002B49]"></span>
+                <span className="text-sm font-bold text-[#002B49]">{activeItem.fieldLabel}</span>
               </div>
-              <p className="mt-1 text-[11px] text-gray-600">
-                Found on your Visa Application Received Notice or Visa Grant Letter.
-              </p>
+              <span className="text-gray-500 text-xs font-normal normal-case">
+                Target Field for: <strong className="text-gray-900">{activeItem.subMenu}</strong>
+              </span>
+            </label>
+
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500">
+                <FileCheck className="w-5 h-5 text-[#002B49]" />
+              </div>
+              <input
+                id="designated-search-input"
+                ref={inputRef}
+                type="text"
+                value={designatedInput}
+                onChange={(e) => setDesignatedInput(e.target.value)}
+                placeholder={activeItem.placeholder}
+                className="w-full pl-11 pr-24 py-3 bg-white border-2 border-[#002B49]/30 rounded-lg text-sm text-gray-900 font-mono font-medium focus:outline-none focus:ring-2 focus:ring-[#002B49] focus:border-[#002B49] transition-all shadow-2xs"
+              />
+              {designatedInput && (
+                <button
+                  type="button"
+                  onClick={() => setDesignatedInput('')}
+                  className="absolute inset-y-0 right-2 px-2.5 py-1 text-xs text-gray-400 hover:text-gray-700 cursor-pointer"
+                >
+                  Clear
+                </button>
+              )}
             </div>
 
-            {/* 2. ED Number Input */}
-            <div>
-              <label htmlFor="ed-input" className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                <span>ED Number (Employer-Declaration ID)</span>
-                <span className="text-gray-600 text-[11px] lowercase font-normal">e.g. ED-78412-WA</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-600">
-                  <Building2 className="w-4 h-4" />
-                </div>
-                <input
-                  id="ed-input"
-                  type="text"
-                  value={edInput}
-                  onChange={(e) => setEdInput(e.target.value)}
-                  placeholder="Enter ED Number (e.g. ED-78412-WA)..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#002B49] focus:border-transparent transition-all"
-                />
-              </div>
-              <p className="mt-1 text-[11px] text-gray-600">
-                Issued for nominated employment, acceptance, and sponsorship verification.
-              </p>
+            <div className="mt-2.5 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-gray-500 gap-2">
+              <span>
+                Enter the official <strong className="text-gray-800">{activeItem.fieldLabel}</strong> to fetch verified records.
+              </span>
+              <span className="font-mono text-[11px] text-[#002B49] bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                Sample: {activeItem.sampleValue}
+              </span>
             </div>
           </div>
 
           {searchFeedback && (
-            <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+            <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
               <span>{searchFeedback}</span>
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-gray-200">
-            <div className="text-xs text-gray-600 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span>Active Verified Session for:</span>
-              <strong className="text-gray-900 font-mono">{currentProfile.fullName}</strong>
+          {/* Action Row */}
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <span className="text-gray-600">Active Profile:</span>
+              <strong className="text-gray-900 font-medium">{currentProfile.fullName}</strong>
+              <span className="font-mono text-gray-500">({currentProfile.referenceNumber})</span>
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setRefInput(currentProfile.referenceNumber);
-                  setEdInput(currentProfile.edNumber);
-                  setSearchFeedback(null);
-                }}
-                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Reset Fields
-              </button>
+              {onOpenDocumentModal && (
+                <button
+                  type="button"
+                  onClick={() => onOpenDocumentModal(activeItem.documentType)}
+                  className="px-4 py-2.5 bg-white hover:bg-gray-50 text-[#002B49] border border-[#002B49] font-bold text-xs sm:text-sm rounded-lg shadow-2xs transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <ExternalLink className="w-4 h-4 text-[#002B49]" />
+                  <span>View Document Preview</span>
+                </button>
+              )}
+
               <button
                 type="submit"
                 disabled={isVerifying}
-                className="px-6 py-2.5 bg-[#002B49] hover:bg-[#001D33] text-white font-bold text-sm rounded-lg shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70"
+                className="px-6 py-2.5 bg-[#002B49] hover:bg-[#001D33] text-white font-bold text-xs sm:text-sm rounded-lg shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70"
               >
                 {isVerifying ? (
                   <>
-                    <RefreshCw className="w-4 h-4 animate-spin text-[#C88A24]" />
+                    <RefreshCw className="w-4 h-4 animate-spin text-[#FFCD00]" />
                     <span>Verifying with DVS...</span>
                   </>
                 ) : (
                   <>
-                    <Search className="w-4 h-4 text-[#FBBF24]" />
-                    <span>Fetch & Authenticate Documents</span>
+                    <Search className="w-4 h-4 text-[#FFCD00]" />
+                    <span>Search & Authenticate {activeItem.subMenu}</span>
                   </>
                 )}
               </button>

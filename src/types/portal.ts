@@ -11,7 +11,10 @@ export type DocumentType =
   | 'income-tax'
   | 'work-permit'
   | 'visa-received'
-  | 'visa-granted';
+  | 'visa-granted'
+  | 'biometric-vfs'
+  | 'plane-ticket'
+  | 'immi-card';
 
 export interface ApplicantProfile {
   id: string;
@@ -38,6 +41,13 @@ export interface ApplicantProfile {
   salaryPackage: string;
   workLocation: string;
   status: 'VERIFIED_ACTIVE' | 'PENDING_REVIEW' | 'GRANTED';
+  verificationIdNo?: string; // e.g. VRF-99420-AU
+  transitionIdNo?: string; // e.g. VFS-TRN-882190
+  insuranceNo?: string; // e.g. BUPA-OVHC-7741029
+  immiCardNo?: string; // e.g. IMMI-CARD-492019
+  ticketNumber?: string; // e.g. QF-948201
+  airlineName?: string; // e.g. Qantas Airways
+  flightRoute?: string; // e.g. London Heathrow (LHR) -> Perth Airport (PER)
 }
 
 export interface PositiveListOccupation {

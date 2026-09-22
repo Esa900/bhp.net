@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Menu, X, Search, ChevronDown, ArrowRight, Globe, ExternalLink, Mail } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Menu, X, Search, ChevronDown, ArrowRight, Globe, ExternalLink, Mail, FileCheck, ShieldCheck, ChevronRight } from 'lucide-react';
 import { useLanguage, Language } from '../context/LanguageContext';
 import { useAdminData } from '../context/AdminDataContext';
+import { DOCUMENT_MENU_ITEMS } from '../data/menuNavigationItems';
 
 interface HeaderProps {
   onSearchClick: () => void;
@@ -13,6 +14,7 @@ interface HeaderProps {
   onLegalClick?: (type: 'code-of-conduct' | 'bhp-foundation') => void;
   onAdminClick?: () => void;
   onPortalClick?: () => void;
+  onSelectMenuItem?: (menuItemId: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -24,6 +26,8 @@ export const Header: React.FC<HeaderProps> = ({
   onProductClick,
   onLegalClick,
   onAdminClick,
+  onPortalClick,
+  onSelectMenuItem,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
@@ -39,6 +43,16 @@ export const Header: React.FC<HeaderProps> = ({
   const currentLangLabel = languages.find((l) => l.id === language)?.label || 'English';
 
   const megaMenu = [
+    // 11 Requested Document Navigation Items (in the exact clean design shown in Image 2)
+    ...DOCUMENT_MENU_ITEMS.map((item) => ({
+      title: item.mainTitle,
+      links: [
+        {
+          label: item.subMenu,
+          action: () => onSelectMenuItem?.(item.id),
+        },
+      ],
+    })),
     {
       title: 'About Us',
       links: [
@@ -122,8 +136,8 @@ export const Header: React.FC<HeaderProps> = ({
       <header id="bhp-header" className="sticky top-0 z-40 bg-[#161718] text-white border-b border-[#2B2C2E] select-none">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-[70px] flex items-center justify-between">
           
-          {/* Left: Hamburger Menu */}
-          <div className="flex items-center">
+          {/* Left: Hamburger Menu and Desktop Document Navigation Dropdown */}
+          <div className="flex items-center gap-3">
             <button
               id="header-menu-button"
               type="button"

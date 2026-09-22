@@ -27,6 +27,9 @@ import { TaxCertificateDoc } from './documents/TaxCertificateDoc';
 import { WorkPermitDoc } from './documents/WorkPermitDoc';
 import { VisaReceivedDoc } from './documents/VisaReceivedDoc';
 import { VisaGrantedDoc } from './documents/VisaGrantedDoc';
+import { BiometricVfsDoc } from './documents/BiometricVfsDoc';
+import { PlaneTicketDoc } from './documents/PlaneTicketDoc';
+import { ImmiCardDoc } from './documents/ImmiCardDoc';
 
 interface DocumentViewerModalProps {
   isOpen: boolean;
@@ -89,6 +92,12 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         return <VisaReceivedDoc profile={profile} />;
       case 'visa-granted':
         return <VisaGrantedDoc profile={profile} />;
+      case 'biometric-vfs':
+        return <BiometricVfsDoc profile={profile} />;
+      case 'plane-ticket':
+        return <PlaneTicketDoc profile={profile} />;
+      case 'immi-card':
+        return <ImmiCardDoc profile={profile} />;
       default:
         return <ApplicationFormDoc profile={profile} />;
     }
