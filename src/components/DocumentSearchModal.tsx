@@ -14,9 +14,12 @@ import {
   Tag,
   Paperclip,
   Image as ImageIcon,
-  Sparkles,
-  Lock,
-  ShieldAlert,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Minimize2,
+  ExternalLink,
+  Download,
   AlertTriangle,
 } from 'lucide-react';
 import { DocumentMenuItem } from '../data/menuNavigationItems';
@@ -46,12 +49,10 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
   // Available admin posts from localStorage
   const [adminPosts, setAdminPosts] = useState<AdminPost[]>([]);
 
-  // PDF Preview Modal State (View Only - No Download)
+  // PDF & Document Preview Modal State with Zoom
   const [previewingDoc, setPreviewingDoc] = useState<AttachedDoc | null>(null);
-
-  // Anti-Screenshot & Screen Capture Protection States
-  const [screenshotAttempted, setScreenshotAttempted] = useState(false);
-  const [isWindowBlurred, setIsWindowBlurred] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState<number>(100);
+  const [previewMaximized, setPreviewMaximized] = useState<boolean>(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -85,119 +86,62 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       setMatchedAdminPost(null);
       setMatchedProfile(null);
       setPreviewingDoc(null);
-      setScreenshotAttempted(false);
-      setIsWindowBlurred(false);
+      setPreviewZoom(100);
+      setPreviewMaximized(false);
       setTimeout(() => inputRef.current?.focus(), 80);
     }
   }, [isOpen, activeItem]);
 
-  // Anti-Screenshot & Keyboard Capture Blocker
+  // Keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
 
-    const triggerScreenshotAlert = () => {
-      setScreenshotAttempted(true);
-      // Clear clipboard to erase potential screen capture data
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        try {
-          navigator.clipboard.writeText('⚠️ PROTECTED: BHP Document Capture Restricted');
-        } catch {
-          // ignore if clipboard permission denied
-        }
-      }
-      setTimeout(() => {
-        setScreenshotAttempted(false);
-      }, 5000);
-    };
-
     const handleKeyDown = (e: KeyboardEvent) => {
-      // ESC key to close
       if (e.key === 'Escape') {
         if (previewingDoc !== null) {
           setPreviewingDoc(null);
         } else {
           onClose();
         }
-        return;
-      }
-
-      // PrintScreen key pressed
-      if (e.key === 'PrintScreen') {
-        e.preventDefault();
-        triggerScreenshotAlert();
-        return;
-      }
-
-      // Ctrl+P / Cmd+P (Print to PDF / Printer)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
-        e.preventDefault();
-        triggerScreenshotAlert();
-        return;
-      }
-
-      // Ctrl+S / Cmd+S (Save webpage)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        triggerScreenshotAlert();
-        return;
-      }
-
-      // Screenshot shortcuts: Win+Shift+S, Cmd+Shift+3/4/5
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'S' || e.key === 's' || e.key === '3' || e.key === '4' || e.key === '5')) {
-        e.preventDefault();
-        triggerScreenshotAlert();
-        return;
-      }
-
-      // Developer Tools shortcuts: F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
-      if (
-        e.key === 'F12' ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
-        ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U'))
-      ) {
-        e.preventDefault();
-        triggerScreenshotAlert();
-        return;
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'PrintScreen') {
-        triggerScreenshotAlert();
-      }
-    };
-
-    // Screen-blur protection when window loses focus (e.g. Snipping tool opened or external screenshot app activated)
-    const handleBlur = () => {
-      setIsWindowBlurred(true);
-    };
-
-    const handleFocus = () => {
-      setIsWindowBlurred(false);
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        setIsWindowBlurred(true);
-      } else {
-        setIsWindowBlurred(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isOpen, onClose, previewingDoc]);
+
+  const handleZoomIn = () => {
+    setPreviewZoom((prev) => Math.min(prev + 25, 300));
+  };
+
+  const handleZoomOut = () => {
+    setPreviewZoom((prev) => Math.max(prev - 25, 50));
+  };
+
+  const handleZoomReset = () => {
+    setPreviewZoom(100);
+  };
+
+  const handleOpenDocPreview = (doc: AttachedDoc) => {
+    setPreviewingDoc(doc);
+    setPreviewZoom(100);
+    setPreviewMaximized(false);
+  };
+
+  const handleOpenImagePreview = (imgUrl: string, idx: number) => {
+    setPreviewingDoc({
+      id: `gallery-img-${idx}`,
+      name: `${matchedAdminPost?.title || 'Document'} - Photo #${idx + 1}`,
+      size: 'High Resolution',
+      type: 'image',
+      dataUrl: imgUrl,
+      uploadDate: matchedAdminPost?.date || 'Current',
+    });
+    setPreviewZoom(100);
+    setPreviewMaximized(false);
+  };
 
   if (!isOpen || !activeItem) return null;
 
@@ -281,52 +225,14 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
     <>
       <div
         id="doc-search-modal-backdrop"
-        className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col items-center pt-10 sm:pt-14 px-3 sm:px-6 overflow-y-auto no-print"
+        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center pt-10 sm:pt-14 px-3 sm:px-6 overflow-y-auto"
         onClick={onClose}
       >
         <div
           id="doc-search-modal-container"
-          className="w-full max-w-4xl bg-[#17181B] rounded-2xl border border-[#2D3036] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 mb-12 relative protected-content"
+          className="w-full max-w-4xl bg-[#17181B] rounded-2xl border border-[#2D3036] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 mb-12 relative"
           onClick={(e) => e.stopPropagation()}
-          onContextMenu={(e) => e.preventDefault()}
         >
-          {/* Top Anti-Screenshot & Screen Capture Warning Banner (triggers on PrintScreen/shortcuts) */}
-          {screenshotAttempted && (
-            <div className="bg-red-600 text-white px-4 py-3 flex items-center justify-between gap-3 text-xs sm:text-sm font-bold animate-in slide-in-from-top duration-200 z-50 border-b border-red-700">
-              <div className="flex items-center gap-2.5">
-                <ShieldAlert className="w-5 h-5 text-white shrink-0 animate-bounce" />
-                <span>
-                  স্ক্রিনশট ও ডাউনলোড নিষেধ: এই ডকুমেন্টের কোনো স্ক্রিনশট বা ডাউনলোড করার অনুমতি নেই। (Screenshots and downloading are restricted by BHP Security Policy).
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setScreenshotAttempted(false)}
-                className="p-1 hover:bg-red-700 rounded text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {/* Window Blur Capture Protection Overlay */}
-          {isWindowBlurred && (hasSearched && (matchedAdminPost || matchedProfile)) && (
-            <div className="absolute inset-0 z-40 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150">
-              <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 mb-3">
-                <Lock className="w-8 h-8" />
-              </div>
-              <h4 className="text-base sm:text-lg font-bold text-white mb-1">
-                সুরক্ষার জন্য ডকুমেন্ট সাময়িকভাবে লুকানো হয়েছে
-              </h4>
-              <p className="text-xs sm:text-sm text-gray-300 max-w-md">
-                স্ক্রিন ক্যাপচার বা অন্য উইন্ডোতে থাকায় কনটেন্ট প্রটেক্ট করা হয়েছে। আবার দেখতে উইন্ডোর উপর ক্লিক করুন।
-              </p>
-              <span className="mt-3 px-3 py-1 rounded-full bg-[#24272E] text-gray-400 text-xs font-mono">
-                BHP Protected Document Protocol
-              </span>
-            </div>
-          )}
-
           {/* Modal Header Bar */}
           <div className="bg-[#1F2228] px-5 py-4 border-b border-[#2C3038] flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 overflow-hidden">
@@ -340,10 +246,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                   </span>
                   <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
                     Live DVS Search
-                  </span>
-                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/20">
-                    <Lock className="w-2.5 h-2.5" />
-                    No Download / Protected
                   </span>
                 </div>
                 <h2 className="text-base sm:text-lg font-bold text-white truncate mt-0.5">
@@ -361,15 +263,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
             >
               <X className="w-5 h-5" />
             </button>
-          </div>
-
-          {/* Security & Anti-Capture Watermark Header Notice */}
-          <div className="bg-[#121417] px-5 py-2 border-b border-[#26282E] flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-400">
-            <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
-              <Lock className="w-3.5 h-3.5" />
-              <span>কনটেন্ট সিকিউরিটি: ছবি জুম বা যেকোনো ফাইল ডাউনলোড সম্পূর্ণ বন্ধ রয়েছে। স্ক্রিনশট নেওয়া নিষেধ।</span>
-            </div>
-            <span className="font-mono text-gray-500">Security Mode: Active</span>
           </div>
 
           {/* Search Box Form */}
@@ -427,27 +320,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                   )}
                 </button>
               </form>
-
-              {/* Quick Clickable Suggestions from Admin Posts */}
-              {adminPosts.length > 0 && (
-                <div className="pt-2 border-t border-[#2A2C31] flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span className="text-gray-400 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-amber-400" />
-                    <span>Recent Post References:</span>
-                  </span>
-                  {adminPosts.slice(0, 3).map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => handleApplySample(p.refNumber)}
-                      className="px-2 py-0.5 rounded bg-[#25282F] hover:bg-[#30353E] text-[#FF8E4D] hover:text-white border border-[#3A3F4B] font-mono cursor-pointer transition-colors"
-                      title={p.title}
-                    >
-                      {p.refNumber}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* =========================================================================
@@ -455,18 +327,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                ========================================================================= */}
             {hasSearched && matchedAdminPost && (
               <div className="bg-[#1C1E22] border border-[#2D3036] rounded-xl overflow-hidden animate-in fade-in duration-200 shadow-xl space-y-0 relative">
-                {/* Diagonal Repeating Security Watermark across the document */}
-                <div
-                  className="absolute inset-0 pointer-events-none select-none z-10 opacity-[0.035] overflow-hidden flex flex-wrap gap-12 rotate-[-25deg] scale-125 items-center justify-center"
-                  aria-hidden="true"
-                >
-                  {Array.from({ length: 30 }).map((_, i) => (
-                    <div key={i} className="text-lg font-black text-white whitespace-nowrap tracking-widest uppercase">
-                      BHP SECURE RECORD • DO NOT COPY • DO NOT CAPTURE
-                    </div>
-                  ))}
-                </div>
-
                 {/* Official Verification Banner */}
                 <div className="bg-gradient-to-r from-[#17252A] via-[#142328] to-[#1C1E22] p-4 sm:p-5 border-b border-[#2C3B38] flex flex-wrap items-center justify-between gap-3 relative z-20">
                   <div className="flex items-center gap-3">
@@ -489,10 +349,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="px-3 py-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-bold tracking-wide">
                       Status: {matchedAdminPost.status || 'Active & Valid'}
-                    </span>
-                    <span className="px-2.5 py-1 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full text-xs font-semibold flex items-center gap-1">
-                      <Lock className="w-3 h-3" />
-                      <span>Protected</span>
                     </span>
                   </div>
                 </div>
@@ -578,7 +434,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                   </div>
 
                   {/* ===============================================================
-                      PICTURE GALLERY (NO ZOOM, NO DOWNLOAD, PROTECTED DISPLAY)
+                      PICTURE GALLERY (CLICK TO VIEW & ZOOM)
                      =============================================================== */}
                   {matchedAdminPost.galleryImages && matchedAdminPost.galleryImages.length > 0 && (
                     <div className="space-y-3 bg-[#141517] p-4 sm:p-5 rounded-xl border border-[#26282B]">
@@ -589,40 +445,34 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                             Document Photos & Gallery (ছবি গ্যালারি - {matchedAdminPost.galleryImages.length} Pictures)
                           </span>
                         </span>
-                        <span className="text-[11px] text-amber-400/90 font-medium flex items-center gap-1">
-                          <Lock className="w-3 h-3" />
-                          <span>View-only (জুম ও ডাউনলোড বন্ধ)</span>
+                        <span className="text-[11px] text-gray-400 font-medium">
+                          Click to view & zoom
                         </span>
                       </div>
 
-                      {/* Clean Protected Gallery Grid - No Zoom click, No download, Drag disabled */}
+                      {/* Interactive Gallery Grid */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-1">
                         {matchedAdminPost.galleryImages.map((img, idx) => (
                           <div
                             key={idx}
-                            className="relative h-32 sm:h-36 rounded-lg overflow-hidden border border-[#31353E] bg-[#0c0d0e] select-none"
-                            onContextMenu={(e) => e.preventDefault()}
+                            onClick={() => handleOpenImagePreview(img, idx)}
+                            className="relative h-32 sm:h-36 rounded-lg overflow-hidden border border-[#31353E] hover:border-[#F25C05] bg-[#0c0d0e] cursor-pointer group transition-all"
+                            title="Click to view & zoom picture"
                           >
                             <img
                               src={img}
                               alt={`${matchedAdminPost.title} - Photo ${idx + 1}`}
-                              className="w-full h-full object-cover protected-image select-none pointer-events-none"
-                              draggable={false}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                               onError={(e) => {
                                 (e.target as HTMLImageElement).src =
                                   'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=400&q=80';
                               }}
                             />
-                            {/* Protective transparent glass layer blocking direct right-click or drag */}
-                            <div
-                              className="absolute inset-0 select-none cursor-default bg-transparent"
-                              onContextMenu={(e) => e.preventDefault()}
-                              draggable={false}
-                            />
-                            {/* Security Watermark Badge on each photo */}
-                            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/75 text-gray-300 flex items-center gap-1 border border-white/10 pointer-events-none">
-                              <Lock className="w-2.5 h-2.5 text-amber-400" />
-                              <span>BHP SECURE</span>
+                            <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                              <span className="px-2 py-1 rounded bg-black/80 text-white text-xs font-medium flex items-center gap-1">
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Zoom</span>
+                              </span>
                             </div>
                             <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/80 text-white pointer-events-none">
                               #{idx + 1}
@@ -634,7 +484,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                   )}
 
                   {/* ===============================================================
-                      ATTACHED PDF & OFFICIAL DOCUMENTS (VIEW-ONLY, NO DOWNLOAD)
+                      ATTACHED PDF & OFFICIAL DOCUMENTS (WITH ZOOMABLE PREVIEW)
                      =============================================================== */}
                   {matchedAdminPost.attachedDocuments &&
                     matchedAdminPost.attachedDocuments.length > 0 && (
@@ -649,7 +499,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                           </span>
                           <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
                             <ShieldCheck className="w-3.5 h-3.5" />
-                            <span>Signed & Sealed</span>
+                            <span>Verified Attachment</span>
                           </span>
                         </div>
 
@@ -657,8 +507,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                           {matchedAdminPost.attachedDocuments.map((doc) => (
                             <div
                               key={doc.id}
-                              className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[#1A1C1F] border border-[#2B2E35] hover:border-[#3D424D] transition-colors gap-3 select-none"
-                              onContextMenu={(e) => e.preventDefault()}
+                              className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[#1A1C1F] border border-[#2B2E35] hover:border-[#3D424D] transition-colors gap-3"
                             >
                               <div className="flex items-center gap-3 overflow-hidden">
                                 <div
@@ -682,25 +531,30 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                                     <span>{doc.size}</span>
                                     <span>•</span>
                                     <span>Uploaded: {doc.uploadDate}</span>
-                                    <span>•</span>
-                                    <span className="text-amber-400 font-semibold flex items-center gap-0.5">
-                                      <Lock className="w-2.5 h-2.5" />
-                                      View Only
-                                    </span>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Only View Document Button - NO Download Button */}
+                              {/* View & Zoom Document Button */}
                               <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
                                 <button
                                   type="button"
-                                  onClick={() => setPreviewingDoc(doc)}
+                                  onClick={() => handleOpenDocPreview(doc)}
                                   className="px-4 py-2 bg-[#25282F] hover:bg-[#313640] text-gray-100 hover:text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer border border-[#373C47] shadow-sm"
                                 >
                                   <Eye className="w-4 h-4 text-[#38bdf8]" />
-                                  <span>View Document (প্রিভিউ)</span>
+                                  <span>View & Zoom (প্রিভিউ ও জুম)</span>
                                 </button>
+                                {doc.dataUrl && (
+                                  <a
+                                    href={doc.dataUrl}
+                                    download={doc.name || 'document.pdf'}
+                                    className="p-2 bg-[#25282F] hover:bg-[#313640] text-gray-300 hover:text-white rounded-xl transition-colors cursor-pointer border border-[#373C47]"
+                                    title="Download Document"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </a>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -708,14 +562,9 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                       </div>
                     )}
 
-                  {/* Actions Bottom Bar (Printing and Download disabled) */}
+                  {/* Actions Bottom Bar */}
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-[#26282B]">
                     <div className="flex items-center gap-2">
-                      <div className="px-3.5 py-2 rounded-xl bg-[#141517] border border-[#2A2D33] text-gray-300 text-xs font-semibold flex items-center gap-2 select-none">
-                        <Lock className="w-4 h-4 text-emerald-400" />
-                        <span>Screenshot & Download Protected</span>
-                      </div>
-
                       <button
                         type="button"
                         onClick={() => handleCopyRef(matchedAdminPost.refNumber)}
@@ -754,7 +603,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
             {hasSearched && !matchedAdminPost && matchedProfile && (
               <div
                 className="bg-[#1C1E22] border border-[#2D3036] rounded-xl p-5 space-y-4 animate-in fade-in duration-200 shadow-lg relative"
-                onContextMenu={(e) => e.preventDefault()}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#2A2C31]">
                   <div className="flex items-center gap-2">
@@ -771,10 +619,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="px-2.5 py-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-semibold">
                       Status: Active & Valid
-                    </span>
-                    <span className="px-2 py-0.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full text-[11px] font-semibold flex items-center gap-1">
-                      <Lock className="w-2.5 h-2.5" />
-                      Protected
                     </span>
                   </div>
                 </div>
@@ -835,12 +679,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-[#26282B]">
-                  <span className="text-[11px] text-gray-400 flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Download & Screenshot restricted</span>
-                  </span>
-
+                <div className="flex items-center justify-end pt-2 border-t border-[#26282B]">
                   <button
                     type="button"
                     onClick={handleReset}
@@ -903,108 +742,228 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       </div>
 
       {/* =========================================================================
-          PDF & DOCUMENT PREVIEW MODAL (VIEW-ONLY, NO DOWNLOAD, SCREENSHOT PROTECTED)
+          PDF & DOCUMENT PREVIEW MODAL WITH INTERACTIVE ZOOM CONTROLS
          ========================================================================= */}
       {previewingDoc && (
         <div
           id="pdf-preview-modal"
-          className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150 no-print"
+          className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150"
           onClick={() => setPreviewingDoc(null)}
         >
           <div
-            className="w-full max-w-3xl bg-[#181A1D] border border-[#31353E] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] relative protected-content"
+            className={`w-full ${
+              previewMaximized ? 'max-w-[97vw] h-[94vh]' : 'max-w-4xl max-h-[90vh]'
+            } bg-[#181A1D] border border-[#31353E] rounded-2xl shadow-2xl overflow-hidden flex flex-col transition-all duration-200 relative`}
             onClick={(e) => e.stopPropagation()}
-            onContextMenu={(e) => e.preventDefault()}
           >
-            {/* Watermark across the preview modal */}
-            <div
-              className="absolute inset-0 pointer-events-none select-none z-10 opacity-[0.04] overflow-hidden flex flex-wrap gap-12 rotate-[-25deg] scale-125 items-center justify-center"
-              aria-hidden="true"
-            >
-              {Array.from({ length: 24 }).map((_, i) => (
-                <div key={i} className="text-sm font-black text-white whitespace-nowrap tracking-widest uppercase">
-                  CONFIDENTIAL • BHP REGISTRY • DO NOT COPY • DO NOT CAPTURE
-                </div>
-              ))}
-            </div>
-
-            {/* Header */}
-            <div className="p-4 bg-[#202328] border-b border-[#2C3038] flex items-center justify-between relative z-20">
+            {/* Header with Zoom Controls */}
+            <div className="px-4 py-3 bg-[#202328] border-b border-[#2C3038] flex flex-wrap items-center justify-between gap-3 relative z-20">
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="p-2 rounded-lg bg-red-500/20 text-red-400">
+                <div className="p-2 rounded-lg bg-red-500/20 text-red-400 shrink-0">
                   <FileText className="w-4 h-4" />
                 </div>
                 <div className="overflow-hidden">
                   <h4 className="text-sm font-bold text-white truncate">{previewingDoc.name}</h4>
                   <div className="flex items-center gap-2 text-[11px] text-gray-400 font-mono">
-                    <span>Size: {previewingDoc.size}</span>
+                    <span className="uppercase text-red-400 font-bold">{previewingDoc.type}</span>
                     <span>•</span>
-                    <span>Uploaded: {previewingDoc.uploadDate}</span>
-                    <span>•</span>
-                    <span className="text-amber-400 font-semibold flex items-center gap-1">
-                      <Lock className="w-3 h-3" />
-                      View Only
-                    </span>
+                    <span>{previewingDoc.size}</span>
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setPreviewingDoc(null)}
-                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#2C3038] cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              {/* PDF & Image Zoom Toolbar */}
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {/* Zoom Out Button */}
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  disabled={previewZoom <= 50}
+                  className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-[#272B33] hover:bg-[#343A45] disabled:opacity-40 disabled:cursor-not-allowed text-gray-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-[#383E4B]"
+                  title="Zoom Out (-25%)"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+
+                {/* Current Zoom Badge */}
+                <span className="px-2.5 py-1 text-xs font-mono font-bold text-white bg-[#101215] rounded-md border border-[#2D333E] min-w-[52px] text-center">
+                  {previewZoom}%
+                </span>
+
+                {/* Zoom In Button */}
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  disabled={previewZoom >= 300}
+                  className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-[#272B33] hover:bg-[#343A45] disabled:opacity-40 disabled:cursor-not-allowed text-gray-200 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-[#383E4B]"
+                  title="Zoom In (+25%)"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+
+                {/* Reset Zoom */}
+                <button
+                  type="button"
+                  onClick={handleZoomReset}
+                  className="px-2 py-1.5 rounded-lg bg-[#272B33] hover:bg-[#343A45] text-gray-300 hover:text-white text-xs font-medium hidden sm:flex items-center gap-1 transition-colors cursor-pointer border border-[#383E4B]"
+                  title="Reset to 100%"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>100%</span>
+                </button>
+
+                <div className="h-5 w-[1px] bg-[#343A45] mx-0.5 hidden sm:block" />
+
+                {/* Maximize / Fullscreen Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setPreviewMaximized(!previewMaximized)}
+                  className="p-1.5 rounded-lg bg-[#272B33] hover:bg-[#343A45] text-gray-300 hover:text-white transition-colors cursor-pointer border border-[#383E4B]"
+                  title={previewMaximized ? 'Restore Normal View' : 'Maximize View'}
+                >
+                  {previewMaximized ? (
+                    <Minimize2 className="w-4 h-4" />
+                  ) : (
+                    <Maximize2 className="w-4 h-4" />
+                  )}
+                </button>
+
+                {/* Open in New Window/Tab */}
+                {previewingDoc.dataUrl && (
+                  <a
+                    href={previewingDoc.dataUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-lg bg-[#272B33] hover:bg-[#343A45] text-gray-300 hover:text-white transition-colors cursor-pointer border border-[#383E4B]"
+                    title="Open Document in Fullscreen / New Tab"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+
+                {/* Download Button */}
+                {previewingDoc.dataUrl && (
+                  <a
+                    href={previewingDoc.dataUrl}
+                    download={previewingDoc.name || 'document.pdf'}
+                    className="p-1.5 rounded-lg bg-[#272B33] hover:bg-[#343A45] text-gray-300 hover:text-white transition-colors cursor-pointer border border-[#383E4B]"
+                    title="Download Document"
+                  >
+                    <Download className="w-4 h-4" />
+                  </a>
+                )}
+
+                {/* Close Button */}
+                <button
+                  type="button"
+                  onClick={() => setPreviewingDoc(null)}
+                  className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#2C3038] cursor-pointer ml-1"
+                  aria-label="Close Preview"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            {/* Document Content View (No Download link, No save) */}
-            <div className="p-5 flex-1 overflow-y-auto space-y-4 relative z-20">
-              {previewingDoc.dataUrl && previewingDoc.dataUrl.startsWith('data:image') ? (
-                <div
-                  className="flex justify-center bg-black/50 rounded-xl p-3 border border-[#2C3038] relative select-none"
-                  onContextMenu={(e) => e.preventDefault()}
-                >
-                  <img
-                    src={previewingDoc.dataUrl}
-                    alt={previewingDoc.name}
-                    className="max-h-[55vh] object-contain protected-image select-none pointer-events-none"
-                    draggable={false}
-                  />
+            {/* Document Content View with Zoom Capability */}
+            <div className="p-3 sm:p-4 flex-1 overflow-auto flex flex-col space-y-3 relative z-20">
+              {previewingDoc.dataUrl &&
+              (previewingDoc.dataUrl.startsWith('data:image') || previewingDoc.type === 'image') ? (
+                /* Image View with smooth zoom scaling */
+                <div className="flex-1 w-full overflow-auto bg-[#0a0b0d] rounded-xl flex items-center justify-center p-4 min-h-[50vh] border border-[#252830]">
                   <div
-                    className="absolute inset-0 bg-transparent select-none"
-                    onContextMenu={(e) => e.preventDefault()}
-                  />
+                    style={{
+                      transform: `scale(${previewZoom / 100})`,
+                      transformOrigin: 'center center',
+                      transition: 'transform 0.15s ease-out',
+                    }}
+                    className="max-w-full flex justify-center cursor-zoom-in"
+                    onClick={handleZoomIn}
+                    title="Click picture to zoom in"
+                  >
+                    <img
+                      src={previewingDoc.dataUrl}
+                      alt={previewingDoc.name}
+                      className={previewMaximized ? 'max-h-[78vh] object-contain rounded-lg shadow-2xl' : 'max-h-[62vh] object-contain rounded-lg shadow-2xl'}
+                    />
+                  </div>
                 </div>
-              ) : previewingDoc.dataUrl && previewingDoc.dataUrl.startsWith('data:application/pdf') ? (
-                <div className="h-[55vh] w-full rounded-xl overflow-hidden border border-[#2C3038] bg-black relative">
-                  <iframe
-                    src={`${previewingDoc.dataUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                    title={previewingDoc.name}
-                    className="w-full h-full border-none select-none"
-                  />
+              ) : previewingDoc.dataUrl &&
+                (previewingDoc.dataUrl.startsWith('data:application/pdf') ||
+                  previewingDoc.dataUrl.includes('.pdf') ||
+                  previewingDoc.type === 'pdf') ? (
+                /* PDF View with toolbar enabled and responsive zoom container */
+                <div className="flex-1 w-full overflow-auto bg-[#0a0b0d] rounded-xl flex items-start justify-center p-2 min-h-[50vh] border border-[#252830]">
+                  <div
+                    style={{
+                      width: `${previewZoom}%`,
+                      minWidth: '100%',
+                      transition: 'width 0.2s ease-out',
+                    }}
+                    className={previewMaximized ? 'h-[78vh]' : 'h-[64vh]'}
+                  >
+                    <iframe
+                      src={`${previewingDoc.dataUrl}#toolbar=1&navpanes=1&zoom=${previewZoom}`}
+                      title={previewingDoc.name}
+                      className="w-full h-full border-none rounded-lg bg-white shadow-2xl"
+                    />
+                  </div>
                 </div>
               ) : (
                 /* Fallback preview view */
-                <div className="p-8 text-center bg-[#121316] rounded-xl border border-[#272A30] space-y-4">
+                <div className="p-8 text-center bg-[#121316] rounded-xl border border-[#272A30] space-y-4 my-auto">
                   <div className="w-16 h-16 rounded-2xl bg-red-500/20 text-red-400 mx-auto flex items-center justify-center border border-red-500/30">
                     <FileText className="w-8 h-8" />
                   </div>
                   <div>
                     <h5 className="text-base font-bold text-white mb-1">{previewingDoc.name}</h5>
                     <p className="text-xs text-gray-400 max-w-md mx-auto">
-                      অফিসিয়াল ডকুমেন্ট BHP কর্পোরেট রেজিস্ট্রি দ্বারা অনুমোদিত। সুরক্ষার স্বার্থে এই ডকুমেন্টের ডাউনলোড ও স্ক্রিনশট বন্ধ রাখা হয়েছে।
+                      Official document uploaded via BHP Admin Registry. Use the controls above to zoom, open in a new tab, or download.
                     </p>
                   </div>
+                  {previewingDoc.dataUrl && (
+                    <div className="pt-2">
+                      <a
+                        href={previewingDoc.dataUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#F25C05] hover:bg-[#D94F04] text-white text-xs font-bold rounded-lg transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        <span>Open Document Directly</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Bottom Security Footer in Preview (Explaining View-Only Security Policy) */}
-              <div className="p-3 rounded-xl bg-[#121316] border border-[#26282E] flex items-center justify-between text-xs text-gray-400">
-                <div className="flex items-center gap-2 text-amber-400 font-semibold">
-                  <Lock className="w-4 h-4" />
-                  <span>Secure In-App Viewer: ডাউনলোড ও সেভ অপশন সম্পূর্ণ নিষ্ক্রিয়</span>
+              {/* Zoom & Navigation Footer */}
+              <div className="px-3 py-2 rounded-xl bg-[#121316] border border-[#26282E] flex flex-wrap items-center justify-between text-xs text-gray-400 gap-2">
+                <span className="flex items-center gap-1.5 text-gray-300">
+                  <span>Zoom Level:</span>
+                  <strong className="text-white font-mono">{previewZoom}%</strong>
+                  <span className="text-gray-500 hidden sm:inline">(Use +/- buttons to adjust zoom)</span>
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleZoomReset}
+                    className="hover:text-white transition-colors cursor-pointer text-[11px]"
+                  >
+                    Reset (100%)
+                  </button>
+                  {previewingDoc.dataUrl && (
+                    <a
+                      href={previewingDoc.dataUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-[#38bdf8] transition-colors cursor-pointer text-[11px] flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Full Window</span>
+                    </a>
+                  )}
                 </div>
-                <span className="text-[11px] text-gray-500">Read-Only Mode</span>
               </div>
             </div>
           </div>
