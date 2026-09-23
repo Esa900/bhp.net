@@ -35,6 +35,10 @@ import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from './data/menuNavigationItem
 import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from './utils/menuItemsStorage';
 import { JobCategory } from './types/jobCircular';
 import { JobCircularModal } from './components/JobCircularModal';
+import { RightDrawerMenu } from './components/RightDrawerMenu';
+import { CanadaMenuItemConfig } from './types/canada';
+import { CANADA_MENU_CONFIGS } from './utils/canadaStorage';
+import { CanadaDocumentSearchModal } from './components/CanadaDocumentSearchModal';
 
 function MainWebsiteContent() {
   const { commodities, siteSettings } = useAdminData();
@@ -60,6 +64,9 @@ function MainWebsiteContent() {
   });
   const [selectedJobCategory, setSelectedJobCategory] = useState<JobCategory | null>(null);
   const [isJobCircularOpen, setIsJobCircularOpen] = useState(false);
+  const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
+  const [selectedCanadaConfig, setSelectedCanadaConfig] = useState<CanadaMenuItemConfig>(() => CANADA_MENU_CONFIGS[0]);
+  const [isCanadaSearchOpen, setIsCanadaSearchOpen] = useState(false);
 
   // Check URL route for /admin or #/admin
   const checkIsAdminRoute = useCallback(() => {
@@ -249,7 +256,7 @@ function MainWebsiteContent() {
 
       {/* Main Page Sections */}
       <main className="flex-1">
-        <HeroHeadline />
+        <HeroHeadline onOpenRightMenu={() => setIsRightDrawerOpen(true)} />
         <HeroBanner />
         <WhatWeProduce onCommoditySelect={(item) => setSelectedCommodity(item)} />
         <BentoGrid
@@ -347,6 +354,26 @@ function MainWebsiteContent() {
         isOpen={isJobCircularOpen}
         onClose={() => setIsJobCircularOpen(false)}
         category={selectedJobCategory}
+      />
+
+      {/* Right Drawer Menu (Triggered from 3-line option below English) */}
+      <RightDrawerMenu
+        isOpen={isRightDrawerOpen}
+        onClose={() => setIsRightDrawerOpen(false)}
+        onSelectCanadaItem={(cfg) => {
+          setSelectedCanadaConfig(cfg);
+          setIsCanadaSearchOpen(true);
+        }}
+        onSelectAustraliaItem={(menuItemId) => {
+          handleSelectMenuItem(menuItemId);
+        }}
+      />
+
+      {/* Canada Document Search Modal (Triggered from 3-line Right Drawer items) */}
+      <CanadaDocumentSearchModal
+        isOpen={isCanadaSearchOpen}
+        onClose={() => setIsCanadaSearchOpen(false)}
+        activeConfig={selectedCanadaConfig}
       />
 
       {/* Admin Panel (accessible via /admin URL or direct link) */}

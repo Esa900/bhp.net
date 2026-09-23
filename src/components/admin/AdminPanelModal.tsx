@@ -42,6 +42,7 @@ import { PositiveListOccupation } from '../../types/portal';
 import { AdminPostsManager } from './AdminPostsManager';
 import { AdminMenuItemsManager } from './AdminMenuItemsManager';
 import { AdminJobCircularManager } from './AdminJobCircularManager';
+import { AdminCanadaManager } from './AdminCanadaManager';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -50,11 +51,10 @@ interface AdminPanelModalProps {
 
 type AdminTab =
   | 'job-circular'
+  | 'canada'
   | 'products'
   | 'news'
-  | 'investor'
   | 'careers'
-  | 'leads'
   | 'settings'
   | 'positive-list'
   | 'posts-all'
@@ -787,23 +787,21 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                 </span>
               </button>
 
+              {/* Canada Work Permit Manager */}
               <button
-                disabled={!canAccessInvestor}
-                onClick={() => setActiveTab('investor')}
+                onClick={() => setActiveTab('canada')}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
-                  !canAccessInvestor ? 'opacity-40 cursor-not-allowed' : ''
-                } ${
-                  activeTab === 'investor'
-                    ? 'bg-[#F25C05] text-white'
+                  activeTab === 'canada'
+                    ? 'bg-red-600 text-white shadow-sm'
                     : 'text-gray-300 hover:bg-[#23262D] hover:text-white'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <TrendingUp className="w-4 h-4 shrink-0" />
-                  <span>4. Investor Data</span>
+                  <span className="text-base">🇨🇦</span>
+                  <span>Canada (কানাডা)</span>
                 </div>
-                <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-black/30">
-                  {reports.length + events.length}
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/40 text-red-300">
+                  Permit
                 </span>
               </button>
 
@@ -820,30 +818,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               >
                 <div className="flex items-center gap-3">
                   <Briefcase className="w-4 h-4 shrink-0" />
-                  <span>5. Careers & Jobs</span>
+                  <span>Careers & Jobs</span>
                 </div>
                 <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-black/30">
                   {jobs.length}
-                </span>
-              </button>
-
-              <button
-                disabled={!canAccessLeads}
-                onClick={() => setActiveTab('leads')}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
-                  !canAccessLeads ? 'opacity-40 cursor-not-allowed' : ''
-                } ${
-                  activeTab === 'leads'
-                    ? 'bg-[#F25C05] text-white'
-                    : 'text-gray-300 hover:bg-[#23262D] hover:text-white'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Users className="w-4 h-4 shrink-0" />
-                  <span>6. Leads & Users</span>
-                </div>
-                <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-black/30">
-                  {inquiries.length + subscribers.length}
                 </span>
               </button>
 
@@ -860,7 +838,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               >
                 <div className="flex items-center gap-3">
                   <Settings className="w-4 h-4 shrink-0" />
-                  <span>7. Settings & SEO</span>
+                  <span>Settings & SEO</span>
                 </div>
                 {!canAccessSettings && <Lock className="w-3 h-3 text-gray-500" />}
               </button>
@@ -875,14 +853,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               >
                 <div className="flex items-center gap-3">
                   <Award className="w-4 h-4 shrink-0 text-[#FFCD00]" />
-                  <span>8. Positive List</span>
+                  <span>Positive List</span>
                 </div>
                 <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-black/40 text-[#FFCD00]">
                   {positiveList.length}
                 </span>
               </button>
 
-              {/* 9. 3-Line Menu Manager */}
+              {/* Australia 3-Line Menu Manager */}
               <button
                 onClick={() => setActiveTab('menu-manager')}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
@@ -893,7 +871,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               >
                 <div className="flex items-center gap-3">
                   <Menu className="w-4 h-4 shrink-0 text-[#38bdf8]" />
-                  <span>9. 3-Line Menu (মেনু)</span>
+                  <span>Australia (অস্ট্রেলিয়া - 3-Line)</span>
                 </div>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/40 text-[#FF8E4D]">
                   Search
@@ -922,6 +900,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
             {/* 3-LINE HAMBURGER MENU MANAGER */}
             {activeTab === 'menu-manager' && (
               <AdminMenuItemsManager showToast={showToast} />
+            )}
+
+            {/* CANADA WORK PERMIT DOCUMENTS MANAGER */}
+            {activeTab === 'canada' && (
+              <AdminCanadaManager showToast={showToast} />
             )}
 
             {/* MODULE: JOB CIRCULAR (CATEGORIES, REQUIREMENTS, HISTORY) */}

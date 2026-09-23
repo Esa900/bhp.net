@@ -87,6 +87,13 @@ export const Header: React.FC<HeaderProps> = ({
       ],
     })),
     {
+      title: 'JOB CIRCULAR',
+      links: jobCategories.map((cat) => ({
+        label: cat.name,
+        action: () => onJobCategoryClick?.(cat),
+      })),
+    },
+    {
       title: 'About Us',
       links: [
         { label: 'Why our work matters', action: () => { const el = document.getElementById('bento-grid-section'); el?.scrollIntoView({ behavior: 'smooth' }); } },
@@ -96,13 +103,6 @@ export const Header: React.FC<HeaderProps> = ({
         { label: 'Board & management / Governance', action: onInvestorClick },
         { label: 'Global locations / Where we operate', action: () => { const el = document.getElementById('where-we-operate-card'); el?.scrollIntoView({ behavior: 'smooth' }); } },
       ],
-    },
-    {
-      title: 'JOB CIRCULAR',
-      links: jobCategories.map((cat) => ({
-        label: cat.name,
-        action: () => onJobCategoryClick?.(cat),
-      })),
     },
     {
       title: 'Investor Centre',
@@ -282,27 +282,40 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Drawer Content */}
             <div className="p-6 space-y-6 flex-1">
               <div className="space-y-5">
-                {megaMenu.map((sec) => (
-                  <div key={sec.title} className="border-b border-[#26282B] pb-3">
-                    <h3 className="text-base font-extrabold text-white mb-2 tracking-wide uppercase text-xs text-[#FF8E4D]">
+                {megaMenu.map((sec, secIdx) => (
+                  <div key={sec.title} className="border-b border-[#23252B] pb-3.5 group">
+                    <h3 className="text-[13px] sm:text-[14px] font-black tracking-wide uppercase text-white mb-1.5">
                       {sec.title}
                     </h3>
-                    <ul className="space-y-1.5 pl-1">
-                      {sec.links.map((item, idx) => (
-                        <li key={idx}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsMenuOpen(false);
-                              item.action();
-                            }}
-                            className="text-left w-full text-sm text-gray-300 hover:text-[#F25C05] transition-colors py-1 flex items-center justify-between group cursor-pointer"
-                          >
-                            <span>{item.label}</span>
-                            <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 text-[#F25C05] transition-all" />
-                          </button>
-                        </li>
-                      ))}
+                    <ul className="space-y-1.5">
+                      {sec.links.map((item, idx) => {
+                        const isFirst = secIdx === 0 && idx === 0;
+                        return (
+                          <li key={idx}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsMenuOpen(false);
+                                item.action();
+                              }}
+                              className={`text-left w-full text-[13px] sm:text-[14px] font-medium transition-colors py-1 flex items-center justify-between cursor-pointer ${
+                                isFirst
+                                  ? 'text-[#F25C05] hover:text-[#ff7426]'
+                                  : 'text-[#9ca3af] hover:text-[#F25C05]'
+                              }`}
+                            >
+                              <span>{item.label}</span>
+                              <ArrowRight
+                                className={`w-3.5 h-3.5 transition-all duration-150 ${
+                                  isFirst
+                                    ? 'text-[#F25C05] opacity-100'
+                                    : 'opacity-0 group-hover:opacity-100 group-hover:translate-x-1 text-[#F25C05]'
+                                }`}
+                              />
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 ))}

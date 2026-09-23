@@ -291,7 +291,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Enter Reference Number or ID (যেমন: BHP-DOC-2026-0089 বা টাইটেল)..."
-                    className="w-full bg-[#121316] border border-[#34373D] focus:border-[#F25C05] rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#F25C05] transition-all font-mono"
+                    className="w-full bg-[#121316] border-2 border-[#F25C05] rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#F25C05] transition-all font-mono"
                   />
                   {query && (
                     <button

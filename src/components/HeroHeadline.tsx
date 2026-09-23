@@ -1,10 +1,35 @@
 import React from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Menu } from 'lucide-react';
 
-export const HeroHeadline: React.FC = () => {
+interface HeroHeadlineProps {
+  onOpenRightMenu?: () => void;
+}
+
+export const HeroHeadline: React.FC<HeroHeadlineProps> = ({ onOpenRightMenu }) => {
   return (
-    <section id="hero-headline-section" className="bg-[#F8F9FA] pt-8 sm:pt-12 pb-6 border-b border-transparent">
-      <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="hero-headline-section" className="bg-[#F8F9FA] pt-3 sm:pt-4 pb-8 border-b border-[#EAECEF]">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Top-right 3-line option directly below the English dropdown in the header */}
+        <div className="flex justify-end mb-3 sm:mb-4">
+          <button
+            id="hero-right-three-line-button"
+            type="button"
+            onClick={onOpenRightMenu}
+            className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white border border-[#D5D9E0] hover:border-[#F25C05] shadow-xs hover:shadow-md transition-all cursor-pointer group"
+            aria-label="Open 3-line options menu"
+            title="Options Menu"
+          >
+            <div className="flex flex-col justify-center gap-[3.5px] w-5 h-4">
+              <span className="w-5 h-[2.5px] bg-[#1E2024] group-hover:bg-[#F25C05] rounded-full transition-colors"></span>
+              <span className="w-5 h-[2.5px] bg-[#1E2024] group-hover:bg-[#F25C05] rounded-full transition-colors"></span>
+              <span className="w-5 h-[2.5px] bg-[#1E2024] group-hover:bg-[#F25C05] rounded-full transition-colors"></span>
+            </div>
+            <span className="text-xs font-bold text-[#1E2024] group-hover:text-[#F25C05] transition-colors">
+              Menu
+            </span>
+          </button>
+        </div>
+
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           {/* Main Titles */}
           <div className="max-w-4xl">
@@ -38,3 +63,4 @@ export const HeroHeadline: React.FC = () => {
     </section>
   );
 };
+
