@@ -39,8 +39,11 @@ import { RightDrawerMenu } from './components/RightDrawerMenu';
 import { CanadaMenuItemConfig } from './types/canada';
 import { CANADA_MENU_CONFIGS } from './utils/canadaStorage';
 import { CanadaDocumentSearchModal } from './components/CanadaDocumentSearchModal';
+import { AuthUser } from './types/auth';
+import { getCurrentAuthUser, BHP_AUTH_STATE_EVENT } from './utils/authStorage';
+import { AuthSecurityGate } from './components/auth/AuthSecurityGate';
 
-function MainWebsiteContent() {
+function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) {
   const { commodities, siteSettings } = useAdminData();
 
   // Modals state
@@ -248,6 +251,7 @@ function MainWebsiteContent() {
         onAdminClick={handleOpenAdmin}
         onPortalClick={() => handleOpenPortal()}
         onSelectMenuItem={handleSelectMenuItem}
+        currentUser={currentUser}
         onJobCategoryClick={(category) => {
           setSelectedJobCategory(category);
           setIsJobCircularOpen(true);
@@ -386,10 +390,29 @@ function MainWebsiteContent() {
 }
 
 export function App() {
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getCurrentAuthUser());
+
+  useEffect(() => {
+    const handleAuthChange = () => {
+      setCurrentUser(getCurrentAuthUser());
+    };
+    window.addEventListener(BHP_AUTH_STATE_EVENT, handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+    return () => {
+      window.removeEventListener(BHP_AUTH_STATE_EVENT, handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, []);
+
+  // Protect website: anyone searching/opening domain must login or register first
+  if (!currentUser) {
+    return <AuthSecurityGate onAuthenticated={(user) => setCurrentUser(user)} />;
+  }
+
   return (
     <LanguageProvider>
       <AdminDataProvider>
-        <MainWebsiteContent />
+        <MainWebsiteContent currentUser={currentUser} />
       </AdminDataProvider>
     </LanguageProvider>
   );

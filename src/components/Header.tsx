@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, X, Search, ChevronDown, ArrowRight, Globe, ExternalLink, Mail, FileCheck, ShieldCheck, ChevronRight } from 'lucide-react';
+import { Menu, X, Search, ChevronDown, ArrowRight, Globe, ExternalLink, Mail, FileCheck, ShieldCheck, ChevronRight, LogOut, User as UserIcon } from 'lucide-react';
 import { useLanguage, Language } from '../context/LanguageContext';
 import { useAdminData } from '../context/AdminDataContext';
 import { DocumentMenuItem, DOCUMENT_MENU_ITEMS } from '../data/menuNavigationItems';
 import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from '../utils/menuItemsStorage';
 import { JobCategory } from '../types/jobCircular';
 import { getStoredJobCategories, JOB_CATEGORIES_UPDATED_EVENT } from '../utils/jobCircularStorage';
+import { AuthUser } from '../types/auth';
+import { logoutAuthUser } from '../utils/authStorage';
 
 interface HeaderProps {
   onSearchClick: () => void;
@@ -19,6 +21,7 @@ interface HeaderProps {
   onPortalClick?: () => void;
   onSelectMenuItem?: (menuItemId: string) => void;
   onJobCategoryClick?: (category: JobCategory) => void;
+  currentUser?: AuthUser | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,6 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   onPortalClick,
   onSelectMenuItem,
   onJobCategoryClick,
+  currentUser,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
@@ -254,6 +258,29 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               )}
             </div>
+
+            {/* Authenticated User Session Profile & Logout */}
+            {currentUser && (
+              <div className="flex items-center gap-2 pl-2 border-l border-white/20">
+                <div className="flex items-center gap-1.5 bg-[#222428] px-2.5 py-1 rounded-full border border-[#3A3C40] text-xs">
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-r from-[#6b47ff] to-[#9962ff] flex items-center justify-center text-white font-bold text-[10px]">
+                    {currentUser.username.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-white font-semibold max-w-[85px] truncate">
+                    {currentUser.username}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => logoutAuthUser()}
+                  className="p-1.5 text-gray-400 hover:text-red-400 transition-colors cursor-pointer rounded-lg hover:bg-red-500/10"
+                  title="Logout from website"
+                  aria-label="Logout"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -368,8 +395,21 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-6 border-t border-[#26282B] text-xs text-gray-500 bg-[#131415]">
-              © BHP 2026. Resources that make the future possible.
+            <div className="p-6 border-t border-[#26282B] text-xs text-gray-400 bg-[#131415] flex items-center justify-between">
+              <div>© BHP 2026. Official Portal.</div>
+              {currentUser && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    logoutAuthUser();
+                  }}
+                  className="flex items-center gap-1.5 text-red-400 hover:text-red-300 font-semibold transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Log Out ({currentUser.username})</span>
+                </button>
+              )}
             </div>
           </div>
 

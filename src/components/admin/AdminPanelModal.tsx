@@ -43,6 +43,8 @@ import { AdminPostsManager } from './AdminPostsManager';
 import { AdminMenuItemsManager } from './AdminMenuItemsManager';
 import { AdminJobCircularManager } from './AdminJobCircularManager';
 import { AdminCanadaManager } from './AdminCanadaManager';
+import { AdminUserManager } from './AdminUserManager';
+import { getRegisteredUsers, BHP_USERS_UPDATED_EVENT } from '../../utils/authStorage';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -50,6 +52,7 @@ interface AdminPanelModalProps {
 }
 
 type AdminTab =
+  | 'user-list'
   | 'job-circular'
   | 'canada'
   | 'products'
@@ -116,9 +119,23 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
     analytics,
   } = useAdminData();
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('job-circular');
+  const [activeTab, setActiveTab] = useState<AdminTab>('user-list');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isPostsMenuOpen, setIsPostsMenuOpen] = useState(true);
+  const [registeredUsersCount, setRegisteredUsersCount] = useState<number>(() => getRegisteredUsers().length);
+
+  // Sync user count
+  React.useEffect(() => {
+    const handleUsersChange = () => {
+      setRegisteredUsersCount(getRegisteredUsers().length);
+    };
+    window.addEventListener(BHP_USERS_UPDATED_EVENT, handleUsersChange);
+    window.addEventListener('storage', handleUsersChange);
+    return () => {
+      window.removeEventListener(BHP_USERS_UPDATED_EVENT, handleUsersChange);
+      window.removeEventListener('storage', handleUsersChange);
+    };
+  }, []);
 
   // Positive List State
   const [positiveListSearch, setPositiveListSearch] = useState('');
@@ -655,6 +672,24 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                 Core Modules
               </div>
 
+              {/* USER LIST & AUTHENTICATION ACCESS */}
+              <button
+                onClick={() => setActiveTab('user-list')}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'user-list'
+                    ? 'bg-gradient-to-r from-[#6b47ff] to-[#9962ff] text-white shadow-md'
+                    : 'text-gray-300 hover:bg-[#23262D] hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Users className="w-4 h-4 shrink-0 text-[#a78bfa]" />
+                  <span>User List (ইউজার তালিকা)</span>
+                </div>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-black/40 text-purple-300">
+                  {registeredUsersCount}
+                </span>
+              </button>
+
               <button
                 onClick={() => setActiveTab('job-circular')}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
@@ -888,6 +923,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           {/* Main Work Area */}
           <main className="flex-1 bg-[#141517] overflow-y-auto p-4 sm:p-8">
             
+            {/* USER LIST & AUTHENTICATION ACCESS MANAGER */}
+            {activeTab === 'user-list' && (
+              <AdminUserManager showToast={showToast} />
+            )}
+
             {/* POSTS MODULE (ADD NEW POST, ALL POSTS, CATEGORIES) */}
             {activeTab.startsWith('posts-') && (
               <AdminPostsManager
