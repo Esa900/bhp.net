@@ -375,3 +375,69 @@ export function setCurrentAuthUser(user: AuthUser | null, rememberMe: boolean = 
 export function logoutAuthUser(): void {
   setCurrentAuthUser(null);
 }
+
+/**
+ * Register or login with Google or Facebook account
+ * Automatically creates username and password, saves to database so it shows up in Admin User List,
+ * and sets session!
+ */
+export function authenticateWithSocialAccount(params: {
+  provider: 'google' | 'facebook';
+  email: string;
+  fullName: string;
+  customPassword?: string;
+  usernameOverride?: string;
+}): { success: boolean; user: AuthUser; isNew: boolean } {
+  const cleanEmail = params.email.trim().toLowerCase();
+  const existingUsers = getRegisteredUsers();
+
+  // Check if account already exists by email
+  const existingUser = existingUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+
+  if (existingUser) {
+    const updatedUser: AuthUser = {
+      ...existingUser,
+      lastLoginAt: new Date().toISOString(),
+    };
+    const updatedList = existingUsers.map((u) => (u.id === existingUser.id ? updatedUser : u));
+    saveRegisteredUsers(updatedList);
+    setCurrentAuthUser(updatedUser, true);
+    return { success: true, user: updatedUser, isNew: false };
+  }
+
+  // Derive username: from email before '@' or name
+  let baseUsername = params.usernameOverride?.trim() || cleanEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '');
+  if (!baseUsername || baseUsername.length < 3) {
+    baseUsername = `user_${Math.floor(1000 + Math.random() * 9000)}`;
+  }
+
+  // Ensure unique username
+  let finalUsername = baseUsername;
+  let counter = 1;
+  while (existingUsers.some((u) => u.username.toLowerCase() === finalUsername.toLowerCase())) {
+    finalUsername = `${baseUsername}${counter}`;
+    counter++;
+  }
+
+  // Generated or custom password
+  const finalPassword =
+    params.customPassword?.trim() ||
+    `${params.provider === 'google' ? 'Google' : 'Fb'}@${Math.floor(1000 + Math.random() * 9000)}`;
+
+  const newUser: AuthUser = {
+    id: `user-${params.provider}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    username: finalUsername,
+    email: cleanEmail,
+    password: finalPassword,
+    fullName: params.fullName.trim() || finalUsername,
+    role: 'user',
+    createdAt: new Date().toISOString(),
+    lastLoginAt: new Date().toISOString(),
+  };
+
+  const updatedList = [newUser, ...existingUsers];
+  saveRegisteredUsers(updatedList);
+  setCurrentAuthUser(newUser, true);
+
+  return { success: true, user: newUser, isNew: true };
+}
