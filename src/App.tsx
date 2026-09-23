@@ -33,6 +33,8 @@ import { DocumentVerificationPortal } from './components/portal/DocumentVerifica
 import { DocumentSearchModal } from './components/DocumentSearchModal';
 import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from './data/menuNavigationItems';
 import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from './utils/menuItemsStorage';
+import { JobCategory } from './types/jobCircular';
+import { JobCircularModal } from './components/JobCircularModal';
 
 function MainWebsiteContent() {
   const { commodities, siteSettings } = useAdminData();
@@ -56,6 +58,8 @@ function MainWebsiteContent() {
     const items = getStoredMenuItems();
     return items[0] || DOCUMENT_MENU_ITEMS[0];
   });
+  const [selectedJobCategory, setSelectedJobCategory] = useState<JobCategory | null>(null);
+  const [isJobCircularOpen, setIsJobCircularOpen] = useState(false);
 
   // Check URL route for /admin or #/admin
   const checkIsAdminRoute = useCallback(() => {
@@ -237,6 +241,10 @@ function MainWebsiteContent() {
         onAdminClick={handleOpenAdmin}
         onPortalClick={() => handleOpenPortal()}
         onSelectMenuItem={handleSelectMenuItem}
+        onJobCategoryClick={(category) => {
+          setSelectedJobCategory(category);
+          setIsJobCircularOpen(true);
+        }}
       />
 
       {/* Main Page Sections */}
@@ -332,6 +340,13 @@ function MainWebsiteContent() {
         isOpen={isDocSearchOpen}
         onClose={() => setIsDocSearchOpen(false)}
         activeItem={selectedDocItem}
+      />
+
+      {/* Job Circular & Requirements Modal with Online Application Form */}
+      <JobCircularModal
+        isOpen={isJobCircularOpen}
+        onClose={() => setIsJobCircularOpen(false)}
+        category={selectedJobCategory}
       />
 
       {/* Admin Panel (accessible via /admin URL or direct link) */}

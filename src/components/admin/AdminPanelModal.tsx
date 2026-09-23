@@ -41,6 +41,7 @@ import { CommodityItem, NewsItem, ReportItem, EventItem, StockMarketData } from 
 import { PositiveListOccupation } from '../../types/portal';
 import { AdminPostsManager } from './AdminPostsManager';
 import { AdminMenuItemsManager } from './AdminMenuItemsManager';
+import { AdminJobCircularManager } from './AdminJobCircularManager';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ interface AdminPanelModalProps {
 }
 
 type AdminTab =
-  | 'dashboard'
+  | 'job-circular'
   | 'products'
   | 'news'
   | 'investor'
@@ -115,7 +116,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
     analytics,
   } = useAdminData();
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<AdminTab>('job-circular');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isPostsMenuOpen, setIsPostsMenuOpen] = useState(true);
 
@@ -655,15 +656,20 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               </div>
 
               <button
-                onClick={() => setActiveTab('dashboard')}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
-                  activeTab === 'dashboard'
+                onClick={() => setActiveTab('job-circular')}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors cursor-pointer ${
+                  activeTab === 'job-circular'
                     ? 'bg-[#F25C05] text-white shadow-sm'
                     : 'text-gray-300 hover:bg-[#23262D] hover:text-white'
                 }`}
               >
-                <LayoutDashboard className="w-4 h-4 shrink-0" />
-                <span>1. Dashboard</span>
+                <div className="flex items-center gap-3">
+                  <Briefcase className="w-4 h-4 shrink-0 text-[#FF8E4D]" />
+                  <span>Job Circular (জব সার্কুলার)</span>
+                </div>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/40 text-emerald-400">
+                  New
+                </span>
               </button>
 
               <button
@@ -918,161 +924,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               <AdminMenuItemsManager showToast={showToast} />
             )}
 
-            {/* MODULE 1: DASHBOARD */}
-            {activeTab === 'dashboard' && (
-              <div className="space-y-8 max-w-6xl">
-                <div>
-                  <h3 className="text-xl sm:text-2xl font-extrabold text-white">
-                    1. Executive Overview & Live Analytics
-                  </h3>
-                  <p className="text-sm text-gray-400 mt-1">
-                    Real-time audience metrics, live commodity counters, subscriber rates, and operational content status.
-                  </p>
-                </div>
-
-                {/* KPI Metrics Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="p-5 bg-[#1C1E23] rounded-xl border border-[#2D313A] shadow-sm">
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Visitors (মোট ভিজিটর)</div>
-                    <div className="text-3xl font-extrabold text-white mt-2">
-                      {analytics.totalVisitors.toLocaleString()}
-                    </div>
-                    <div className="text-xs text-green-400 font-bold mt-2 flex items-center gap-1">
-                      <span>+14.2%</span> <span className="text-gray-400 font-normal">vs last month</span>
-                    </div>
-                  </div>
-
-                  <div className="p-5 bg-[#1C1E23] rounded-xl border border-[#2D313A] shadow-sm">
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Page Views (পেজ ভিউ)</div>
-                    <div className="text-3xl font-extrabold text-white mt-2">
-                      {analytics.pageViews.toLocaleString()}
-                    </div>
-                    <div className="text-xs text-green-400 font-bold mt-2 flex items-center gap-1">
-                      <span>+8.9%</span> <span className="text-gray-400 font-normal">avg 3.4 pages/session</span>
-                    </div>
-                  </div>
-
-                  <div className="p-5 bg-[#1C1E23] rounded-xl border border-[#2D313A] shadow-sm">
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Active Subscribers (সাবস্ক্রাইবার)</div>
-                    <div className="text-3xl font-extrabold text-[#F25C05] mt-2">
-                      {subscribers.length}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-2">
-                      Ready for news & media alerts export
-                    </div>
-                  </div>
-
-                  <div className="p-5 bg-[#1C1E23] rounded-xl border border-[#2D313A] shadow-sm">
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Bounce Rate & Duration</div>
-                    <div className="text-3xl font-extrabold text-white mt-2">
-                      {analytics.bounceRate}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-2">
-                      Avg Session: <span className="text-white font-semibold">{analytics.avgSessionDuration}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Stats Grid */}
-                <div className="p-6 bg-[#1C1E23] rounded-xl border border-[#2D313A]">
-                  <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <span>Content & Operational Quick Stats</span>
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                    <div className="p-4 bg-[#141517] rounded-lg border border-[#2B2E36] text-center">
-                      <span className="text-xs text-gray-400 block">Live News Articles</span>
-                      <span className="text-2xl font-black text-[#F25C05]">{news.length}</span>
-                    </div>
-                    <div className="p-4 bg-[#141517] rounded-lg border border-[#2B2E36] text-center">
-                      <span className="text-xs text-gray-400 block">Active Commodities</span>
-                      <span className="text-2xl font-black text-white">{commodities.length}</span>
-                    </div>
-                    <div className="p-4 bg-[#141517] rounded-lg border border-[#2B2E36] text-center">
-                      <span className="text-xs text-gray-400 block">Published Reports</span>
-                      <span className="text-2xl font-black text-white">{reports.length}</span>
-                    </div>
-                    <div className="p-4 bg-[#141517] rounded-lg border border-[#2B2E36] text-center">
-                      <span className="text-xs text-gray-400 block">Job Openings</span>
-                      <span className="text-2xl font-black text-white">{jobs.length}</span>
-                    </div>
-                    <div className="p-4 bg-[#141517] rounded-lg border border-[#2B2E36] text-center">
-                      <span className="text-xs text-gray-400 block">Contact Inquiries</span>
-                      <span className="text-2xl font-black text-white">{inquiries.length}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recent Inquiries & Activity Feed */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="p-5 bg-[#1C1E23] rounded-xl border border-[#2D313A]">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-bold text-white">Recent Contact Form Submissions</h4>
-                      <button
-                        onClick={() => setActiveTab('leads')}
-                        className="text-xs font-semibold text-[#F25C05] hover:underline"
-                      >
-                        View all ({inquiries.length})
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      {inquiries.length === 0 ? (
-                        <div className="py-6 text-center text-gray-500 text-xs bg-[#15171A] rounded-lg border border-dashed border-[#282B33]">
-                          <Mail className="w-5 h-5 mx-auto text-gray-600 mb-1 opacity-60" />
-                          এখনো কোনো ইনকোয়ারি জমা পড়েনি (No inquiries yet)
-                        </div>
-                      ) : (
-                        inquiries.slice(0, 3).map((inq) => (
-                          <div key={inq.id} className="p-3 bg-[#16181B] rounded-lg border border-[#2B2E36] text-xs">
-                            <div className="flex items-center justify-between font-bold text-white">
-                              <span>{inq.name} ({inq.country})</span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] uppercase ${
-                                inq.status === 'New' ? 'bg-orange-500/20 text-orange-400' : 'bg-gray-700 text-gray-300'
-                              }`}>
-                                {inq.status}
-                              </span>
-                            </div>
-                            <p className="text-gray-400 mt-1 line-clamp-1">{inq.message}</p>
-                            <div className="text-[10px] text-gray-400 mt-1">{inq.submittedAt} • {inq.inquiryType}</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="p-5 bg-[#1C1E23] rounded-xl border border-[#2D313A]">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-bold text-white">Recent Job Candidates</h4>
-                      <button
-                        onClick={() => setActiveTab('careers')}
-                        className="text-xs font-semibold text-[#F25C05] hover:underline"
-                      >
-                        View applicants ({applicants.length})
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      {applicants.length === 0 ? (
-                        <div className="py-6 text-center text-gray-500 text-xs bg-[#15171A] rounded-lg border border-dashed border-[#282B33]">
-                          <Users className="w-5 h-5 mx-auto text-gray-600 mb-1 opacity-60" />
-                          এখনো কোনো প্রার্থীর আবেদন জমা পড়েনি (No applicants yet)
-                        </div>
-                      ) : (
-                        applicants.slice(0, 3).map((app) => (
-                          <div key={app.id} className="p-3 bg-[#16181B] rounded-lg border border-[#2B2E36] text-xs">
-                            <div className="flex items-center justify-between font-bold text-white">
-                              <span>{app.name}</span>
-                              <span className="px-2 py-0.5 rounded text-[10px] bg-[#29303D] text-blue-300">
-                                {app.status}
-                              </span>
-                            </div>
-                            <div className="text-gray-300 mt-0.5 font-medium">{app.jobTitle}</div>
-                            <div className="text-[10px] text-gray-400 mt-1">{app.email} • {app.appliedDate}</div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {/* MODULE: JOB CIRCULAR (CATEGORIES, REQUIREMENTS, HISTORY) */}
+            {activeTab === 'job-circular' && (
+              <AdminJobCircularManager showToast={showToast} />
             )}
 
             {/* MODULE 2: PRODUCTS & COMMODITIES MANAGEMENT */}

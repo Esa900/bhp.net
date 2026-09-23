@@ -4,6 +4,8 @@ import { useLanguage, Language } from '../context/LanguageContext';
 import { useAdminData } from '../context/AdminDataContext';
 import { DocumentMenuItem, DOCUMENT_MENU_ITEMS } from '../data/menuNavigationItems';
 import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from '../utils/menuItemsStorage';
+import { JobCategory } from '../types/jobCircular';
+import { getStoredJobCategories, JOB_CATEGORIES_UPDATED_EVENT } from '../utils/jobCircularStorage';
 
 interface HeaderProps {
   onSearchClick: () => void;
@@ -16,6 +18,7 @@ interface HeaderProps {
   onAdminClick?: () => void;
   onPortalClick?: () => void;
   onSelectMenuItem?: (menuItemId: string) => void;
+  onJobCategoryClick?: (category: JobCategory) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -29,10 +32,12 @@ export const Header: React.FC<HeaderProps> = ({
   onAdminClick,
   onPortalClick,
   onSelectMenuItem,
+  onJobCategoryClick,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [docMenuItems, setDocMenuItems] = useState<DocumentMenuItem[]>(() => getStoredMenuItems());
+  const [jobCategories, setJobCategories] = useState<JobCategory[]>(() => getStoredJobCategories());
   const { language, setLanguage, t } = useLanguage();
   const { siteSettings } = useAdminData();
 
@@ -41,12 +46,24 @@ export const Header: React.FC<HeaderProps> = ({
       setDocMenuItems(getStoredMenuItems());
     };
 
+    const handleJobCatsUpdate = () => {
+      setJobCategories(getStoredJobCategories());
+    };
+
     window.addEventListener(MENU_ITEMS_UPDATED_EVENT, handleUpdate);
-    window.addEventListener('storage', handleUpdate);
+    window.addEventListener(JOB_CATEGORIES_UPDATED_EVENT, handleJobCatsUpdate);
+    window.addEventListener('storage', () => {
+      handleUpdate();
+      handleJobCatsUpdate();
+    });
 
     return () => {
       window.removeEventListener(MENU_ITEMS_UPDATED_EVENT, handleUpdate);
-      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener(JOB_CATEGORIES_UPDATED_EVENT, handleJobCatsUpdate);
+      window.removeEventListener('storage', () => {
+        handleUpdate();
+        handleJobCatsUpdate();
+      });
     };
   }, []);
 
@@ -81,14 +98,11 @@ export const Header: React.FC<HeaderProps> = ({
       ],
     },
     {
-      title: 'What we do',
-      links: [
-        { label: 'Copper (তামা)', action: () => onProductClick('copper') },
-        { label: 'Iron ore (আকরিক লোহা)', action: () => onProductClick('iron-ore') },
-        { label: 'Steelmaking coal (কয়লা)', action: () => onProductClick('steelmaking-coal') },
-        { label: 'Potash (পটাশ)', action: () => onProductClick('potash') },
-        { label: 'BHP Ventures & BHP Xplor', action: () => onProductClick('copper') },
-      ],
+      title: 'JOB CIRCULAR',
+      links: jobCategories.map((cat) => ({
+        label: cat.name,
+        action: () => onJobCategoryClick?.(cat),
+      })),
     },
     {
       title: 'Investor Centre',

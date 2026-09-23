@@ -1669,9 +1669,8 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                             </div>
                           </div>
                         </div>
-                        <div className="px-2.5 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs font-semibold rounded-lg flex items-center gap-1.5">
-                          <Lock className="w-3 h-3 text-amber-400" />
-                          <span>Protected (Download Disabled)</span>
+                        <div className="px-2.5 py-1 bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-xs font-semibold rounded-lg flex items-center gap-1.5">
+                          <span>Attachment</span>
                         </div>
                       </div>
                     ))}
