@@ -94,17 +94,6 @@ export const Header: React.FC<HeaderProps> = ({
       })),
     },
     {
-      title: 'About Us',
-      links: [
-        { label: 'Why our work matters', action: () => { const el = document.getElementById('bento-grid-section'); el?.scrollIntoView({ behavior: 'smooth' }); } },
-        { label: 'Our future & strategy', action: () => { const el = document.getElementById('hero-banner-section'); el?.scrollIntoView({ behavior: 'smooth' }); } },
-        { label: 'Our history', action: () => { const el = document.getElementById('bento-grid-section'); el?.scrollIntoView({ behavior: 'smooth' }); } },
-        { label: 'Operating ethically / Our code', action: () => onLegalClick?.('code-of-conduct') },
-        { label: 'Board & management / Governance', action: onInvestorClick },
-        { label: 'Global locations / Where we operate', action: () => { const el = document.getElementById('where-we-operate-card'); el?.scrollIntoView({ behavior: 'smooth' }); } },
-      ],
-    },
-    {
       title: 'Investor Centre',
       links: [
         { label: 'Reports & presentations', action: onInvestorClick },
@@ -143,6 +132,17 @@ export const Header: React.FC<HeaderProps> = ({
       links: [
         { label: 'Become a supplier / Find opportunities', action: onSupplierClick },
         { label: 'Local Buying Program (LBP)', action: onSupplierClick },
+      ],
+    },
+    {
+      title: 'About Us',
+      links: [
+        { label: 'Why our work matters', action: () => { const el = document.getElementById('bento-grid-section'); el?.scrollIntoView({ behavior: 'smooth' }); } },
+        { label: 'Our future & strategy', action: () => { const el = document.getElementById('hero-banner-section'); el?.scrollIntoView({ behavior: 'smooth' }); } },
+        { label: 'Our history', action: () => { const el = document.getElementById('bento-grid-section'); el?.scrollIntoView({ behavior: 'smooth' }); } },
+        { label: 'Operating ethically / Our code', action: () => onLegalClick?.('code-of-conduct') },
+        { label: 'Board & management / Governance', action: onInvestorClick },
+        { label: 'Global locations / Where we operate', action: () => { const el = document.getElementById('where-we-operate-card'); el?.scrollIntoView({ behavior: 'smooth' }); } },
       ],
     },
     {
@@ -284,9 +284,25 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="space-y-5">
                 {megaMenu.map((sec, secIdx) => (
                   <div key={sec.title} className="border-b border-[#23252B] pb-3.5 group">
-                    <h3 className="text-[13px] sm:text-[14px] font-black tracking-wide uppercase text-white mb-1.5">
-                      {sec.title}
-                    </h3>
+                    {sec.title === 'JOB CIRCULAR' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          if (jobCategories.length > 0) {
+                            onJobCategoryClick?.(jobCategories[0]);
+                          }
+                        }}
+                        className="text-[13px] sm:text-[14px] font-black tracking-wide uppercase text-white hover:text-[#F25C05] transition-colors mb-1.5 flex items-center justify-between w-full cursor-pointer text-left"
+                      >
+                        <span>{sec.title}</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-[#F25C05]" />
+                      </button>
+                    ) : (
+                      <h3 className="text-[13px] sm:text-[14px] font-black tracking-wide uppercase text-white mb-1.5">
+                        {sec.title}
+                      </h3>
+                    )}
                     <ul className="space-y-1.5">
                       {sec.links.map((item, idx) => {
                         const isFirst = secIdx === 0 && idx === 0;
