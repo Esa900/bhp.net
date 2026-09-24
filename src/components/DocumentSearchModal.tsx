@@ -86,6 +86,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
   // When activeItem changes or modal opens, reset search and focus input
   useEffect(() => {
     if (isOpen) {
+      setAdminPosts(getStoredAdminPosts());
       setQuery('');
       setHasSearched(false);
       setMatchedAdminPost(null);
@@ -160,8 +161,12 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
     setMatchedProfile(null);
 
     setTimeout(() => {
-      // 1. Search in Admin Posts first (User's primary requirement)
-      const foundPost = findAdminPostByQuery(searchTerm, adminPosts, activeItem.mainTitle);
+      // 1. Refresh latest admin posts from storage to guarantee 100% real-time state
+      const freshPosts = getStoredAdminPosts();
+      setAdminPosts(freshPosts);
+
+      // 2. Search in Admin Posts first (User's primary requirement)
+      const foundPost = findAdminPostByQuery(searchTerm, freshPosts, activeItem.mainTitle);
       if (foundPost) {
         setMatchedAdminPost(foundPost);
         setIsSearching(false);
