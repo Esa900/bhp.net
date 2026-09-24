@@ -56,6 +56,18 @@ All attached circular documentation and verified clearance certificates are cert
     date: '2026-03-12',
     status: 'Published',
     imageUrl: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
+    candidateName: 'Mohammad Tanvir Ahmed',
+    passportNumber: 'A09482103',
+    nationality: 'Bangladeshi',
+    dateOfBirth: '1993-04-18',
+    jobTitle: 'Senior Mining Maintenance Specialist',
+    employerName: 'BHP Group Operations (Australia)',
+    workLocation: 'Perth & Pilbara, WA, Australia',
+    salaryPackage: '$135,000 AUD / Year',
+    visaSubclass: 'Subclass 482 - TSS (Medium-Term Stream)',
+    issueDate: '2026-01-10',
+    expiryDate: '2029-01-09',
+    verificationIdNo: 'VRF-AU-928410',
     galleryImages: [
       'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
       'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=80',
@@ -101,6 +113,18 @@ All supporting biometric documents, police clearances, and medical certification
     date: '2026-02-28',
     status: 'Published',
     imageUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80',
+    candidateName: 'Kazi Farhan Mahmud',
+    passportNumber: 'B18492044',
+    nationality: 'Bangladeshi',
+    dateOfBirth: '1991-09-25',
+    jobTitle: 'Heavy Mobile Equipment Mechanical Engineer',
+    employerName: 'BHP Olympic Dam Operations',
+    workLocation: 'Olympic Dam, South Australia',
+    salaryPackage: '$142,000 AUD / Year',
+    visaSubclass: 'Subclass 482 - TSS (Employer Nominated)',
+    issueDate: '2026-02-01',
+    expiryDate: '2030-01-31',
+    verificationIdNo: 'VRF-AU-441299',
     galleryImages: [
       'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80',
       'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80',
@@ -160,41 +184,78 @@ export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
 };
 
 /**
- * Find an Admin Post matching user's query (by Reference Number, ID, or Title)
+ * Find an Admin Post matching user's query (by Reference Number, ID, Passport, Candidate Name, or Title)
  */
 export const findAdminPostByQuery = (
   rawQuery: string,
-  postsPool?: AdminPost[]
+  postsPool?: AdminPost[],
+  categoryTarget?: string
 ): AdminPost | null => {
   if (!rawQuery || !rawQuery.trim()) return null;
-  const posts = postsPool || getStoredAdminPosts();
+  const allPosts = postsPool || getStoredAdminPosts();
 
   const queryTrimmed = rawQuery.trim().toLowerCase();
   const cleanQuery = queryTrimmed.replace(/[-\s_./]/g, '');
 
   if (!cleanQuery) return null;
 
-  // 1. Direct Reference Number match (highest precision)
-  const exactRefMatch = posts.find((p) => {
+  // Filter by category first if specified
+  const pool = categoryTarget
+    ? [
+        ...allPosts.filter(
+          (p) =>
+            p.category?.toLowerCase() === categoryTarget.toLowerCase() ||
+            p.category?.toLowerCase().includes(categoryTarget.toLowerCase()) ||
+            categoryTarget.toLowerCase().includes(p.category?.toLowerCase() || '')
+        ),
+        ...allPosts.filter(
+          (p) =>
+            p.category?.toLowerCase() !== categoryTarget.toLowerCase() &&
+            !p.category?.toLowerCase().includes(categoryTarget.toLowerCase()) &&
+            !categoryTarget.toLowerCase().includes(p.category?.toLowerCase() || '')
+        ),
+      ]
+    : allPosts;
+
+  // 1. Direct Reference Number or Verification ID match (highest precision)
+  const exactRefMatch = pool.find((p) => {
     const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
     const pId = (p.id || '').toLowerCase().replace(/[-\s_./]/g, '');
-    return pRef === cleanQuery || pId === cleanQuery;
+    const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./]/g, '');
+    const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
+    return (
+      pRef === cleanQuery ||
+      pId === cleanQuery ||
+      pVrf === cleanQuery ||
+      pPass === cleanQuery
+    );
   });
   if (exactRefMatch) return exactRefMatch;
 
-  // 2. Partial Reference Number or ID match
-  const partialRefMatch = posts.find((p) => {
+  // 2. Partial Reference Number, Passport, or ID match
+  const partialRefMatch = pool.find((p) => {
     const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
     const pId = (p.id || '').toLowerCase().replace(/[-\s_./]/g, '');
+    const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./]/g, '');
+    const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
     return (
       (pRef && (pRef.includes(cleanQuery) || cleanQuery.includes(pRef))) ||
-      (pId && (pId.includes(cleanQuery) || cleanQuery.includes(pId)))
+      (pId && (pId.includes(cleanQuery) || cleanQuery.includes(pId))) ||
+      (pVrf && (pVrf.includes(cleanQuery) || cleanQuery.includes(pVrf))) ||
+      (pPass && (pPass.includes(cleanQuery) || cleanQuery.includes(pPass)))
     );
   });
   if (partialRefMatch) return partialRefMatch;
 
-  // 3. Match within attached document names or title
-  const docOrTitleMatch = posts.find((p) => {
+  // 3. Candidate Name match
+  const candidateMatch = pool.find((p) => {
+    if (!p.candidateName) return false;
+    return p.candidateName.toLowerCase().includes(queryTrimmed);
+  });
+  if (candidateMatch) return candidateMatch;
+
+  // 4. Match within attached document names or title
+  const docOrTitleMatch = pool.find((p) => {
     const titleLower = p.title.toLowerCase();
     const hasDocNameMatch = p.attachedDocuments?.some((doc) =>
       doc.name.toLowerCase().replace(/[-\s_./]/g, '').includes(cleanQuery)
@@ -204,3 +265,37 @@ export const findAdminPostByQuery = (
 
   return docOrTitleMatch || null;
 };
+
+/**
+ * Add a new Admin Post
+ */
+export const addStoredAdminPost = (post: AdminPost): void => {
+  const current = getStoredAdminPosts();
+  saveStoredAdminPosts([post, ...current]);
+};
+
+/**
+ * Update an existing Admin Post
+ */
+export const updateStoredAdminPost = (id: string, updates: Partial<AdminPost>): boolean => {
+  const current = getStoredAdminPosts();
+  const index = current.findIndex((p) => p.id === id);
+  if (index === -1) return false;
+
+  current[index] = { ...current[index], ...updates };
+  saveStoredAdminPosts(current);
+  return true;
+};
+
+/**
+ * Delete an Admin Post
+ */
+export const deleteStoredAdminPost = (id: string): boolean => {
+  const current = getStoredAdminPosts();
+  const filtered = current.filter((p) => p.id !== id);
+  if (filtered.length === current.length) return false;
+
+  saveStoredAdminPosts(filtered);
+  return true;
+};
+

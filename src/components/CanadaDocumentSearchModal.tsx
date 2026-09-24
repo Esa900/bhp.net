@@ -9,12 +9,10 @@ import {
   Calendar,
   User,
   ExternalLink,
-  Download,
   AlertTriangle,
   Building,
   MapPin,
   Clock,
-  Printer,
   Sparkles,
 } from 'lucide-react';
 import { CanadaMenuItemConfig, CanadaDocumentRecord } from '../types/canada';
@@ -26,6 +24,11 @@ import {
 } from '../utils/canadaStorage';
 import { findAdminPostByQuery } from '../utils/postsStorage';
 import { AdminPost } from '../types';
+import {
+  FullPdfDocumentViewer,
+  canadaRecordToUnifiedDoc,
+  postToUnifiedDoc,
+} from './FullPdfDocumentViewer';
 
 interface CanadaDocumentSearchModalProps {
   isOpen: boolean;
@@ -123,16 +126,6 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
       }
       setIsSearching(false);
     }, 280);
-  };
-
-  const handleCopyRef = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(true);
-    setTimeout(() => setCopiedText(false), 2000);
-  };
-
-  const handlePrint = () => {
-    window.print();
   };
 
   return (
@@ -266,148 +259,31 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
           {hasSearched && (
             <div className="pt-2 animate-in fade-in duration-200">
               {matchedRecord ? (
-                /* MATCH FOUND - OFFICIAL CANADA CERTIFICATE CARD */
-                <div className="rounded-2xl bg-gradient-to-b from-[#1C1F26] to-[#16181D] border-2 border-emerald-500/40 p-5 sm:p-6 shadow-xl space-y-5">
-                  {/* Verified Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#2C303B]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-                        <ShieldCheck className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                            Authentication Successful
-                          </span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                            {matchedRecord.status}
-                          </span>
-                        </div>
-                        <h4 className="text-lg font-black text-white">
-                          {matchedRecord.candidateName}
-                        </h4>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handlePrint}
-                        className="px-3 py-1.5 rounded-lg bg-[#262A33] hover:bg-[#323642] text-xs font-semibold text-gray-200 flex items-center gap-1.5 transition-colors cursor-pointer"
-                        title="Print Certificate"
-                      >
-                        <Printer className="w-3.5 h-3.5 text-gray-300" />
-                        <span>Print</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Identification Details Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div className="p-3 bg-[#131518] rounded-xl border border-[#272B33]">
-                      <span className="text-[10px] text-gray-400 block uppercase font-semibold">TIN / Ref No</span>
-                      <span className="font-mono font-bold text-white text-xs sm:text-sm">
-                        {matchedRecord.tinOrRef || matchedRecord.referenceNo || 'N/A'}
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-[#131518] rounded-xl border border-[#272B33]">
-                      <span className="text-[10px] text-gray-400 block uppercase font-semibold">ID / Verification No</span>
-                      <span className="font-mono font-bold text-amber-400 text-xs sm:text-sm">
-                        {matchedRecord.idNumber || matchedRecord.verificationIdNo || matchedRecord.transitionIdNo || 'N/A'}
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-[#131518] rounded-xl border border-[#272B33]">
-                      <span className="text-[10px] text-gray-400 block uppercase font-semibold">Passport Number</span>
-                      <span className="font-mono font-bold text-white text-xs sm:text-sm">
-                        {matchedRecord.passportNumber}
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-[#131518] rounded-xl border border-[#272B33]">
-                      <span className="text-[10px] text-gray-400 block uppercase font-semibold">Nationality</span>
-                      <span className="font-bold text-white text-xs sm:text-sm">
-                        {matchedRecord.nationality}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Employment Details */}
-                  <div className="p-4 bg-[#131518] rounded-xl border border-[#272B33] grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                    <div>
-                      <span className="text-[10px] text-gray-400 block uppercase font-semibold">Job Designation</span>
-                      <span className="font-bold text-white text-sm">{matchedRecord.jobTitle}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-gray-400 block uppercase font-semibold">Employer / Sponsor</span>
-                      <span className="font-bold text-white text-sm">{matchedRecord.employer}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-gray-400 block uppercase font-semibold">Valid Until</span>
-                      <span className="font-mono font-bold text-emerald-400 text-sm">{matchedRecord.validUntil}</span>
-                    </div>
-                  </div>
-
-                  {/* Notes / Work Entitlement */}
-                  {matchedRecord.notes && (
-                    <div className="p-3.5 bg-[#181B22] rounded-xl border border-[#2B303C] text-xs text-gray-300">
-                      <span className="font-bold text-white block mb-0.5">Authorization Terms:</span>
-                      <p className="text-gray-400 leading-relaxed">{matchedRecord.notes}</p>
-                    </div>
-                  )}
-
-                  {/* Attached Document Preview / Download */}
-                  {matchedRecord.attachedPdfUrl && (
-                    <div className="p-3.5 bg-[#14161B] rounded-xl border border-[#272B34] flex items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-2.5 overflow-hidden">
-                        <FileText className="w-5 h-5 text-red-400 shrink-0" />
-                        <div className="truncate">
-                          <span className="font-bold text-white block truncate">
-                            {matchedRecord.attachedPdfName || 'Official_Document.pdf'}
-                          </span>
-                          <span className="text-[10px] text-gray-400">Official verified file attachment</span>
-                        </div>
-                      </div>
-
-                      <a
-                        href={matchedRecord.attachedPdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shrink-0"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download</span>
-                      </a>
-                    </div>
-                  )}
-                </div>
+                /* MATCH FOUND - OFFICIAL CANADA FULL PDF CERTIFICATE & DOCUMENTS */
+                <FullPdfDocumentViewer
+                  document={canadaRecordToUnifiedDoc(matchedRecord)}
+                  onSearchAnother={() => {
+                    setQuery('');
+                    setHasSearched(false);
+                    setMatchedRecord(null);
+                    setMatchedAdminPost(null);
+                    setTimeout(() => inputRef.current?.focus(), 50);
+                  }}
+                  onClose={onClose}
+                />
               ) : matchedAdminPost ? (
                 /* MATCH FOUND IN ADMIN POSTS */
-                <div className="rounded-2xl bg-gradient-to-b from-[#1C1F26] to-[#16181D] border-2 border-emerald-500/40 p-5 sm:p-6 shadow-xl space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-[#2C303B]">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-                        <ShieldCheck className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                          Document Authenticated
-                        </span>
-                        <h4 className="text-lg font-black text-white">{matchedAdminPost.title}</h4>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded bg-[#252830] text-gray-200 text-xs font-mono">
-                      {matchedAdminPost.referenceNumber}
-                    </span>
-                  </div>
-
-                  <div className="p-4 bg-[#131518] rounded-xl border border-[#272B33] text-xs text-gray-300">
-                    <p className="leading-relaxed">{matchedAdminPost.description}</p>
-                  </div>
-                </div>
+                <FullPdfDocumentViewer
+                  document={postToUnifiedDoc(matchedAdminPost, 'canada')}
+                  onSearchAnother={() => {
+                    setQuery('');
+                    setHasSearched(false);
+                    setMatchedRecord(null);
+                    setMatchedAdminPost(null);
+                    setTimeout(() => inputRef.current?.focus(), 50);
+                  }}
+                  onClose={onClose}
+                />
               ) : (
                 /* NO RECORD FOUND */
                 <div className="p-8 text-center bg-[#131518] rounded-2xl border border-dashed border-[#2D3038] space-y-3">

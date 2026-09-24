@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ArrowRight } from 'lucide-react';
 import { CanadaMenuItemConfig } from '../types/canada';
-import { CANADA_MENU_CONFIGS } from '../utils/canadaStorage';
+import {
+  getStoredCanadaMenuConfigs,
+  CANADA_MENU_CONFIGS_UPDATED_EVENT,
+} from '../utils/canadaStorage';
 
 interface RightDrawerMenuProps {
   isOpen: boolean;
@@ -15,6 +18,20 @@ export const RightDrawerMenu: React.FC<RightDrawerMenuProps> = ({
   onClose,
   onSelectCanadaItem,
 }) => {
+  const [menuConfigs, setMenuConfigs] = useState<CanadaMenuItemConfig[]>(() => getStoredCanadaMenuConfigs());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setMenuConfigs(getStoredCanadaMenuConfigs());
+    };
+    window.addEventListener(CANADA_MENU_CONFIGS_UPDATED_EVENT, handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener(CANADA_MENU_CONFIGS_UPDATED_EVENT, handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
+
   if (!isOpen) return null;
 
   return (
@@ -42,10 +59,10 @@ export const RightDrawerMenu: React.FC<RightDrawerMenuProps> = ({
           </button>
         </div>
 
-        {/* Drawer Content - Pure 5 items matching exact reference design */}
+        {/* Drawer Content */}
         <div className="p-6 flex-1 overflow-y-auto">
           <div className="space-y-0">
-            {CANADA_MENU_CONFIGS.map((item, idx) => {
+            {menuConfigs.map((item, idx) => {
               const isFirst = idx === 0;
               return (
                 <div

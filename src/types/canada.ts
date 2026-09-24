@@ -3,7 +3,8 @@ export type CanadaCategoryType =
   | 'offer-letter'
   | 'job-confirmation'
   | 'biometric-vfs'
-  | 'work-permit-pending';
+  | 'work-permit-pending'
+  | string;
 
 export interface CanadaDocumentRecord {
   id: string;
@@ -44,11 +45,11 @@ export interface CanadaDocumentRecord {
 }
 
 export interface CanadaMenuItemConfig {
-  id: CanadaCategoryType;
+  id: string;
   mainTitle: string;
   subMenu: string;
   fieldLabel: string;
-  searchFieldKey: 'tinOrRef' | 'idNumber' | 'verificationIdNo' | 'transitionIdNo' | 'referenceNo';
+  searchFieldKey: string;
   placeholder: string;
   samplePlaceholder: string;
   description: string;

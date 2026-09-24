@@ -6,3 +6,39 @@
   user-drag: none;
 }
 
+/* Dedicated Print Styles for Full PDF Document Output */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .no-print,
+  #doc-search-modal-backdrop,
+  #canada-search-modal-backdrop,
+  header,
+  nav,
+  button,
+  .no-print * {
+    display: none !important;
+  }
+
+  #printable-pdf-document {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: 2px solid #1e293b !important;
+    background: white !important;
+    color: #111 !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+}
+

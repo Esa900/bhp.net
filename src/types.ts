@@ -79,6 +79,20 @@ export interface AdminPost {
   attachedDocuments: AttachedDoc[]; // PDF & Document upload option
   readTime: string;
   badges: string[];
+
+  // Customer / Candidate Details for Full PDF Generation
+  candidateName?: string;
+  passportNumber?: string;
+  nationality?: string;
+  dateOfBirth?: string;
+  jobTitle?: string;
+  employerName?: string;
+  workLocation?: string;
+  salaryPackage?: string;
+  visaSubclass?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  verificationIdNo?: string;
 }
 
 export interface PostCategory {

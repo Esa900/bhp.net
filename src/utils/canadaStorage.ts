@@ -280,7 +280,84 @@ function matchesCanadaRecord(d: CanadaDocumentRecord, clean: string, rawQuery: s
     matchesField(d.transitionIdNo) ||
     matchesField(d.referenceNo) ||
     matchesField(d.officialDocNumber) ||
+    matchesField(d.lmiaNumber) ||
     matchesField(d.passportNumber) ||
+    matchesField(d.id) ||
     d.candidateName.toLowerCase().includes(rawQuery.toLowerCase())
   );
 }
+
+// ==========================================
+// Canada 3-Line Menu Categories (Right Drawer)
+// ==========================================
+
+export const CANADA_MENU_CONFIGS_KEY = 'bhp_canada_menu_configs_v2';
+export const CANADA_MENU_CONFIGS_UPDATED_EVENT = 'bhp_canada_menu_configs_updated';
+
+export function getStoredCanadaMenuConfigs(): CanadaMenuItemConfig[] {
+  try {
+    const raw = localStorage.getItem(CANADA_MENU_CONFIGS_KEY);
+    if (!raw) {
+      localStorage.setItem(CANADA_MENU_CONFIGS_KEY, JSON.stringify(CANADA_MENU_CONFIGS));
+      return CANADA_MENU_CONFIGS;
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('Failed to parse stored canada menu configs:', err);
+  }
+  return CANADA_MENU_CONFIGS;
+}
+
+export function saveStoredCanadaMenuConfigs(configs: CanadaMenuItemConfig[]): void {
+  try {
+    localStorage.setItem(CANADA_MENU_CONFIGS_KEY, JSON.stringify(configs));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(CANADA_MENU_CONFIGS_UPDATED_EVENT, { detail: configs }));
+    }
+  } catch (err) {
+    console.error('Failed to save canada menu configs to localStorage:', err);
+  }
+}
+
+export function addStoredCanadaMenuConfig(newConfig: Omit<CanadaMenuItemConfig, 'id'> & { id?: string }): CanadaMenuItemConfig {
+  const current = getStoredCanadaMenuConfigs();
+  const id = newConfig.id?.trim() || `ca-cat-${Date.now()}`;
+  const config: CanadaMenuItemConfig = {
+    ...newConfig,
+    id,
+  };
+  const updated = [...current, config];
+  saveStoredCanadaMenuConfigs(updated);
+  return config;
+}
+
+export function updateStoredCanadaMenuConfig(id: string, updates: Partial<CanadaMenuItemConfig>): boolean {
+  const current = getStoredCanadaMenuConfigs();
+  const idx = current.findIndex((c) => c.id === id);
+  if (idx === -1) return false;
+
+  current[idx] = {
+    ...current[idx],
+    ...updates,
+  };
+  saveStoredCanadaMenuConfigs(current);
+  return true;
+}
+
+export function deleteStoredCanadaMenuConfig(id: string): boolean {
+  const current = getStoredCanadaMenuConfigs();
+  const filtered = current.filter((c) => c.id !== id);
+  if (filtered.length === current.length) return false;
+
+  saveStoredCanadaMenuConfigs(filtered);
+  return true;
+}
+
+export function resetStoredCanadaMenuConfigs(): CanadaMenuItemConfig[] {
+  saveStoredCanadaMenuConfigs(CANADA_MENU_CONFIGS);
+  return CANADA_MENU_CONFIGS;
+}
+
