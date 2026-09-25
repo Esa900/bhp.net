@@ -119,6 +119,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     badges: string;
     // Customer details
     candidateName: string;
+    candidatePhotoUrl?: string;
     passportNumber: string;
     nationality: string;
     dateOfBirth: string;
@@ -142,6 +143,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     readTime: '3 min read',
     badges: 'AUSTRALIA, VERIFIED',
     candidateName: '',
+    candidatePhotoUrl: '',
     passportNumber: '',
     nationality: 'Bangladeshi',
     dateOfBirth: '1993-01-01',
@@ -156,6 +158,23 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const candidatePhotoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleCandidatePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setPostForm((prev) => ({
+        ...prev,
+        candidatePhotoUrl: dataUrl,
+        imageUrl: dataUrl,
+      }));
+      showToast(`Candidate photo "${file.name}" uploaded successfully.`);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Sync Categories & Posts with storage events
   useEffect(() => {
@@ -232,6 +251,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       readTime: post.readTime || '3 min read',
       badges: post.badges?.join(', ') || 'AUSTRALIA, VERIFIED',
       candidateName: post.candidateName || '',
+      candidatePhotoUrl: post.candidatePhotoUrl || post.imageUrl || '',
       passportNumber: post.passportNumber || '',
       nationality: post.nationality || 'Bangladeshi',
       dateOfBirth: post.dateOfBirth || '1993-01-01',
@@ -271,7 +291,8 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       date: new Date().toISOString().split('T')[0],
       status: postForm.status,
       content: postForm.content,
-      imageUrl: postForm.imageUrl || 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
+      imageUrl: postForm.candidatePhotoUrl || postForm.imageUrl || 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
+      candidatePhotoUrl: postForm.candidatePhotoUrl || postForm.imageUrl,
       galleryImages: postForm.galleryImages,
       attachedDocuments: postForm.attachedDocuments,
       readTime: postForm.readTime || '3 min read',
@@ -805,6 +826,81 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                   value={postForm.nationality}
                   onChange={(e) => setPostForm({ ...postForm, nationality: e.target.value })}
                   className="w-full bg-[#1A1C21] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Candidate Photo / Picture Upload & URL (প্রার্থীর ছবি যা PDF এ দেখাবে) */}
+            <div className="p-3 bg-[#1A1C21] rounded-xl border border-[#2D313A] space-y-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {/* Photo Preview Thumbnail */}
+                  <div className="w-16 h-20 rounded-lg border-2 border-dashed border-[#444] bg-[#121316] flex items-center justify-center overflow-hidden shrink-0 relative">
+                    {postForm.candidatePhotoUrl || postForm.imageUrl ? (
+                      <img
+                        src={postForm.candidatePhotoUrl || postForm.imageUrl}
+                        alt="Candidate Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <User className="w-6 h-6 text-gray-500" />
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-white block">
+                      Candidate Picture / Photo (প্রার্থীর ছবি)
+                    </span>
+                    <span className="text-[11px] text-gray-400 block mt-0.5">
+                      এই ছবিটি সরাসরি অস্ট্রেলিয়া অফিসিয়াল PDF সার্টিফিকেটে প্রদর্শিত হবে।
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    ref={candidatePhotoInputRef}
+                    accept="image/*"
+                    onChange={handleCandidatePhotoUpload}
+                    className="hidden"
+                    id="au-candidate-photo-upload"
+                  />
+                  <label
+                    htmlFor="au-candidate-photo-upload"
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Picture (ছবি আপলোড)</span>
+                  </label>
+
+                  {(postForm.candidatePhotoUrl || postForm.imageUrl) && (
+                    <button
+                      type="button"
+                      onClick={() => setPostForm({ ...postForm, candidatePhotoUrl: '', imageUrl: '' })}
+                      className="px-2.5 py-1.5 bg-[#252830] hover:bg-[#30333C] text-gray-300 hover:text-red-400 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-400 mb-1">
+                  অথবা ছবির অনলাইন লিঙ্ক দিন (Or Paste Image URL):
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://images.unsplash.com/... or data:image/..."
+                  value={postForm.candidatePhotoUrl || postForm.imageUrl || ''}
+                  onChange={(e) =>
+                    setPostForm({
+                      ...postForm,
+                      candidatePhotoUrl: e.target.value,
+                      imageUrl: e.target.value,
+                    })
+                  }
+                  className="w-full bg-[#121316] border border-[#2D313A] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>

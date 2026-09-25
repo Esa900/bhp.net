@@ -20,7 +20,6 @@ import {
   User,
   Home,
   CreditCard,
-  Printer,
   ChevronRight,
 } from 'lucide-react';
 import { JobCategory, JobRequirement, JobApplication } from '../types/jobCircular';
@@ -291,16 +290,8 @@ export const JobCircularModal: React.FC<JobCircularModalProps> = ({
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="px-4 py-2.5 rounded-xl bg-[#23272F] hover:bg-[#2C313C] text-gray-200 text-xs font-semibold flex items-center gap-2 border border-[#373D4A] transition-colors cursor-pointer"
-                >
-                  <Printer className="w-4 h-4 text-gray-400" />
-                  <span>Print Slip / স্লিপ প্রিন্ট</span>
-                </button>
-                <button
-                  type="button"
                   onClick={onClose}
-                  className="px-6 py-2.5 rounded-xl bg-[#F25C05] hover:bg-[#D94F04] text-white text-xs font-bold transition-colors cursor-pointer shadow-md"
+                  className="px-8 py-2.5 rounded-xl bg-[#F25C05] hover:bg-[#D94F04] text-white text-xs font-bold transition-colors cursor-pointer shadow-md"
                 >
                   Done / সম্পন্ন
                 </button>

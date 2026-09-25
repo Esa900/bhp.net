@@ -24,6 +24,7 @@ export interface CanadaDocumentRecord {
   passportNumber: string;
   nationality: string;
   dateOfBirth?: string;
+  candidatePhotoUrl?: string;
 
   // Employment Details
   jobTitle: string;

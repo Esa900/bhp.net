@@ -76,14 +76,6 @@ export const CeoMessageModal: React.FC<CeoMessageModalProps> = ({ isOpen, onClos
                   {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Share2 className="w-3.5 h-3.5 text-[#F25C05]" />}
                   <span>{copied ? 'Link Copied' : 'Share Message'}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  className="inline-flex items-center gap-1.5 text-xs bg-[#2A2622] hover:bg-[#38332D] text-gray-200 px-3 py-1.5 rounded transition-colors cursor-pointer"
-                >
-                  {downloaded ? <Check className="w-3.5 h-3.5 text-green-400" /> : <FileText className="w-3.5 h-3.5 text-[#F25C05]" />}
-                  <span>{downloaded ? 'PDF Download Started' : 'Download PDF (4.2 MB)'}</span>
-                </button>
               </div>
             </div>
           </div>

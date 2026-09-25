@@ -504,17 +504,11 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                   </a>
                 )}
 
-                {/* Download Button */}
-                {previewingDoc.dataUrl && (
-                  <a
-                    href={previewingDoc.dataUrl}
-                    download={previewingDoc.name || 'document.pdf'}
-                    className="p-1.5 rounded-lg bg-[#272B33] hover:bg-[#343A45] text-gray-300 hover:text-white transition-colors cursor-pointer border border-[#383E4B]"
-                    title="Download Document"
-                  >
-                    <Download className="w-4 h-4" />
-                  </a>
-                )}
+                {/* Protected View Badge */}
+                <div className="px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-semibold flex items-center gap-1 select-none">
+                  <Lock className="w-3 h-3 text-amber-400" />
+                  <span>View Only</span>
+                </div>
 
                 {/* Close Button */}
                 <button
@@ -581,7 +575,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                   <div>
                     <h5 className="text-base font-bold text-white mb-1">{previewingDoc.name}</h5>
                     <p className="text-xs text-gray-400 max-w-md mx-auto">
-                      Official document uploaded via BHP Admin Registry. Use the controls above to zoom, open in a new tab, or download.
+                      Official document verified via BHP Registry. Protected document: View Only.
                     </p>
                   </div>
                   {previewingDoc.dataUrl && (

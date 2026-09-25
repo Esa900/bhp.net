@@ -82,6 +82,7 @@ export interface AdminPost {
 
   // Customer / Candidate Details for Full PDF Generation
   candidateName?: string;
+  candidatePhotoUrl?: string;
   passportNumber?: string;
   nationality?: string;
   dateOfBirth?: string;

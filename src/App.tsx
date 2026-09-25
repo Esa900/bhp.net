@@ -149,8 +149,9 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
 
   const handleCloseAdmin = () => {
     setIsAdminOpen(false);
-    if (window.location.pathname.includes('/admin') || window.location.hash.includes('admin')) {
+    if (window.location.pathname.includes('/admin') || window.location.hash.includes('admin') || window.location.search.includes('admin')) {
       window.history.pushState({}, '', isPortalOpen ? '/portal' : '/');
+      window.dispatchEvent(new Event('popstate'));
     }
   };
 
@@ -389,22 +390,61 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
   );
 }
 
+function checkIsAdminUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  const pathname = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+  const search = window.location.search.toLowerCase();
+
+  return (
+    pathname === '/admin' ||
+    pathname === '/admin/' ||
+    pathname.startsWith('/admin') ||
+    hash === '#/admin' ||
+    hash === '#admin' ||
+    hash.startsWith('#admin') ||
+    hash.startsWith('#/admin') ||
+    search.includes('admin=true')
+  );
+}
+
 export function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getCurrentAuthUser());
+  const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => checkIsAdminUrl());
 
   useEffect(() => {
     const handleAuthChange = () => {
       setCurrentUser(getCurrentAuthUser());
     };
+    const handleRouteChange = () => {
+      setIsAdminRoute(checkIsAdminUrl());
+    };
+
     window.addEventListener(BHP_AUTH_STATE_EVENT, handleAuthChange);
     window.addEventListener('storage', handleAuthChange);
+    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener('hashchange', handleRouteChange);
+
     return () => {
       window.removeEventListener(BHP_AUTH_STATE_EVENT, handleAuthChange);
       window.removeEventListener('storage', handleAuthChange);
+      window.removeEventListener('popstate', handleRouteChange);
+      window.removeEventListener('hashchange', handleRouteChange);
     };
   }, []);
 
-  // Protect website: anyone searching/opening domain must login or register first
+  // When visiting /admin directly, direct admin login screen appears immediately without requiring website customer login
+  if (isAdminRoute) {
+    return (
+      <LanguageProvider>
+        <AdminDataProvider>
+          <MainWebsiteContent currentUser={currentUser} />
+        </AdminDataProvider>
+      </LanguageProvider>
+    );
+  }
+
+  // Protect website: anyone searching/opening website must login or register first
   if (!currentUser) {
     return <AuthSecurityGate onAuthenticated={(user) => setCurrentUser(user)} />;
   }

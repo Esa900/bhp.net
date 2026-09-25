@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ZoomIn,
   ZoomOut,
@@ -18,6 +18,7 @@ import {
   Briefcase,
   Globe,
   Award,
+  X,
 } from 'lucide-react';
 import { AdminPost, AttachedDoc } from '../types';
 import { CanadaDocumentRecord } from '../types/canada';
@@ -76,7 +77,7 @@ export function postToUnifiedDoc(
     expiryDate: post.expiryDate || '2028-12-31',
     verificationId: post.verificationIdNo || `VRF-AU-${post.refNumber.replace(/[^0-9]/g, '').slice(-5) || '92841'}`,
     descriptionOrNotes: post.content,
-    featuredImageUrl: post.imageUrl,
+    featuredImageUrl: post.candidatePhotoUrl || post.imageUrl,
     galleryImages: post.galleryImages,
     attachedDocuments: post.attachedDocuments,
     author: post.author,
@@ -119,6 +120,7 @@ export function canadaRecordToUnifiedDoc(rec: CanadaDocumentRecord): UnifiedDocu
     officialDocNumber: rec.officialDocNumber,
     lmiaNumber: rec.lmiaNumber,
     descriptionOrNotes: rec.notes || 'Officially verified and authenticated under Canadian immigration and employer sponsorship regulations.',
+    featuredImageUrl: rec.candidatePhotoUrl,
     attachedDocuments: attachedDocs,
     author: 'Immigration, Refugees and Citizenship Canada (IRCC) & BHP Canada',
   };
@@ -167,6 +169,17 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
 
   const isAustralia = document.country === 'australia';
 
+  // Handle ESC key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullScreen) {
+        setIsFullScreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullScreen]);
+
   const handleCopy = () => {
     navigator.clipboard.writeText(document.referenceNumber);
     setCopiedRef(true);
@@ -182,11 +195,11 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   );
 
   return (
-    <div className={`w-full flex flex-col space-y-4 ${isFullScreen ? 'fixed inset-0 z-50 bg-[#121316] p-4 sm:p-6 overflow-y-auto' : ''}`}>
+    <div className={`w-full flex flex-col space-y-4 ${isFullScreen ? 'fixed inset-0 z-[100] bg-[#0E1013]/98 backdrop-blur-md p-4 sm:p-6 overflow-y-auto select-text animate-in fade-in duration-150' : ''}`}>
       {/* =========================================================================
           TOP ACTION & CONTROL TOOLBAR (PDF Viewer Header)
          ========================================================================= */}
-      <div className="bg-[#1A1C21] p-3 sm:p-4 rounded-xl border border-[#2B2F38] flex flex-wrap items-center justify-between gap-3 shadow-md no-print">
+      <div className={`bg-[#1A1C21] p-3 sm:p-4 rounded-xl border border-[#2B2F38] flex flex-wrap items-center justify-between gap-3 shadow-md no-print ${isFullScreen ? 'sticky top-0 z-30 shadow-2xl' : ''}`}>
         {/* Left: Status & Country Indicator */}
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-xl border flex items-center justify-center shrink-0 ${
@@ -229,6 +242,12 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
 
         {/* Right: PDF Viewer Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Protected Document Indicator - Download Disabled for Customers */}
+          <div className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-semibold flex items-center gap-1.5 select-none">
+            <Lock className="w-3 h-3 text-amber-400" />
+            <span>View Only • Protected</span>
+          </div>
+
           {/* Zoom Controls */}
           <div className="hidden sm:flex items-center gap-1 bg-[#121316] p-1 rounded-lg border border-[#2B2F38]">
             <button
@@ -261,18 +280,35 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
           <button
             type="button"
             onClick={() => setIsFullScreen(!isFullScreen)}
-            className="p-2 bg-[#252830] hover:bg-[#323640] text-gray-300 hover:text-white rounded-lg transition-colors cursor-pointer border border-[#373C48]"
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              isFullScreen
+                ? 'bg-red-600 hover:bg-red-500 text-white border-red-500 shadow-lg'
+                : 'bg-[#F25C05] hover:bg-[#D94F04] text-white border-[#F25C05] shadow-md'
+            }`}
             title={isFullScreen ? 'Exit Full Screen' : 'Full Screen View'}
           >
-            {isFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            {isFullScreen ? (
+              <>
+                <Minimize2 className="w-4 h-4" />
+                <span>Close Full Screen</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-4 h-4" />
+                <span>Full Screen</span>
+              </>
+            )}
           </button>
 
           {/* Search Another */}
           {onSearchAnother && (
             <button
               type="button"
-              onClick={onSearchAnother}
-              className="px-3 py-2 text-xs font-medium text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+              onClick={() => {
+                if (isFullScreen) setIsFullScreen(false);
+                onSearchAnother();
+              }}
+              className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Search Another</span>
@@ -404,15 +440,48 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
           (Standard A4 sheet styling with microprint borders, seals, QR code & biometrics)
          ========================================================================= */}
       {activeDocTab === 'certificate' && (
-        <div className="w-full flex justify-center overflow-x-auto py-2">
+        <div className="w-full flex flex-col items-center py-2 relative">
+          {/* Quick Notice above document when not fullscreen */}
+          {!isFullScreen && (
+            <div className="w-full max-w-[850px] mb-2 flex items-center justify-between px-1">
+              <span className="text-xs text-gray-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Official Verified Certificate
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsFullScreen(true)}
+                className="px-3.5 py-1.5 bg-[#F25C05] hover:bg-[#D94F04] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer transition-all hover:scale-105"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>Click for Full Screen (ফুল স্ক্রিনে দেখুন)</span>
+              </button>
+            </div>
+          )}
+
           <div
             id="printable-pdf-document"
+            onClick={() => {
+              if (!isFullScreen) setIsFullScreen(true);
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+            title={!isFullScreen ? 'Click anywhere on PDF to view in full screen (ফুল স্ক্রিনে দেখতে ক্লিক করুন)' : undefined}
             style={{
               transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
               transformOrigin: 'top center',
             }}
-            className="w-full max-w-[850px] bg-white text-[#111] p-6 sm:p-10 rounded-2xl shadow-2xl border-4 border-[#202530] relative select-text transition-transform duration-150"
+            className={`w-full max-w-[850px] bg-white text-[#111] p-6 sm:p-10 rounded-2xl shadow-2xl border-4 border-[#202530] relative select-text transition-all duration-150 ${
+              !isFullScreen ? 'cursor-pointer group hover:border-[#F25C05] hover:shadow-2xl hover:shadow-[#F25C05]/20' : ''
+            }`}
           >
+            {/* Hover overlay hint when not fullscreen */}
+            {!isFullScreen && (
+              <div className="absolute top-4 right-4 z-20 opacity-90 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 px-3 py-1.5 bg-[#0F172A]/90 hover:bg-[#F25C05] text-white text-xs font-bold rounded-lg shadow-lg backdrop-blur-xs border border-white/20">
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>Click to Expand Full Screen</span>
+              </div>
+            )}
+
             {/* Watermark Pattern */}
             <div className="absolute inset-0 pointer-events-none opacity-[0.03] flex items-center justify-center select-none overflow-hidden">
               <div className="transform -rotate-45 text-center font-black text-gray-900 text-6xl sm:text-7xl tracking-widest uppercase">
