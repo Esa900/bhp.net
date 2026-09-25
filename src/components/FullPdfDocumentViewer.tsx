@@ -242,11 +242,6 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
 
         {/* Right: PDF Viewer Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Protected Document Indicator - Download Disabled for Customers */}
-          <div className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] font-semibold flex items-center gap-1.5 select-none">
-            <Lock className="w-3 h-3 text-amber-400" />
-            <span>View Only • Protected</span>
-          </div>
 
           {/* Zoom Controls */}
           <div className="hidden sm:flex items-center gap-1 bg-[#121316] p-1 rounded-lg border border-[#2B2F38]">
