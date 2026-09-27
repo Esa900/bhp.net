@@ -522,11 +522,9 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
 
   // Delete Post
   const handleDeletePost = (id: string, title: string) => {
-    if (confirm(`Are you sure you want to delete post "${title}"?`)) {
-      setPosts((prev) => prev.filter((p) => p.id !== id));
-      deleteNews(id);
-      showToast(`Post "${title}" deleted.`);
-    }
+    setPosts((prev) => prev.filter((p) => p.id !== id));
+    deleteNews(id);
+    showToast(`Post "${title}" deleted.`);
   };
 
   // Add Category
@@ -554,10 +552,8 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   };
 
   const handleDeleteCategory = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete category "${name}"?`)) {
-      setCategories((prev) => prev.filter((c) => c.id !== id));
-      showToast(`Category "${name}" deleted.`);
-    }
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+    showToast(`Category "${name}" deleted.`);
   };
 
   // Filter posts

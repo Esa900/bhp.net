@@ -324,11 +324,9 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
   };
 
   const handleDeletePost = (id: string, title: string) => {
-    if (window.confirm(`Are you sure you want to delete post "${title}"?`)) {
-      deleteStoredAdminPost(id);
-      setPosts(getStoredAdminPosts());
-      showToast(`Post "${title}" deleted.`);
-    }
+    deleteStoredAdminPost(id);
+    setPosts(getStoredAdminPosts());
+    showToast(`Post "${title}" deleted successfully.`);
   };
 
   // Document attachment handler (Base64 file reader)
@@ -452,19 +450,15 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
   };
 
   const handleDeleteCategory = (id: string, title: string) => {
-    if (window.confirm(`Are you sure you want to remove "${title}" from the Australia 3-line menu?`)) {
-      deleteStoredMenuItem(id);
-      setCategories(getStoredMenuItems());
-      showToast(`Category "${title}" removed from Australia menu.`);
-    }
+    deleteStoredMenuItem(id);
+    setCategories(getStoredMenuItems());
+    showToast(`Category "${title}" removed from Australia menu.`);
   };
 
   const handleResetCategories = () => {
-    if (window.confirm('Reset Australia menu categories to default official items?')) {
-      resetStoredMenuItems();
-      setCategories(getStoredMenuItems());
-      showToast('Australia menu categories reset to default.');
-    }
+    resetStoredMenuItems();
+    setCategories(getStoredMenuItems());
+    showToast('Australia menu categories reset to default.');
   };
 
   // Filtered lists

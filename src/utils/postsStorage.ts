@@ -145,14 +145,24 @@ All supporting biometric documents, police clearances, and medical certification
 ];
 
 /**
- * Retrieve all Admin Posts from LocalStorage (or initial defaults)
+ * Retrieve all Admin Posts from LocalStorage (or in-memory cache / initial defaults)
  */
 export const getStoredAdminPosts = (): AdminPost[] => {
+  if (typeof window !== 'undefined' && (window as any).__bhp_admin_posts_cache) {
+    const cached = (window as any).__bhp_admin_posts_cache;
+    if (Array.isArray(cached) && cached.length > 0) {
+      return cached;
+    }
+  }
+
   try {
     const raw = localStorage.getItem(POSTS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        if (typeof window !== 'undefined') {
+          (window as any).__bhp_admin_posts_cache = parsed;
+        }
         return parsed;
       }
     }
@@ -172,14 +182,36 @@ export const getStoredAdminPosts = (): AdminPost[] => {
  * Save Admin Posts to LocalStorage and broadcast update event
  */
 export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
+  if (typeof window !== 'undefined') {
+    (window as any).__bhp_admin_posts_cache = posts;
+  }
+
   try {
     localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
-    // Trigger custom event so any listener or modal immediately refreshes
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: posts }));
-    }
   } catch (err) {
-    console.error('Failed to save admin posts to localStorage:', err);
+    console.warn('LocalStorage save quota exceeded, preserving newest post and pruning old payloads:', err);
+    try {
+      // Keep recent posts with full attached files, lightweight older posts so saving NEVER fails
+      const streamlined = posts.map((p, idx) => {
+        if (idx < 5) return p;
+        return {
+          ...p,
+          attachedDocuments: p.attachedDocuments?.map((d) => ({
+            ...d,
+            dataUrl: (d.dataUrl && d.dataUrl.length > 50000) ? '#' : d.dataUrl,
+          })),
+        };
+      });
+      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(streamlined));
+    } catch (e2) {
+      console.error('Secondary storage error:', e2);
+    }
+  }
+
+  // Trigger custom event so any listener or modal immediately refreshes
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: posts }));
+    window.dispatchEvent(new Event('storage'));
   }
 };
 
@@ -189,7 +221,7 @@ export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
 export const findAdminPostByQuery = (
   rawQuery: string,
   postsPool?: AdminPost[],
-  categoryTarget?: string
+  _categoryTarget?: string
 ): AdminPost | null => {
   if (!rawQuery || !rawQuery.trim()) return null;
   const allPosts = postsPool || getStoredAdminPosts();
@@ -199,26 +231,8 @@ export const findAdminPostByQuery = (
 
   if (!cleanQuery) return null;
 
-  // Filter by category first if specified
-  const pool = categoryTarget
-    ? [
-        ...allPosts.filter(
-          (p) =>
-            p.category?.toLowerCase() === categoryTarget.toLowerCase() ||
-            p.category?.toLowerCase().includes(categoryTarget.toLowerCase()) ||
-            categoryTarget.toLowerCase().includes(p.category?.toLowerCase() || '')
-        ),
-        ...allPosts.filter(
-          (p) =>
-            p.category?.toLowerCase() !== categoryTarget.toLowerCase() &&
-            !p.category?.toLowerCase().includes(categoryTarget.toLowerCase()) &&
-            !categoryTarget.toLowerCase().includes(p.category?.toLowerCase() || '')
-        ),
-      ]
-    : allPosts;
-
-  // 1. Direct Reference Number or Verification ID match (highest precision)
-  const exactRefMatch = pool.find((p) => {
+  // 1. Direct Reference Number, Verification ID, or Passport match across ALL posts (Highest Priority)
+  const exactRefMatch = allPosts.find((p) => {
     const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
     const pId = (p.id || '').toLowerCase().replace(/[-\s_./]/g, '');
     const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./]/g, '');
@@ -233,7 +247,7 @@ export const findAdminPostByQuery = (
   if (exactRefMatch) return exactRefMatch;
 
   // 2. Partial Reference Number, Passport, or ID match
-  const partialRefMatch = pool.find((p) => {
+  const partialRefMatch = allPosts.find((p) => {
     const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
     const pId = (p.id || '').toLowerCase().replace(/[-\s_./]/g, '');
     const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./]/g, '');
@@ -248,14 +262,18 @@ export const findAdminPostByQuery = (
   if (partialRefMatch) return partialRefMatch;
 
   // 3. Candidate Name match
-  const candidateMatch = pool.find((p) => {
+  const candidateMatch = allPosts.find((p) => {
     if (!p.candidateName) return false;
-    return p.candidateName.toLowerCase().includes(queryTrimmed);
+    const cleanCandName = p.candidateName.toLowerCase().replace(/[-\s_./]/g, '');
+    return (
+      p.candidateName.toLowerCase().includes(queryTrimmed) ||
+      cleanCandName.includes(cleanQuery)
+    );
   });
   if (candidateMatch) return candidateMatch;
 
   // 4. Match within attached document names or title
-  const docOrTitleMatch = pool.find((p) => {
+  const docOrTitleMatch = allPosts.find((p) => {
     const titleLower = p.title.toLowerCase();
     const hasDocNameMatch = p.attachedDocuments?.some((doc) =>
       doc.name.toLowerCase().replace(/[-\s_./]/g, '').includes(cleanQuery)

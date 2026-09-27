@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   User,
-  Mail,
   Lock,
   Eye,
   EyeOff,
@@ -17,7 +16,6 @@ import {
 import { authenticateUser, registerUser, setCurrentAuthUser } from '../../utils/authStorage';
 import { AuthUser } from '../../types/auth';
 import { GoogleAccountChooserModal } from './GoogleAccountChooserModal';
-import { FacebookLoginModal } from './FacebookLoginModal';
 
 interface AuthSecurityGateProps {
   onAuthenticated: (user: AuthUser) => void;
@@ -28,17 +26,15 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
 
   // Social Modals
   const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [showFacebookModal, setShowFacebookModal] = useState(false);
 
   // Form states - Login
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  // Form states - Register
+  // Form states - Register (Username & Password only - Email removed per user request)
   const [regUsername, setRegUsername] = useState('');
-  const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
 
@@ -71,7 +67,7 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
     }, 300);
   };
 
-  // Handle Register Submit
+  // Handle Register Submit (Username & Password only)
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -79,12 +75,12 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
     setIsLoading(true);
 
     setTimeout(() => {
-      const res = registerUser(regUsername, regEmail, regPassword);
+      const res = registerUser(regUsername, undefined, regPassword);
       setIsLoading(false);
 
       if (res.success && res.user) {
         setSuccessMsg('Account created successfully! Logging you in...');
-        setCurrentAuthUser(res.user, true);
+        setCurrentAuthUser(res.user, false);
         setTimeout(() => {
           onAuthenticated(res.user!);
         }, 400);
@@ -288,15 +284,15 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
             {/* Social Logins Section */}
             <div className="mt-7 text-center">
               <span className="text-xs text-purple-200/50 block mb-3">Or continue with</span>
-              <div className="flex items-center justify-center gap-3.5">
+              <div className="flex items-center justify-center">
                 {/* Continue with Google */}
                 <button
                   type="button"
                   onClick={() => setShowGoogleModal(true)}
                   title="Continue with Google (ডিভাইসের গুগল অ্যাকাউন্ট নির্বাচন করুন)"
-                  className="w-12 h-11 rounded-2xl bg-[#231d42]/80 hover:bg-[#2e2656] border border-purple-500/25 flex items-center justify-center transition-all cursor-pointer hover:border-purple-400 hover:scale-105 active:scale-95 shadow-sm"
+                  className="px-6 py-2.5 rounded-2xl bg-[#231d42]/80 hover:bg-[#2e2656] border border-purple-500/25 flex items-center justify-center gap-2.5 transition-all cursor-pointer hover:border-purple-400 hover:scale-105 active:scale-95 shadow-sm text-xs font-semibold text-purple-200"
                 >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                     <path
                       fill="#4285F4"
                       d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
@@ -314,16 +310,7 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
                       d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                     />
                   </svg>
-                </button>
-
-                {/* Continue with Facebook */}
-                <button
-                  type="button"
-                  onClick={() => setShowFacebookModal(true)}
-                  title="Continue with Facebook (ফেসবুক লগইন)"
-                  className="w-12 h-11 rounded-2xl bg-[#231d42]/80 hover:bg-[#2e2656] border border-purple-500/25 flex items-center justify-center text-[#1877F2] font-black text-xl transition-all cursor-pointer hover:border-purple-400 hover:scale-105 active:scale-95 shadow-sm"
-                >
-                  f
+                  <span>Google Account</span>
                 </button>
               </div>
             </div>
@@ -331,7 +318,7 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
         )}
 
         {/* =========================================================================
-            TAB 2: REGISTER (Image 2)
+            TAB 2: REGISTER (Image 1) - Only Username & Password
            ========================================================================= */}
         {activeTab === 'register' && (
           <div className="animate-in fade-in duration-200">
@@ -359,23 +346,6 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
                     placeholder="Username"
                     required
                     autoComplete="username"
-                    className="w-full bg-transparent text-sm text-white placeholder-purple-300/40 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Email Address Input */}
-              <div className="space-y-1">
-                <div className="w-full bg-[#1b1735]/90 border border-purple-500/25 focus-within:border-[#8b5cf6] focus-within:ring-1 focus-within:ring-[#8b5cf6]/50 rounded-2xl px-4 py-3.5 flex items-center gap-3 transition-all">
-                  <Mail className="w-4 h-4 text-purple-300/60 shrink-0" />
-                  <input
-                    id="reg-email"
-                    type="email"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="Email Address"
-                    required
-                    autoComplete="email"
                     className="w-full bg-transparent text-sm text-white placeholder-purple-300/40 focus:outline-none"
                   />
                 </div>
@@ -427,15 +397,15 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
             {/* Social Logins Section */}
             <div className="mt-7 text-center">
               <span className="text-xs text-purple-200/50 block mb-3">Or register with</span>
-              <div className="flex items-center justify-center gap-3.5">
+              <div className="flex items-center justify-center">
                 {/* Register with Google */}
                 <button
                   type="button"
                   onClick={() => setShowGoogleModal(true)}
                   title="Register with Google (গুগল অ্যাকাউন্ট দিয়ে সরাসরি রেজিস্টার)"
-                  className="w-12 h-11 rounded-2xl bg-[#231d42]/80 hover:bg-[#2e2656] border border-purple-500/25 flex items-center justify-center transition-all cursor-pointer hover:border-purple-400 hover:scale-105 active:scale-95 shadow-sm"
+                  className="px-6 py-2.5 rounded-2xl bg-[#231d42]/80 hover:bg-[#2e2656] border border-purple-500/25 flex items-center justify-center gap-2.5 transition-all cursor-pointer hover:border-purple-400 hover:scale-105 active:scale-95 shadow-sm text-xs font-semibold text-purple-200"
                 >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                     <path
                       fill="#4285F4"
                       d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
@@ -453,16 +423,7 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
                       d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                     />
                   </svg>
-                </button>
-
-                {/* Register with Facebook */}
-                <button
-                  type="button"
-                  onClick={() => setShowFacebookModal(true)}
-                  title="Register with Facebook (ফেসবুক দিয়ে সরাসরি রেজিস্টার)"
-                  className="w-12 h-11 rounded-2xl bg-[#231d42]/80 hover:bg-[#2e2656] border border-purple-500/25 flex items-center justify-center text-[#1877F2] font-black text-xl transition-all cursor-pointer hover:border-purple-400 hover:scale-105 active:scale-95 shadow-sm"
-                >
-                  f
+                  <span>Google Account</span>
                 </button>
               </div>
             </div>
@@ -483,16 +444,6 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
       <GoogleAccountChooserModal
         isOpen={showGoogleModal}
         onClose={() => setShowGoogleModal(false)}
-        onSuccess={(user) => {
-          setSuccessMsg(`Welcome, ${user.fullName || user.username}! Accessing BHP portal...`);
-          setTimeout(() => onAuthenticated(user), 300);
-        }}
-      />
-
-      {/* Facebook Login Modal */}
-      <FacebookLoginModal
-        isOpen={showFacebookModal}
-        onClose={() => setShowFacebookModal(false)}
         onSuccess={(user) => {
           setSuccessMsg(`Welcome, ${user.fullName || user.username}! Accessing BHP portal...`);
           setTimeout(() => onAuthenticated(user), 300);

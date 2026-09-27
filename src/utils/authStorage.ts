@@ -85,21 +85,20 @@ export function saveRegisteredUsers(users: AuthUser[]): void {
  */
 export function registerUser(
   username: string,
-  email: string,
-  password: string
+  emailOrUndefined?: string,
+  password?: string
 ): { success: boolean; message: string; user?: AuthUser } {
   const cleanUsername = username.trim();
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanPassword = password.trim();
+  const cleanPassword = (password || '').trim();
+  const cleanEmail = emailOrUndefined && emailOrUndefined.trim()
+    ? emailOrUndefined.trim().toLowerCase()
+    : `${cleanUsername.toLowerCase()}@user.bhp.com`;
 
   if (!cleanUsername) {
     return { success: false, message: 'Username is required' };
   }
   if (cleanUsername.length < 3) {
     return { success: false, message: 'Username must be at least 3 characters long' };
-  }
-  if (!cleanEmail || !cleanEmail.includes('@')) {
-    return { success: false, message: 'Valid email address is required' };
   }
   if (!cleanPassword || cleanPassword.length < 4) {
     return { success: false, message: 'Password must be at least 4 characters long' };
@@ -113,14 +112,6 @@ export function registerUser(
   );
   if (usernameTaken) {
     return { success: false, message: 'This username is already registered. Please choose another or login.' };
-  }
-
-  // Check email uniqueness
-  const emailTaken = existingUsers.some(
-    (u) => u.email.toLowerCase() === cleanEmail
-  );
-  if (emailTaken) {
-    return { success: false, message: 'This email is already registered. Please login.' };
   }
 
   const newUser: AuthUser = {
@@ -316,17 +307,17 @@ export function authenticateUser(
 }
 
 /**
- * Get currently logged in user session
+ * Get currently logged in user session (strictly session-based: quits on browser close)
  */
 export function getCurrentAuthUser(): AuthUser | null {
   try {
-    const local = localStorage.getItem(BHP_AUTH_SESSION_KEY);
-    if (local) {
-      return JSON.parse(local);
-    }
     const session = sessionStorage.getItem(BHP_AUTH_SESSION_KEY);
     if (session) {
       return JSON.parse(session);
+    }
+    // Purge persistent localStorage session if present to ensure browser quit logs out
+    if (localStorage.getItem(BHP_AUTH_SESSION_KEY)) {
+      localStorage.removeItem(BHP_AUTH_SESSION_KEY);
     }
     return null;
   } catch (err) {
@@ -336,12 +327,14 @@ export function getCurrentAuthUser(): AuthUser | null {
 }
 
 /**
- * Save logged in user session
+ * Save logged in user session (stored in sessionStorage so quitting/closing browser asks for re-login)
  */
-export function setCurrentAuthUser(user: AuthUser | null, rememberMe: boolean = true): void {
+export function setCurrentAuthUser(user: AuthUser | null, _rememberMe: boolean = false): void {
   try {
+    // Clear any local storage session
+    localStorage.removeItem(BHP_AUTH_SESSION_KEY);
+
     if (!user) {
-      localStorage.removeItem(BHP_AUTH_SESSION_KEY);
       sessionStorage.removeItem(BHP_AUTH_SESSION_KEY);
     } else {
       const sanitized: AuthUser = {
@@ -354,13 +347,8 @@ export function setCurrentAuthUser(user: AuthUser | null, rememberMe: boolean = 
         lastLoginAt: user.lastLoginAt || new Date().toISOString(),
       };
 
-      if (rememberMe) {
-        localStorage.setItem(BHP_AUTH_SESSION_KEY, JSON.stringify(sanitized));
-        sessionStorage.removeItem(BHP_AUTH_SESSION_KEY);
-      } else {
-        sessionStorage.setItem(BHP_AUTH_SESSION_KEY, JSON.stringify(sanitized));
-        localStorage.removeItem(BHP_AUTH_SESSION_KEY);
-      }
+      // Always save to sessionStorage: closing the browser automatically revokes session!
+      sessionStorage.setItem(BHP_AUTH_SESSION_KEY, JSON.stringify(sanitized));
     }
 
     window.dispatchEvent(new CustomEvent(BHP_AUTH_STATE_EVENT, { detail: user }));

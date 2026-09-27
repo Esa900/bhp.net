@@ -86,15 +86,29 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
   // When activeItem changes or modal opens, reset search and focus input
   useEffect(() => {
     if (isOpen) {
-      setAdminPosts(getStoredAdminPosts());
-      setQuery('');
-      setHasSearched(false);
-      setMatchedAdminPost(null);
-      setMatchedProfile(null);
+      const fresh = getStoredAdminPosts();
+      setAdminPosts(fresh);
       setPreviewingDoc(null);
       setPreviewZoom(100);
       setPreviewMaximized(false);
-      setTimeout(() => inputRef.current?.focus(), 80);
+
+      // If opened with a specific search query (e.g. from header search or post selection)
+      if (
+        activeItem?.sampleValue &&
+        activeItem.sampleValue.trim() &&
+        !activeItem.sampleValue.startsWith('REF-928410') &&
+        !activeItem.sampleValue.startsWith('ED-78412') &&
+        !activeItem.sampleValue.startsWith('VRF-99420')
+      ) {
+        setQuery(activeItem.sampleValue);
+        handleSearch(activeItem.sampleValue);
+      } else {
+        setQuery('');
+        setHasSearched(false);
+        setMatchedAdminPost(null);
+        setMatchedProfile(null);
+        setTimeout(() => inputRef.current?.focus(), 80);
+      }
     }
   }, [isOpen, activeItem]);
 
@@ -165,8 +179,8 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       const freshPosts = getStoredAdminPosts();
       setAdminPosts(freshPosts);
 
-      // 2. Search in Admin Posts first (User's primary requirement)
-      const foundPost = findAdminPostByQuery(searchTerm, freshPosts, activeItem.mainTitle);
+      // 2. Search in Admin Posts first (User's primary requirement - universal reference number search)
+      const foundPost = findAdminPostByQuery(searchTerm, freshPosts);
       if (foundPost) {
         setMatchedAdminPost(foundPost);
         setIsSearching(false);

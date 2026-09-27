@@ -191,18 +191,14 @@ export const AdminJobCircularManager: React.FC<AdminJobCircularManagerProps> = (
   };
 
   const handleDeleteCategory = (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to remove category "${name}"?`)) {
-      removeJobCategory(id);
-      showToast(`Category "${name}" removed.`);
-    }
+    removeJobCategory(id);
+    showToast(`Category "${name}" removed.`);
   };
 
   const handleResetCategories = () => {
-    if (window.confirm('Reset all categories back to standard 10 defaults?')) {
-      resetJobCategoriesToDefault();
-      resetJobRequirementsToDefault();
-      showToast('Categories & Requirements reset to defaults.');
-    }
+    resetJobCategoriesToDefault();
+    resetJobRequirementsToDefault();
+    showToast('Categories & Requirements reset to defaults.');
   };
 
   // ----------------------------------------------------
@@ -262,18 +258,14 @@ export const AdminJobCircularManager: React.FC<AdminJobCircularManagerProps> = (
   };
 
   const handleDeleteApp = (id: string) => {
-    if (window.confirm(`Delete application ${id}?`)) {
-      deleteJobApplication(id);
-      showToast('Application deleted.');
-      if (viewingApp?.id === id) setViewingApp(null);
-    }
+    deleteJobApplication(id);
+    showToast('Application deleted.');
+    if (viewingApp?.id === id) setViewingApp(null);
   };
 
   const handleClearHistory = () => {
-    if (window.confirm('Are you sure you want to clear all applicant history? This cannot be undone.')) {
-      clearAllJobApplications();
-      showToast('All application history cleared.');
-    }
+    clearAllJobApplications();
+    showToast('All application history cleared.');
   };
 
   // Filtered applications

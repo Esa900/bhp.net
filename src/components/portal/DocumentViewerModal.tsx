@@ -3,11 +3,9 @@ import { ApplicantProfile, DocumentType } from '../../types/portal';
 import { DOCUMENT_METADATA_LIST } from '../../data/portalData';
 import {
   X,
-  Printer,
   ShieldCheck,
   Share2,
   Check,
-  Download,
   ExternalLink,
   Lock,
   FileText,
@@ -51,10 +49,6 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
   if (!isOpen) return null;
 
   const currentMeta = DOCUMENT_METADATA_LIST.find((d) => d.type === activeDoc) || DOCUMENT_METADATA_LIST[0];
-
-  const handlePrint = () => {
-    window.print();
-  };
 
   const handleCopyLink = () => {
     const url = `${window.location.origin}${window.location.pathname}?ref=${profile.referenceNumber}&doc=${activeDoc}`;
@@ -142,14 +136,6 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">{copied ? 'Link Copied' : 'Share / Link'}</span>
-            </button>
-
-            <button
-              onClick={handlePrint}
-              className="px-3 py-1.5 bg-[#C88A24] hover:bg-[#B0761A] text-black font-extrabold rounded text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-            >
-              <Printer className="w-3.5 h-3.5 text-black" />
-              <span>Print / PDF</span>
             </button>
 
             <button

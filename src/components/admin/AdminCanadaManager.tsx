@@ -304,11 +304,9 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
   };
 
   const handleDeletePost = (id: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete Canada post for "${name}"?`)) {
-      deleteCanadaDocument(id);
-      setDocuments(getStoredCanadaDocuments());
-      showToast(`Canada post for "${name}" deleted.`);
-    }
+    deleteCanadaDocument(id);
+    setDocuments(getStoredCanadaDocuments());
+    showToast(`Canada post for "${name}" deleted.`);
   };
 
   // Document attachment handler
@@ -379,19 +377,15 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
   };
 
   const handleDeleteCategory = (id: string, title: string) => {
-    if (window.confirm(`Are you sure you want to remove "${title}" from Canada's 3-line menu?`)) {
-      deleteStoredCanadaMenuConfig(id);
-      setMenuConfigs(getStoredCanadaMenuConfigs());
-      showToast(`Canada category "${title}" removed.`);
-    }
+    deleteStoredCanadaMenuConfig(id);
+    setMenuConfigs(getStoredCanadaMenuConfigs());
+    showToast(`Canada category "${title}" removed.`);
   };
 
   const handleResetCategories = () => {
-    if (window.confirm('Reset Canada menu categories to default official items?')) {
-      resetStoredCanadaMenuConfigs();
-      setMenuConfigs(getStoredCanadaMenuConfigs());
-      showToast('Canada menu categories reset to default.');
-    }
+    resetStoredCanadaMenuConfigs();
+    setMenuConfigs(getStoredCanadaMenuConfigs());
+    showToast('Canada menu categories reset to default.');
   };
 
   // Filtered lists

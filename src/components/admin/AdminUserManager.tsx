@@ -156,18 +156,12 @@ export const AdminUserManager: React.FC<AdminUserManagerProps> = ({ showToast })
       return;
     }
 
-    if (
-      window.confirm(
-        `Are you sure you want to remove user "${user.username}"?\n\nThis user will be permanently deleted from the database and will NO LONGER be able to login with their username and password!`
-      )
-    ) {
-      const res = deleteUserByAdmin(user.id);
-      if (res.success) {
-        showToast(res.message);
-        setUsers(getRegisteredUsers());
-      } else {
-        showToast(`Error: ${res.message}`);
-      }
+    const res = deleteUserByAdmin(user.id);
+    if (res.success) {
+      showToast(res.message);
+      setUsers(getRegisteredUsers());
+    } else {
+      showToast(`Error: ${res.message}`);
     }
   };
 

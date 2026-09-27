@@ -207,14 +207,8 @@ export const AdminMenuItemsManager: React.FC<AdminMenuItemsManagerProps> = ({
   };
 
   const handleResetToDefaults = () => {
-    if (
-      window.confirm(
-        'আপনি কি নিশ্চিত যে সমস্ত ৩-লাইন মেনু অপশন ডিফল্ট অবস্থায় রিস্টোর করতে চান? আপনার কাস্টম পরিবর্তনগুলো রিসেট হয়ে যাবে।'
-      )
-    ) {
-      resetStoredMenuItems();
-      showToast('৩-লাইন মেনু অপশন সফলভাবে ডিফল্ট অবস্থায় রিস্টোর হয়েছে।');
-    }
+    resetStoredMenuItems();
+    showToast('৩-লাইন মেনু অপশন সফলভাবে ডিফল্ট অবস্থায় রিস্টোর হয়েছে।');
   };
 
   // Filtered items

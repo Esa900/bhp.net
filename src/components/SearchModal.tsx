@@ -62,13 +62,17 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     ? adminPosts.filter((p) => {
         const cleanTrimmed = trimmed.replace(/[-\s_./]/g, '');
         const cleanRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
+        const cleanPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
+        const cleanCand = (p.candidateName || '').toLowerCase().replace(/[-\s_./]/g, '');
         const refMatch = cleanRef.includes(cleanTrimmed) || cleanTrimmed.includes(cleanRef);
+        const passMatch = cleanPass.includes(cleanTrimmed) || cleanTrimmed.includes(cleanPass);
+        const candMatch = (p.candidateName || '').toLowerCase().includes(trimmed) || cleanCand.includes(cleanTrimmed);
         const titleMatch = p.title.toLowerCase().includes(trimmed);
         const catMatch = p.category.toLowerCase().includes(trimmed);
         const docMatch = p.attachedDocuments?.some((d) =>
           d.name.toLowerCase().includes(trimmed)
         );
-        return refMatch || titleMatch || catMatch || docMatch;
+        return refMatch || passMatch || candMatch || titleMatch || catMatch || docMatch;
       })
     : [];
 

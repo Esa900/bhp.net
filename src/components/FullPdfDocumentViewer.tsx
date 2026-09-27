@@ -162,7 +162,6 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   document,
   onSearchAnother,
 }) => {
-  const [activeDocTab, setActiveDocTab] = useState<string>('certificate');
   const [zoom, setZoom] = useState<number>(100);
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [copiedRef, setCopiedRef] = useState<boolean>(false);
@@ -189,10 +188,6 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   const handleZoomIn = () => setZoom((z) => Math.min(z + 20, 200));
   const handleZoomOut = () => setZoom((z) => Math.max(z - 20, 60));
   const handleZoomReset = () => setZoom(100);
-
-  const selectedAttachedDoc = document.attachedDocuments?.find(
-    (d) => d.id === activeDocTab
-  );
 
   return (
     <div className={`w-full flex flex-col space-y-4 ${isFullScreen ? 'fixed inset-0 z-[100] bg-[#0E1013]/98 backdrop-blur-md p-4 sm:p-6 overflow-y-auto select-text animate-in fade-in duration-150' : ''}`}>
@@ -313,37 +308,35 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
       </div>
 
       {/* =========================================================================
-          DOCUMENT TABS: OFFICIAL CERTIFICATE + ATTACHED PDF / FILES
+          DOCUMENT QUICK NAVIGATION ANCHORS
          ========================================================================= */}
       {document.attachedDocuments && document.attachedDocuments.length > 0 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-print">
           <button
             type="button"
-            onClick={() => setActiveDocTab('certificate')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-              activeDocTab === 'certificate'
-                ? 'bg-[#F25C05] text-white shadow-md'
-                : 'bg-[#1C1E23] text-gray-400 hover:text-white border border-[#2D313A]'
-            }`}
+            onClick={() => {
+              const el = document.getElementById('official-certificate-sheet');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shrink-0 bg-[#F25C05] text-white shadow-md"
           >
             <FileText className="w-3.5 h-3.5" />
-            <span>Official Verification Certificate (অফিসিয়াল সনদ)</span>
+            <span>1. Official Verification Certificate (অফিসিয়াল সনদ)</span>
           </button>
 
           {document.attachedDocuments.map((doc, idx) => (
             <button
               key={doc.id}
               type="button"
-              onClick={() => setActiveDocTab(doc.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                activeDocTab === doc.id
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-[#1C1E23] text-gray-400 hover:text-white border border-[#2D313A]'
-              }`}
+              onClick={() => {
+                const el = document.getElementById(`attached-doc-${doc.id}`);
+                el?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shrink-0 bg-[#1C1E23] hover:bg-blue-600 text-gray-300 hover:text-white border border-[#2D313A]"
             >
               <Paperclip className="w-3.5 h-3.5" />
               <span className="truncate max-w-[200px]">
-                {doc.name || `Attached Document #${idx + 1}`}
+                {idx + 2}. {doc.name || `Attached Document #${idx + 1}`}
               </span>
             </button>
           ))}
@@ -351,91 +344,10 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
       )}
 
       {/* =========================================================================
-          VIEW MODE 1: EMBEDDED ATTACHED PDF / IMAGE (If an attached file tab is active)
-         ========================================================================= */}
-      {activeDocTab !== 'certificate' && selectedAttachedDoc && (
-        <div className="bg-[#1C1E23] rounded-2xl border border-[#2D313A] p-4 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#2C303B] pb-3">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-sm sm:text-base font-bold text-white truncate max-w-md">
-                  {selectedAttachedDoc.name}
-                </h4>
-                <div className="flex items-center gap-2 text-[11px] text-gray-400">
-                  <span className="uppercase font-mono text-red-400 font-bold">{selectedAttachedDoc.type}</span>
-                  <span>•</span>
-                  <span>{selectedAttachedDoc.size}</span>
-                  <span>•</span>
-                  <span>Uploaded: {selectedAttachedDoc.uploadDate}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <a
-                href={selectedAttachedDoc.dataUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-[#252830] hover:bg-[#323640] text-gray-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open in New Tab</span>
-              </a>
-            </div>
-          </div>
-
-          {/* Embedded PDF/Image Frame */}
-          <div className="w-full min-h-[620px] rounded-xl overflow-hidden bg-black/50 border border-[#2D313A] flex items-center justify-center relative">
-            {selectedAttachedDoc.dataUrl.startsWith('data:application/pdf') ||
-            selectedAttachedDoc.name.toLowerCase().endsWith('.pdf') ? (
-              <iframe
-                src={selectedAttachedDoc.dataUrl}
-                title={selectedAttachedDoc.name}
-                className="w-full h-[700px] rounded-xl border-0"
-              />
-            ) : selectedAttachedDoc.dataUrl.startsWith('data:image') ||
-              selectedAttachedDoc.type === 'image' ? (
-              <div className="p-4 flex items-center justify-center max-h-[700px] overflow-auto">
-                <img
-                  src={selectedAttachedDoc.dataUrl}
-                  alt={selectedAttachedDoc.name}
-                  style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
-                  className="max-w-full h-auto rounded-lg shadow-2xl transition-transform"
-                />
-              </div>
-            ) : (
-              <div className="p-8 text-center space-y-3">
-                <FileText className="w-12 h-12 text-gray-500 mx-auto" />
-                <p className="text-sm font-semibold text-gray-200">
-                  Document Preview Ready ({selectedAttachedDoc.name})
-                </p>
-                <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                  Click below to view the full verified document in a new tab.
-                </p>
-                <a
-                  href={selectedAttachedDoc.dataUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-all shadow-md cursor-pointer"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  <span>Open Document in New Tab</span>
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          VIEW MODE 2: THE OFFICIAL FULL PDF CERTIFICATE & VERIFICATION SHEET
+          PAGE 1: THE OFFICIAL FULL PDF CERTIFICATE & VERIFICATION SHEET
           (Standard A4 sheet styling with microprint borders, seals, QR code & biometrics)
          ========================================================================= */}
-      {activeDocTab === 'certificate' && (
-        <div className="w-full flex flex-col items-center py-2 relative">
+      <div id="official-certificate-sheet" className="w-full flex flex-col items-center py-2 relative">
           {/* Quick Notice above document when not fullscreen */}
           {!isFullScreen && (
             <div className="w-full max-w-[850px] mb-2 flex items-center justify-between px-1">
@@ -776,6 +688,80 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
               </div>
             </div>
           </div>
+        </div>
+
+      {/* =========================================================================
+          PAGE 2+: ATTACHED UPLOADED PDF(S) & DOCUMENTS (DISPLAYED OPEN INLINE)
+          Directly below the official certificate sheet per user request
+         ========================================================================= */}
+      {document.attachedDocuments && document.attachedDocuments.length > 0 && (
+        <div className="w-full space-y-6 pt-4">
+          {document.attachedDocuments.map((doc, idx) => (
+            <div
+              key={doc.id}
+              id={`attached-doc-${doc.id}`}
+              className="w-full max-w-[850px] mx-auto bg-[#1C1E23] rounded-2xl border border-[#2D313A] shadow-2xl overflow-hidden p-4 sm:p-6 space-y-4"
+            >
+              {/* Header for attached document */}
+              <div className="flex items-center justify-between border-b border-[#2C303B] pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-[#F25C05]/20 text-[#F25C05] border border-[#F25C05]/30 shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm sm:text-base font-bold text-white truncate max-w-md">
+                      {doc.name || `Attached Official Document #${idx + 1}`}
+                    </h4>
+                    <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
+                      <span className="uppercase font-mono text-emerald-400 font-bold">
+                        {doc.type === 'pdf' ? 'OFFICIAL PDF' : 'VERIFIED DOCUMENT'}
+                      </span>
+                      <span>•</span>
+                      <span>{doc.size || 'Verified'}</span>
+                      <span>•</span>
+                      <span>Ref: {document.referenceNumber}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span className="font-semibold hidden sm:inline">Protected View</span>
+                </div>
+              </div>
+
+              {/* Document Open Viewer Frame */}
+              <div className="w-full min-h-[600px] sm:min-h-[750px] rounded-xl overflow-hidden bg-[#111316] border border-[#2B2F38] flex items-center justify-center relative">
+                {doc.dataUrl && (doc.dataUrl.startsWith('data:application/pdf') || doc.name.toLowerCase().endsWith('.pdf') || doc.type === 'pdf') ? (
+                  <iframe
+                    src={doc.dataUrl}
+                    title={doc.name}
+                    className="w-full h-[650px] sm:h-[800px] rounded-xl border-0 bg-white"
+                  />
+                ) : doc.dataUrl && (doc.dataUrl.startsWith('data:image') || doc.type === 'image') ? (
+                  <div className="p-4 flex items-center justify-center w-full max-h-[800px] overflow-auto">
+                    <img
+                      src={doc.dataUrl}
+                      alt={doc.name}
+                      onContextMenu={(e) => e.preventDefault()}
+                      style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
+                      className="max-w-full h-auto rounded-lg shadow-2xl transition-transform"
+                    />
+                  </div>
+                ) : (
+                  <div className="p-8 text-center space-y-3">
+                    <FileText className="w-12 h-12 text-gray-500 mx-auto" />
+                    <p className="text-sm font-semibold text-white">
+                      Verified Attachment ({doc.name})
+                    </p>
+                    <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                      Official document verified under Reference No: {document.referenceNumber}.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

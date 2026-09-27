@@ -42,6 +42,7 @@ import { CanadaDocumentSearchModal } from './components/CanadaDocumentSearchModa
 import { AuthUser } from './types/auth';
 import { getCurrentAuthUser, BHP_AUTH_STATE_EVENT } from './utils/authStorage';
 import { AuthSecurityGate } from './components/auth/AuthSecurityGate';
+import { setupSecurityProtection } from './utils/securityProtection';
 
 function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) {
   const { commodities, siteSettings } = useAdminData();
@@ -413,6 +414,8 @@ export function App() {
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(() => checkIsAdminUrl());
 
   useEffect(() => {
+    const cleanupSecurity = setupSecurityProtection();
+
     const handleAuthChange = () => {
       setCurrentUser(getCurrentAuthUser());
     };
@@ -426,6 +429,7 @@ export function App() {
     window.addEventListener('hashchange', handleRouteChange);
 
     return () => {
+      cleanupSecurity();
       window.removeEventListener(BHP_AUTH_STATE_EVENT, handleAuthChange);
       window.removeEventListener('storage', handleAuthChange);
       window.removeEventListener('popstate', handleRouteChange);
