@@ -200,8 +200,8 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Enter Reference Number or ID (যেমন: BHP-DOC-2026-0089 বা টাইটেল)..."
-                  className="w-full bg-[#121316] border-2 border-[#F25C05] rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#F25C05] transition-all font-mono"
+                  placeholder="Enter Reference Number or ID..."
+                  className="w-full bg-[#121316] border-2 border-[#FF5500] rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#FF5500] transition-all font-mono"
                 />
                 {query && (
                   <button
@@ -224,7 +224,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
               <button
                 type="submit"
                 disabled={!query.trim() || isSearching}
-                className="px-6 py-3 bg-[#F25C05] hover:bg-[#D94F04] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-md"
+                className="px-6 py-3 bg-[#FF5500] hover:bg-[#E64200] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-md"
               >
                 {isSearching ? (
                   <span>Searching...</span>
@@ -237,19 +237,9 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
               </button>
             </form>
 
-            {/* Quick Sample Helper Button */}
-            <div className="flex items-center justify-between text-xs text-gray-400 pt-1">
+            {/* Helper Text without sample */}
+            <div className="text-xs text-gray-400 pt-1">
               <span>Enter the official reference ID or TIN printed on your document.</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery(currentConfig.samplePlaceholder);
-                  handleSearch(currentConfig.samplePlaceholder);
-                }}
-                className="text-[#FF8E4D] hover:underline font-mono text-[11px] cursor-pointer"
-              >
-                Try Sample: {currentConfig.samplePlaceholder}
-              </button>
             </div>
           </div>
 
@@ -295,18 +285,6 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
                     <p className="text-xs text-gray-400 max-w-md mx-auto">
                       No official document was found matching "{query}". Please verify that your ID, TIN, or Reference Number is typed correctly.
                     </p>
-                  </div>
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setQuery(currentConfig.samplePlaceholder);
-                        handleSearch(currentConfig.samplePlaceholder);
-                      }}
-                      className="px-4 py-2 bg-[#252830] hover:bg-[#30333C] text-xs font-semibold text-gray-200 rounded-lg transition-colors cursor-pointer"
-                    >
-                      Search with Demo ID: {currentConfig.samplePlaceholder}
-                    </button>
                   </div>
                 </div>
               )}

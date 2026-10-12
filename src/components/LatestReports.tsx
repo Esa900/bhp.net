@@ -21,51 +21,51 @@ export const LatestReports: React.FC<LatestReportsProps> = ({ onOpenReports }) =
   };
 
   return (
-    <section id="latest-reports-section" className="bg-[#F8F9FA] py-14 sm:py-20">
+    <section id="latest-reports-section" className="bg-[#F8FAFC] py-14 sm:py-20">
       <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Split Card */}
-        <div className="bg-[#ECE7DF] rounded-xs overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[460px] shadow-sm">
+        <div className="bg-gradient-to-br from-[#F1ECE4] to-[#E8E2D6] rounded-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[460px] shadow-lg border border-amber-900/10">
           
           {/* Left Side: Content */}
           <div className="lg:col-span-5 p-8 sm:p-12 lg:p-14 flex flex-col justify-between relative z-10">
             <div>
               <div
                 id="report-tag"
-                className="text-2xl sm:text-3xl font-extrabold text-[#111315] tracking-tight"
+                className="text-2xl sm:text-3xl font-extrabold text-[#0A0D14] tracking-tight"
               >
                 {t('latestReportsTitle')}
               </div>
 
               <h3
                 id="report-title"
-                className="mt-2 text-2xl sm:text-3xl font-medium text-[#444850] tracking-tight leading-tight"
+                className="mt-2 text-2xl sm:text-3xl font-semibold text-[#334155] tracking-tight leading-tight"
               >
                 {currentReport.title}
               </h3>
 
               <p
                 id="report-description"
-                className="mt-4 text-sm sm:text-base text-[#52565E] leading-relaxed"
+                className="mt-4 text-sm sm:text-base text-[#475569] leading-relaxed"
               >
                 {currentReport.description}
               </p>
             </div>
 
             {/* Bottom Row with Divider */}
-            <div className="mt-8 pt-6 border-t border-[#D5CEC4] flex items-center justify-between">
+            <div className="mt-8 pt-6 border-t border-amber-900/15 flex items-center justify-between">
               <button
                 id="report-read-more-link"
                 type="button"
                 onClick={onOpenReports}
-                className="inline-flex items-center gap-2 text-base font-bold text-[#111315] hover:text-[#F25C05] transition-colors group cursor-pointer"
+                className="inline-flex items-center gap-2 text-base font-bold text-[#0A0D14] hover:text-[#FF5500] transition-colors group cursor-pointer"
               >
                 <span>Read more</span>
-                <ArrowRight className="w-4 h-4 text-[#F25C05] group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="w-4 h-4 text-[#FF5500] group-hover:translate-x-1 transition-transform" />
               </button>
 
               {/* Pagination Controls */}
               <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-[#444850]">
+                <span className="text-sm font-semibold text-[#475569] tabular-nums">
                   {currentIndex + 1} / {REPORTS.length}
                 </span>
                 <div className="flex items-center gap-1">
@@ -73,7 +73,7 @@ export const LatestReports: React.FC<LatestReportsProps> = ({ onOpenReports }) =
                     id="report-prev-button"
                     type="button"
                     onClick={handlePrev}
-                    className="p-1 text-[#444850] hover:text-[#111315] transition-colors focus:outline-none cursor-pointer"
+                    className="p-1.5 rounded-full hover:bg-black/5 text-[#475569] hover:text-[#0A0D14] transition-colors focus:outline-none cursor-pointer"
                     aria-label="Previous report"
                   >
                     <ChevronLeft className="w-5 h-5" />
@@ -82,7 +82,7 @@ export const LatestReports: React.FC<LatestReportsProps> = ({ onOpenReports }) =
                     id="report-next-button"
                     type="button"
                     onClick={handleNext}
-                    className="p-1 text-[#444850] hover:text-[#111315] transition-colors focus:outline-none cursor-pointer"
+                    className="p-1.5 rounded-full hover:bg-black/5 text-[#475569] hover:text-[#0A0D14] transition-colors focus:outline-none cursor-pointer"
                     aria-label="Next report"
                   >
                     <ChevronRight className="w-5 h-5" />

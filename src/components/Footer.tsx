@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUp } from 'lucide-react';
+import { BhpLogo } from './common/BhpLogo';
 
 interface FooterProps {
   onOpenPrivacy?: () => void;
@@ -33,17 +34,17 @@ export const Footer: React.FC<FooterProps> = ({
   };
 
   return (
-    <footer id="bhp-footer" className="relative bg-[#161718] text-white pt-12 pb-14 border-t border-[#26272A]">
+    <footer id="bhp-footer" className="relative bg-[#0A0D12] text-white pt-14 pb-16 border-t border-[#1C202B]">
       {/* Scroll to top floating button */}
-      <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 relative -top-18">
+      <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 relative -top-20">
         <button
           id="scroll-to-top-button"
           type="button"
           onClick={scrollToTop}
-          className="w-12 h-12 rounded-full bg-white text-[#F25C05] hover:text-[#d44e00] shadow-xl border border-gray-200 flex items-center justify-center transition-transform hover:-translate-y-1 focus:outline-none cursor-pointer"
+          className="w-12 h-12 rounded-full bg-[#131722] text-[#FF5500] hover:bg-[#FF5500] hover:text-white shadow-2xl border border-[#242C3D] flex items-center justify-center transition-all hover:-translate-y-1 focus:outline-none cursor-pointer group"
           aria-label="Scroll back to top of page"
         >
-          <ArrowUp className="w-6 h-6 stroke-[2.5]" />
+          <ArrowUp className="w-6 h-6 stroke-[2.5] transition-transform group-hover:-translate-y-0.5" />
         </button>
       </div>
 
@@ -56,11 +57,12 @@ export const Footer: React.FC<FooterProps> = ({
             <button
               type="button"
               onClick={scrollToTop}
-              className="font-extrabold text-[36px] tracking-tight text-[#F25C05] leading-none block text-left cursor-pointer"
+              className="block text-left cursor-pointer focus:outline-none"
+              aria-label="BHP Home"
             >
-              BHP
+              <BhpLogo size="lg" showTagline={true} />
             </button>
-            <span className="text-xs text-gray-400 mt-2 block font-medium">
+            <span className="text-xs text-gray-400 mt-3 block font-medium">
               © BHP 2026
             </span>
           </div>
@@ -73,7 +75,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <button
                   type="button"
                   onClick={onOpenAbout}
-                  className="text-base sm:text-lg font-bold text-white hover:text-[#F25C05] transition-colors cursor-pointer text-left"
+                  className="text-base sm:text-lg font-bold text-white hover:text-[#FF5500] transition-colors cursor-pointer text-left"
                 >
                   About
                 </button>
@@ -82,7 +84,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <button
                   type="button"
                   onClick={onOpenInvestors}
-                  className="text-base sm:text-lg font-bold text-white hover:text-[#F25C05] transition-colors cursor-pointer text-left"
+                  className="text-base sm:text-lg font-bold text-white hover:text-[#FF5500] transition-colors cursor-pointer text-left"
                 >
                   Investors
                 </button>
@@ -91,7 +93,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <button
                   type="button"
                   onClick={onOpenCareers}
-                  className="text-base sm:text-lg font-bold text-white hover:text-[#F25C05] transition-colors cursor-pointer text-left"
+                  className="text-base sm:text-lg font-bold text-white hover:text-[#FF5500] transition-colors cursor-pointer text-left"
                 >
                   Careers
                 </button>
@@ -100,7 +102,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <button
                   type="button"
                   onClick={onOpenSuppliers}
-                  className="text-base sm:text-lg font-bold text-white hover:text-[#F25C05] transition-colors cursor-pointer text-left"
+                  className="text-base sm:text-lg font-bold text-white hover:text-[#FF5500] transition-colors cursor-pointer text-left"
                 >
                   Suppliers
                 </button>
@@ -116,7 +118,7 @@ export const Footer: React.FC<FooterProps> = ({
                     const el = document.getElementById('what-we-produce');
                     el?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="text-base sm:text-lg font-bold text-white hover:text-[#F25C05] transition-colors cursor-pointer text-left"
+                  className="text-base sm:text-lg font-bold text-white hover:text-[#FF5500] transition-colors cursor-pointer text-left"
                 >
                   What we do
                 </button>
@@ -128,7 +130,7 @@ export const Footer: React.FC<FooterProps> = ({
                     const el = document.getElementById('bento-grid-section');
                     el?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="text-base sm:text-lg font-bold text-white hover:text-[#F25C05] transition-colors cursor-pointer text-left"
+                  className="text-base sm:text-lg font-bold text-white hover:text-[#FF5500] transition-colors cursor-pointer text-left"
                 >
                   Sustainability
                 </button>
@@ -140,7 +142,7 @@ export const Footer: React.FC<FooterProps> = ({
                     const el = document.getElementById('latest-news-section');
                     el?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="text-base sm:text-lg font-bold text-white hover:text-[#F25C05] transition-colors cursor-pointer text-left"
+                  className="text-base sm:text-lg font-bold text-white hover:text-[#FF5500] transition-colors cursor-pointer text-left"
                 >
                   News
                 </button>
@@ -149,7 +151,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <button
                   type="button"
                   onClick={onOpenContact}
-                  className="text-base sm:text-lg font-bold text-white hover:text-[#F25C05] transition-colors cursor-pointer text-left"
+                  className="text-base sm:text-lg font-bold text-white hover:text-[#FF5500] transition-colors cursor-pointer text-left"
                 >
                   Contact us
                 </button>
@@ -160,7 +162,7 @@ export const Footer: React.FC<FooterProps> = ({
         </div>
 
         {/* Divider */}
-        <div className="border-t border-[#2B2C30] pt-8">
+        <div className="border-t border-[#1C202B] pt-8">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 text-xs text-gray-400">
             
             {/* Social Icons */}
@@ -172,7 +174,7 @@ export const Footer: React.FC<FooterProps> = ({
                   href="https://facebook.com/bhp"
                   target="_blank"
                   rel="noreferrer"
-                  className="p-1.5 rounded-full hover:text-[#F25C05] hover:bg-[#25272B] transition-colors"
+                  className="p-1.5 rounded-full hover:text-[#FF5500] hover:bg-[#1A1F2B] transition-colors"
                   aria-label="Follow BHP on Facebook"
                 >
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -185,7 +187,7 @@ export const Footer: React.FC<FooterProps> = ({
                   href="https://instagram.com/bhp"
                   target="_blank"
                   rel="noreferrer"
-                  className="p-1.5 rounded-full hover:text-[#F25C05] hover:bg-[#25272B] transition-colors"
+                  className="p-1.5 rounded-full hover:text-[#FF5500] hover:bg-[#1A1F2B] transition-colors"
                   aria-label="Follow BHP on Instagram"
                 >
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -198,7 +200,7 @@ export const Footer: React.FC<FooterProps> = ({
                   href="https://linkedin.com/company/bhp"
                   target="_blank"
                   rel="noreferrer"
-                  className="p-1.5 rounded-full hover:text-[#F25C05] hover:bg-[#25272B] transition-colors"
+                  className="p-1.5 rounded-full hover:text-[#FF5500] hover:bg-[#1A1F2B] transition-colors"
                   aria-label="Follow BHP on LinkedIn"
                 >
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -211,7 +213,7 @@ export const Footer: React.FC<FooterProps> = ({
                   href="https://x.com/bhp"
                   target="_blank"
                   rel="noreferrer"
-                  className="p-1.5 rounded-full hover:text-[#F25C05] hover:bg-[#25272B] transition-colors"
+                  className="p-1.5 rounded-full hover:text-[#FF5500] hover:bg-[#1A1F2B] transition-colors"
                   aria-label="Follow BHP on X"
                 >
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -224,7 +226,7 @@ export const Footer: React.FC<FooterProps> = ({
                   href="https://youtube.com/bhp"
                   target="_blank"
                   rel="noreferrer"
-                  className="p-1.5 rounded-full hover:text-[#F25C05] hover:bg-[#25272B] transition-colors"
+                  className="p-1.5 rounded-full hover:text-[#FF5500] hover:bg-[#1A1F2B] transition-colors"
                   aria-label="Follow BHP on YouTube"
                 >
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -237,7 +239,7 @@ export const Footer: React.FC<FooterProps> = ({
                   href="https://tiktok.com/@bhp"
                   target="_blank"
                   rel="noreferrer"
-                  className="p-1.5 rounded-full hover:text-[#F25C05] hover:bg-[#25272B] transition-colors"
+                  className="p-1.5 rounded-full hover:text-[#FF5500] hover:bg-[#1A1F2B] transition-colors"
                   aria-label="Follow BHP on TikTok"
                 >
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">

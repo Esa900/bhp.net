@@ -314,8 +314,8 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Enter Reference Number or ID (যেমন: BHP-DOC-2026-0089 বা টাইটেল)..."
-                    className="w-full bg-[#121316] border-2 border-[#F25C05] rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#F25C05] transition-all font-mono"
+                    placeholder="Enter Reference Number or ID..."
+                    className="w-full bg-[#121316] border-2 border-[#FF5500] rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#FF5500] transition-all font-mono"
                   />
                   {query && (
                     <button
@@ -332,7 +332,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                 <button
                   type="submit"
                   disabled={!query.trim() || isSearching}
-                  className="px-6 py-3 bg-[#F25C05] hover:bg-[#D94F04] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-md"
+                  className="px-6 py-3 bg-[#FF5500] hover:bg-[#E64200] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-md"
                 >
                   {isSearching ? (
                     <span>Searching...</span>
@@ -380,14 +380,13 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                     No Record Found for "{query}"
                   </h3>
                   <p className="text-xs text-gray-300 max-w-md mx-auto">
-                    No post or document was found matching the entered reference or ID number.
-                    Please check the reference number posted from the Admin Panel or try with a sample.
+                    No official record or document was found matching "{query}". Please check that your reference number or ID was typed correctly.
                   </p>
                 </div>
-                {adminPosts.length > 0 ? (
+                {adminPosts.length > 0 && (
                   <div className="pt-2 flex flex-col items-center gap-2">
                     <span className="text-[11px] text-gray-400 font-semibold">
-                      Or click an active reference from Admin Panel:
+                      Or select an active reference:
                     </span>
                     <div className="flex flex-wrap justify-center gap-2">
                       {adminPosts.slice(0, 3).map((p) => (
@@ -402,15 +401,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                       ))}
                     </div>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleApplySample()}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#2B231D] hover:bg-[#382C22] border border-[#593922] text-[#FF8E4D] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                  >
-                    <span>Try with sample number:</span>
-                    <strong className="font-mono text-white">{activeItem.sampleValue}</strong>
-                  </button>
                 )}
               </div>
             )}

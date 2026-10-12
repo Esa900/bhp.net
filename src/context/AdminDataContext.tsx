@@ -397,7 +397,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [adminRole, setAdminRole] = useState<AdminRole>('Super Admin');
   const [adminPassword, setAdminPassword] = useState<string>(() => {
     const saved = localStorage.getItem('bhp_admin_pwd');
-    if (!saved || saved === 'admin123') {
+    if (!saved) {
       localStorage.setItem('bhp_admin_pwd', 'ESA006##');
       return 'ESA006##';
     }
@@ -649,11 +649,12 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (oldPass !== adminPassword) {
       return { success: false, message: 'Current password does not match.' };
     }
-    if (newPass.length < 6) {
-      return { success: false, message: 'New password must be at least 6 characters.' };
+    if (!newPass || newPass.trim().length < 4) {
+      return { success: false, message: 'New password must be at least 4 characters.' };
     }
-    setAdminPassword(newPass);
-    localStorage.setItem('bhp_admin_pwd', newPass);
+    const cleanPass = newPass.trim();
+    setAdminPassword(cleanPass);
+    localStorage.setItem('bhp_admin_pwd', cleanPass);
     return { success: true, message: 'Admin password updated successfully!' };
   };
 

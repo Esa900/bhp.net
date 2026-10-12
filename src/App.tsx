@@ -233,10 +233,10 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#111315] flex flex-col font-sans selection:bg-[#F25C05] selection:text-white">
+    <div className="min-h-screen bg-[#F8FAFC] text-[#0A0D14] flex flex-col font-sans selection:bg-[#FF5500] selection:text-white">
       {/* Optional Top Announcement Bar */}
       {siteSettings.announcementEnabled && siteSettings.announcementText && (
-        <div className="bg-[#F25C05] text-white text-xs font-semibold py-2 px-4 text-center tracking-wide">
+        <div className="bg-gradient-to-r from-[#E63B00] via-[#FF5500] to-[#FF771C] text-white text-xs font-semibold py-2 px-4 text-center tracking-wide shadow-xs">
           {siteSettings.announcementText}
         </div>
       )}

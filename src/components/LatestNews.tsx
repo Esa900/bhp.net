@@ -33,14 +33,14 @@ export const LatestNews: React.FC<LatestNewsProps> = ({ onArticleSelect }) => {
     : visibleNews;
 
   return (
-    <section id="latest-news-section" className="bg-[#F8F9FA] py-14 sm:py-20 border-t border-gray-200/60">
+    <section id="latest-news-section" className="bg-[#F8FAFC] py-16 sm:py-24 border-t border-slate-200/80">
       <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header with Title, More News link, and Arrow Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 sm:mb-10">
           <div className="flex items-center gap-6">
             <h2
               id="latest-news-title"
-              className="text-[32px] sm:text-[40px] font-extrabold text-[#111315] tracking-tight"
+              className="text-[32px] sm:text-[42px] font-extrabold text-[#0A0D14] tracking-tight"
             >
               {t('latestNewsTitle')}
             </h2>
@@ -48,10 +48,10 @@ export const LatestNews: React.FC<LatestNewsProps> = ({ onArticleSelect }) => {
               id="latest-news-more-link"
               type="button"
               onClick={() => activeNewsList[0] && onArticleSelect?.(activeNewsList[0])}
-              className="inline-flex items-center gap-1.5 text-base font-bold text-[#111315] hover:text-[#F25C05] transition-colors group cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-base font-bold text-[#0A0D14] hover:text-[#FF5500] transition-colors group cursor-pointer"
             >
               <span>{t('moreNews')}</span>
-              <ArrowRight className="w-4 h-4 text-[#F25C05] group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-4 h-4 text-[#FF5500] group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
 
@@ -61,7 +61,7 @@ export const LatestNews: React.FC<LatestNewsProps> = ({ onArticleSelect }) => {
               id="news-carousel-prev"
               type="button"
               onClick={handlePrev}
-              className="w-10 h-10 rounded-full border border-gray-300 hover:border-[#111315] text-[#111315] hover:text-[#F25C05] flex items-center justify-center transition-colors focus:outline-none cursor-pointer"
+              className="w-10 h-10 rounded-full border border-slate-300 hover:border-[#FF5500] text-[#0A0D14] hover:text-[#FF5500] flex items-center justify-center transition-colors focus:outline-none cursor-pointer"
               aria-label="Previous news item"
             >
               <ChevronLeft className="w-5 h-5 stroke-[2]" />
@@ -70,7 +70,7 @@ export const LatestNews: React.FC<LatestNewsProps> = ({ onArticleSelect }) => {
               id="news-carousel-next"
               type="button"
               onClick={handleNext}
-              className="w-10 h-10 rounded-full border border-gray-300 hover:border-[#111315] text-[#111315] hover:text-[#F25C05] flex items-center justify-center transition-colors focus:outline-none cursor-pointer"
+              className="w-10 h-10 rounded-full border border-slate-300 hover:border-[#FF5500] text-[#0A0D14] hover:text-[#FF5500] flex items-center justify-center transition-colors focus:outline-none cursor-pointer"
               aria-label="Next news item"
             >
               <ChevronRight className="w-5 h-5 stroke-[2]" />
@@ -85,7 +85,7 @@ export const LatestNews: React.FC<LatestNewsProps> = ({ onArticleSelect }) => {
               key={news.id}
               id={`news-card-${news.id}`}
               onClick={() => onArticleSelect?.(news)}
-              className="group relative h-[440px] sm:h-[480px] rounded-xs overflow-hidden bg-[#1E2024] flex flex-col justify-end p-7 sm:p-8 cursor-pointer shadow-sm transition-transform duration-300 hover:-translate-y-1"
+              className="group relative h-[440px] sm:h-[480px] rounded-2xl overflow-hidden bg-[#161B26] flex flex-col justify-end p-7 sm:p-8 cursor-pointer shadow-lg transition-transform duration-300 hover:-translate-y-1.5 border border-slate-200/40"
             >
               {/* Background Photo with Dark Gradient Overlay */}
               <img
@@ -102,7 +102,7 @@ export const LatestNews: React.FC<LatestNewsProps> = ({ onArticleSelect }) => {
                   {news.badges.map((badge, idx) => (
                     <span
                       key={idx}
-                      className="px-3 py-1 bg-white text-[#111315] font-extrabold text-[11px] tracking-wider uppercase rounded-full shadow-xs"
+                      className="px-3 py-1 bg-white text-[#0A0D14] font-extrabold text-[11px] tracking-wider uppercase rounded-full shadow-xs"
                     >
                       {badge}
                     </span>
@@ -110,7 +110,7 @@ export const LatestNews: React.FC<LatestNewsProps> = ({ onArticleSelect }) => {
                 </div>
 
                 {/* News Title */}
-                <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight leading-snug group-hover:text-[#FF8844] transition-colors">
+                <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight leading-snug group-hover:text-[#FFA043] transition-colors">
                   {news.title}
                 </h3>
               </div>

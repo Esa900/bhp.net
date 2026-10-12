@@ -24,13 +24,13 @@ export const WhatWeProduce: React.FC<WhatWeProduceProps> = ({ onCommoditySelect 
   };
 
   return (
-    <section id="what-we-produce" className="bg-[#F8F9FA] py-14 sm:py-20 border-t border-gray-200/60">
+    <section id="what-we-produce" className="bg-[#F8FAFC] py-16 sm:py-24 border-t border-slate-200/80">
       <div className="max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
         <div className="max-w-3xl">
           {/* Orange Ingot / Mineral Icon */}
-          <div className="w-10 h-10 mb-4 text-[#F25C05]">
+          <div className="w-10 h-10 mb-4 text-[#FF5500]">
             <svg viewBox="0 0 40 40" fill="none" className="w-full h-full stroke-current stroke-[2.2]">
               <path d="M8 26L14 14H26L32 26H8Z" />
               <path d="M14 14L20 8L26 14" />
@@ -41,12 +41,12 @@ export const WhatWeProduce: React.FC<WhatWeProduceProps> = ({ onCommoditySelect 
 
           <h2
             id="what-we-produce-title"
-            className="text-[32px] sm:text-[40px] font-extrabold text-[#111315] tracking-tight"
+            className="text-[32px] sm:text-[42px] font-extrabold text-[#0A0D14] tracking-tight"
           >
             {t('whatWeProduceTitle')}
           </h2>
 
-          <p className="mt-3 text-base sm:text-lg text-[#52555C] leading-relaxed">
+          <p className="mt-3 text-base sm:text-lg text-[#475569] leading-relaxed">
             Copper for renewable energy, iron ore and steelmaking coal for steel for new infrastructure. And potash to support more sustainable farming.
           </p>
 
@@ -55,10 +55,10 @@ export const WhatWeProduce: React.FC<WhatWeProduceProps> = ({ onCommoditySelect 
               id="what-we-produce-products-link"
               type="button"
               onClick={() => onCommoditySelect?.(activeCommodity)}
-              className="inline-flex items-center gap-1.5 text-base font-bold text-[#111315] hover:text-[#F25C05] transition-colors group cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-base font-bold text-[#0A0D14] hover:text-[#FF5500] transition-colors group cursor-pointer"
             >
               <span>Products</span>
-              <ArrowRight className="w-4 h-4 text-[#F25C05] group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-4 h-4 text-[#FF5500] group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
         </div>
@@ -67,7 +67,7 @@ export const WhatWeProduce: React.FC<WhatWeProduceProps> = ({ onCommoditySelect 
         <div className="mt-10 sm:mt-12">
           <div
             role="tablist"
-            className="flex items-center gap-6 sm:gap-10 border-b border-gray-300 pb-2 overflow-x-auto no-scrollbar"
+            className="flex items-center gap-6 sm:gap-10 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar"
           >
             {commodities.map((commodity) => {
               const isActive = commodity.id === activeCommodity.id;
@@ -80,12 +80,12 @@ export const WhatWeProduce: React.FC<WhatWeProduceProps> = ({ onCommoditySelect 
                   type="button"
                   onClick={() => setActiveTabId(commodity.id)}
                   className={`relative text-base sm:text-lg font-bold pb-2 transition-colors whitespace-nowrap focus:outline-none cursor-pointer ${
-                    isActive ? 'text-[#B84704]' : 'text-[#3E4249] hover:text-[#111315]'
+                    isActive ? 'text-[#FF5500]' : 'text-[#475569] hover:text-[#0A0D14]'
                   }`}
                 >
                   {commodity.name}
                   {isActive && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#B84704]" />
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF5500] rounded-full" />
                   )}
                 </button>
               );
@@ -96,26 +96,26 @@ export const WhatWeProduce: React.FC<WhatWeProduceProps> = ({ onCommoditySelect 
           <div
             id={`tabpanel-${activeCommodity.id}`}
             role="tabpanel"
-            className="mt-6 bg-[#F4F6F8] rounded-xs overflow-hidden grid grid-cols-1 lg:grid-cols-2 items-center min-h-[380px] shadow-xs"
+            className="mt-6 bg-white rounded-2xl border border-slate-200/90 overflow-hidden grid grid-cols-1 lg:grid-cols-2 items-center min-h-[380px] shadow-[0_4px_24px_-4px_rgba(0,0,0,0.06)]"
           >
             {/* Left Content */}
             <div className="p-8 sm:p-12 lg:p-14 flex flex-col justify-between h-full">
               <div>
-                <p className="text-base sm:text-lg text-[#33363B] leading-relaxed font-normal">
+                <p className="text-base sm:text-lg text-[#1E293B] leading-relaxed font-normal">
                   {activeCommodity.description}
                 </p>
-                <p className="mt-4 text-sm text-[#666A73] leading-relaxed">
+                <p className="mt-4 text-sm text-[#64748B] leading-relaxed">
                   {activeCommodity.secondaryText}
                 </p>
 
                 {/* Key Statistics */}
-                <div className="mt-8 grid grid-cols-2 gap-4 pt-6 border-t border-gray-200/80">
+                <div className="mt-8 grid grid-cols-2 gap-4 pt-6 border-t border-slate-100">
                   {activeCommodity.stats.map((stat, idx) => (
                     <div key={idx}>
-                      <div className="text-xs uppercase tracking-wider text-gray-500 font-medium">
+                      <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
                         {stat.label}
                       </div>
-                      <div className="text-base sm:text-lg font-bold text-[#111315] mt-0.5">
+                      <div className="text-base sm:text-lg font-extrabold text-[#0A0D14] mt-0.5 tabular-nums">
                         {stat.value}
                       </div>
                     </div>
@@ -127,10 +127,10 @@ export const WhatWeProduce: React.FC<WhatWeProduceProps> = ({ onCommoditySelect 
                 <button
                   type="button"
                   onClick={() => onCommoditySelect?.(activeCommodity)}
-                  className="inline-flex items-center gap-2 text-sm sm:text-base font-bold text-[#111315] hover:text-[#F25C05] transition-colors group cursor-pointer"
+                  className="inline-flex items-center gap-2 text-sm sm:text-base font-bold text-[#0A0D14] hover:text-[#FF5500] transition-colors group cursor-pointer"
                 >
                   <span>{t('findOutMore')}</span>
-                  <ArrowRight className="w-4 h-4 text-[#F25C05] group-hover:translate-x-1.5 transition-transform" />
+                  <ArrowRight className="w-4 h-4 text-[#FF5500] group-hover:translate-x-1.5 transition-transform" />
                 </button>
               </div>
             </div>

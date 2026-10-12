@@ -108,7 +108,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
       setAuthError('');
       showToast('Admin access unlocked successfully.');
     } else {
-      setAuthError('Incorrect admin password. Default is admin123.');
+      setAuthError('Incorrect admin password. Please try again.');
     }
   };
 
@@ -118,8 +118,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
       showToast('Error: New password and confirmation do not match.');
       return;
     }
-    if (pwdForm.newPassword.length < 6) {
-      showToast('Error: Password must be at least 6 characters.');
+    if (pwdForm.newPassword.length < 4) {
+      showToast('Error: Password must be at least 4 characters.');
       return;
     }
 

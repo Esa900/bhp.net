@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Menu, X, Search, ChevronDown, ArrowRight, Globe, ExternalLink, Mail, FileCheck, ShieldCheck, ChevronRight, LogOut, User as UserIcon } from 'lucide-react';
 import { useLanguage, Language } from '../context/LanguageContext';
 import { useAdminData } from '../context/AdminDataContext';
+import { BhpLogo } from './common/BhpLogo';
 import { DocumentMenuItem, DOCUMENT_MENU_ITEMS } from '../data/menuNavigationItems';
 import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from '../utils/menuItemsStorage';
 import { JobCategory } from '../types/jobCircular';
@@ -73,6 +74,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const languages: { id: Language; label: string; flag: string }[] = [
     { id: 'en', label: 'English', flag: 'EN' },
+    { id: 'bn', label: 'বাংলা | Bengali', flag: 'BN' },
     { id: 'es', label: 'ES | Español', flag: 'ES' },
     { id: 'zh', label: '中文 | Chinese', flag: 'ZH' },
   ];
@@ -162,13 +164,13 @@ export const Header: React.FC<HeaderProps> = ({
     <>
       {/* Real-time Dynamic Announcement Bar (if enabled in Admin Panel) */}
       {siteSettings?.announcementEnabled && siteSettings?.announcementText && (
-        <div id="site-announcement-bar" className="bg-[#F25C05] text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2 tracking-wide">
+        <div id="site-announcement-bar" className="bg-gradient-to-r from-[#E63B00] via-[#FF5500] to-[#FF771C] text-white text-xs font-semibold py-2 px-4 text-center flex items-center justify-center gap-2 tracking-wide shadow-xs">
           <span>{siteSettings.announcementText}</span>
         </div>
       )}
 
-      <header id="bhp-header" className="sticky top-0 z-40 bg-[#161718] text-white border-b border-[#2B2C2E] select-none">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-[70px] flex items-center justify-between">
+      <header id="bhp-header" className="sticky top-0 z-40 bg-[#0B0E14] text-white border-b border-[#1E232E] shadow-lg shadow-black/20 select-none backdrop-blur-md">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-[72px] flex items-center justify-between">
           
           {/* Left: Hamburger Menu and Desktop Document Navigation Dropdown */}
           <div className="flex items-center gap-3">
@@ -176,25 +178,23 @@ export const Header: React.FC<HeaderProps> = ({
               id="header-menu-button"
               type="button"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-2 -ml-2 text-white hover:text-[#F25C05] transition-colors focus:outline-none focus:ring-1 focus:ring-[#F25C05] rounded cursor-pointer"
+              className="p-2 -ml-2 text-gray-200 hover:text-[#FF5500] hover:bg-[#161B26] transition-colors focus:outline-none focus:ring-1 focus:ring-[#FF5500] rounded-lg cursor-pointer"
               aria-label="Open navigation menu"
             >
               <Menu className="w-6 h-6 stroke-[2]" />
             </button>
           </div>
 
-          {/* Center: BHP Wordmark Logo (Home link) */}
+          {/* Center: BHP Redesigned Modern Logo (Home link) */}
           <div className="flex items-center justify-center">
             <button
               id="bhp-home-logo-link"
               type="button"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="flex items-center gap-1 group focus:outline-none cursor-pointer"
+              className="flex items-center gap-1 group focus:outline-none cursor-pointer py-1"
               aria-label="BHP Home"
             >
-              <span className="font-extrabold text-[28px] sm:text-[34px] tracking-tight text-[#F25C05] leading-none transition-transform group-hover:scale-105">
-                BHP
-              </span>
+              <BhpLogo size="md" showTagline={false} />
             </button>
           </div>
 
@@ -204,7 +204,7 @@ export const Header: React.FC<HeaderProps> = ({
               id="header-search-button"
               type="button"
               onClick={onSearchClick}
-              className="p-1.5 text-white hover:text-[#F25C05] transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="p-1.5 text-gray-200 hover:text-[#FF5500] hover:bg-[#161B26] rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
               aria-label="Search BHP"
             >
               <Search className="w-5 h-5 stroke-[2]" />
@@ -215,7 +215,7 @@ export const Header: React.FC<HeaderProps> = ({
               id="header-contact-link"
               type="button"
               onClick={onContactClick}
-              className="hidden sm:inline-block text-white hover:text-[#F25C05] transition-colors cursor-pointer"
+              className="hidden sm:inline-block text-gray-200 hover:text-[#FF5500] transition-colors cursor-pointer font-semibold"
             >
               {t('contactUs')}
             </button>
@@ -226,7 +226,7 @@ export const Header: React.FC<HeaderProps> = ({
                 id="header-language-toggle"
                 type="button"
                 onClick={() => setIsLangOpen(!isLangOpen)}
-                className="flex items-center gap-1 text-white hover:text-[#F25C05] transition-colors py-1 focus:outline-none cursor-pointer text-xs sm:text-sm font-semibold"
+                className="flex items-center gap-1 text-gray-200 hover:text-[#FF5500] transition-colors py-1 focus:outline-none cursor-pointer text-xs sm:text-sm font-semibold"
               >
                 <span>{currentLangLabel}</span>
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isLangOpen ? 'rotate-180' : ''}`} />
@@ -235,7 +235,7 @@ export const Header: React.FC<HeaderProps> = ({
               {isLangOpen && (
                 <div
                   id="language-dropdown-menu"
-                  className="absolute right-0 mt-2 w-44 bg-[#222428] border border-[#3A3C40] rounded shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100"
+                  className="absolute right-0 mt-2 w-48 bg-[#141822] border border-[#232938] rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
                 >
                   {languages.map((lang) => (
                     <button
@@ -245,10 +245,10 @@ export const Header: React.FC<HeaderProps> = ({
                         setLanguage(lang.id);
                         setIsLangOpen(false);
                       }}
-                      className={`w-full text-left px-3.5 py-2 text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer ${
+                      className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors flex items-center justify-between cursor-pointer ${
                         language === lang.id
-                          ? 'bg-[#F25C05] text-white'
-                          : 'text-gray-200 hover:bg-[#2C2E33] hover:text-white'
+                          ? 'bg-gradient-to-r from-[#FF5500] to-[#E64200] text-white shadow-xs'
+                          : 'text-gray-300 hover:bg-[#1E2332] hover:text-white'
                       }`}
                     >
                       <span>{lang.label}</span>
@@ -287,19 +287,19 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Slide-out Mega Menu Drawer */}
       {isMenuOpen && (
-        <div id="navigation-drawer-backdrop" className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex">
+        <div id="navigation-drawer-backdrop" className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex">
           <div
             id="navigation-drawer-panel"
-            className="w-full max-w-[500px] bg-[#161718] text-white h-full flex flex-col shadow-2xl border-r border-[#2C2E33] overflow-y-auto animate-in slide-in-from-left duration-250"
+            className="w-full max-w-[500px] bg-[#0B0E14] text-white h-full flex flex-col shadow-2xl border-r border-[#1E232E] overflow-y-auto animate-in slide-in-from-left duration-250"
           >
             {/* Drawer Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#2C2E33] sticky top-0 bg-[#161718] z-10">
-              <span className="font-extrabold text-2xl tracking-tight text-[#F25C05]">BHP</span>
+            <div className="flex items-center justify-between px-6 py-5 border-b border-[#1E232E] sticky top-0 bg-[#0B0E14] z-10">
+              <BhpLogo size="sm" showTagline={false} />
               <button
                 id="close-navigation-drawer"
                 type="button"
                 onClick={() => setIsMenuOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-[#161B26] rounded-lg transition-colors cursor-pointer"
                 aria-label="Close menu"
               >
                 <X className="w-6 h-6" />

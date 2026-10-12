@@ -5,6 +5,7 @@ import {
   getStoredCanadaMenuConfigs,
   CANADA_MENU_CONFIGS_UPDATED_EVENT,
 } from '../utils/canadaStorage';
+import { BhpLogo } from './common/BhpLogo';
 
 interface RightDrawerMenuProps {
   isOpen: boolean;
@@ -42,17 +43,17 @@ export const RightDrawerMenu: React.FC<RightDrawerMenuProps> = ({
     >
       <div
         id="right-drawer-panel"
-        className="w-full max-w-[420px] bg-[#111215] h-full shadow-2xl border-l border-[#23252B] flex flex-col text-white animate-in slide-in-from-right duration-200 select-none"
+        className="w-full max-w-[420px] bg-[#0C0F16] h-full shadow-2xl border-l border-[#1F2533] flex flex-col text-white animate-in slide-in-from-right duration-200 select-none"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Drawer Header - Clean BHP logo and Close Button */}
-        <div className="px-6 py-5 border-b border-[#23252B] flex items-center justify-between bg-[#111215]">
-          <span className="font-extrabold text-2xl tracking-tight text-[#F25C05]">BHP</span>
+        {/* Drawer Header - Redesigned BHP logo and Close Button */}
+        <div className="px-6 py-5 border-b border-[#1F2533] flex items-center justify-between bg-[#0C0F16]">
+          <BhpLogo size="sm" showTagline={false} />
 
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#1E2026] transition-colors cursor-pointer"
+            className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#1A202D] transition-colors cursor-pointer"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
