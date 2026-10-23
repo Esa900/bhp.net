@@ -19,7 +19,6 @@ import {
   Maximize2,
   Minimize2,
   ExternalLink,
-  Download,
   AlertTriangle,
 } from 'lucide-react';
 import { DocumentMenuItem } from '../data/menuNavigationItems';
@@ -29,9 +28,11 @@ import { AdminPost, AttachedDoc } from '../types';
 import { getStoredAdminPosts, findAdminPostByQuery } from '../utils/postsStorage';
 import {
   FullPdfDocumentViewer,
+  UnifiedDocumentData,
   postToUnifiedDoc,
   profileToUnifiedDoc,
 } from './FullPdfDocumentViewer';
+import { searchUniversalDocument } from '../utils/universalSearch';
 
 interface DocumentSearchModalProps {
   isOpen: boolean;
@@ -46,6 +47,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [matchedUniversalDoc, setMatchedUniversalDoc] = useState<UnifiedDocumentData | null>(null);
   const [matchedAdminPost, setMatchedAdminPost] = useState<AdminPost | null>(null);
   const [matchedProfile, setMatchedProfile] = useState<ApplicantProfile | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -93,18 +95,13 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       setPreviewMaximized(false);
 
       // If opened with a specific search query (e.g. from header search or post selection)
-      if (
-        activeItem?.sampleValue &&
-        activeItem.sampleValue.trim() &&
-        !activeItem.sampleValue.startsWith('REF-928410') &&
-        !activeItem.sampleValue.startsWith('ED-78412') &&
-        !activeItem.sampleValue.startsWith('VRF-99420')
-      ) {
+      if (activeItem?.sampleValue && activeItem.sampleValue.trim()) {
         setQuery(activeItem.sampleValue);
         handleSearch(activeItem.sampleValue);
       } else {
         setQuery('');
         setHasSearched(false);
+        setMatchedUniversalDoc(null);
         setMatchedAdminPost(null);
         setMatchedProfile(null);
         setTimeout(() => inputRef.current?.focus(), 80);
@@ -153,11 +150,11 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
   const handleOpenImagePreview = (imgUrl: string, idx: number) => {
     setPreviewingDoc({
       id: `gallery-img-${idx}`,
-      name: `${matchedAdminPost?.title || 'Document'} - Photo #${idx + 1}`,
+      name: `${matchedUniversalDoc?.title || matchedAdminPost?.title || 'Document'} - Photo #${idx + 1}`,
       size: 'High Resolution',
       type: 'image',
       dataUrl: imgUrl,
-      uploadDate: matchedAdminPost?.date || 'Current',
+      uploadDate: matchedUniversalDoc?.issueDate || matchedAdminPost?.date || 'Current',
     });
     setPreviewZoom(100);
     setPreviewMaximized(false);
@@ -171,6 +168,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
 
     setIsSearching(true);
     setHasSearched(true);
+    setMatchedUniversalDoc(null);
     setMatchedAdminPost(null);
     setMatchedProfile(null);
 
@@ -179,50 +177,21 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       const freshPosts = getStoredAdminPosts();
       setAdminPosts(freshPosts);
 
-      // 2. Search in Admin Posts first (User's primary requirement - universal reference number search)
-      const foundPost = findAdminPostByQuery(searchTerm, freshPosts);
-      if (foundPost) {
-        setMatchedAdminPost(foundPost);
+      // 2. Perform Universal Search across Australia, Canada, and Sample Profiles
+      const result = searchUniversalDocument(searchTerm);
+      if (result) {
+        setMatchedUniversalDoc(result.document);
+        if (result.source === 'australia') {
+          setMatchedAdminPost(result.rawRecord);
+        } else if (result.source === 'portal') {
+          setMatchedProfile(result.rawRecord);
+        }
         setIsSearching(false);
         return;
       }
 
-      // 2. Fallback search in SAMPLE_PROFILES (for existing sample verifications)
-      const cleanTerm = searchTerm.toLowerCase().replace(/[-\s]/g, '');
-      const foundProfile = SAMPLE_PROFILES.find((p) => {
-        const refMatch = p.referenceNumber.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const edMatch = p.edNumber?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const docMatch = p.documentNumber?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const vrfMatch = p.verificationIdNo?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const trnMatch = p.transitionIdNo?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const grantMatch = p.visaGrantNumber?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const insMatch = p.insuranceNo?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const immiMatch = p.immiCardNo?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const tfnMatch = p.tfnNumber?.toLowerCase().replace(/[-\s]/g, '').includes(cleanTerm);
-        const nameMatch = p.fullName.toLowerCase().includes(searchTerm.toLowerCase());
-        const visaSubMatch = p.visaSubclass.toLowerCase().includes(searchTerm.toLowerCase());
-
-        return (
-          refMatch ||
-          edMatch ||
-          docMatch ||
-          vrfMatch ||
-          trnMatch ||
-          grantMatch ||
-          insMatch ||
-          immiMatch ||
-          tfnMatch ||
-          nameMatch ||
-          visaSubMatch
-        );
-      });
-
-      if (foundProfile) {
-        setMatchedProfile(foundProfile);
-      }
-
       setIsSearching(false);
-    }, 350);
+    }, 250);
   };
 
   const handleCopyRef = (refNum: string) => {
@@ -240,6 +209,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
   const handleReset = () => {
     setQuery('');
     setHasSearched(false);
+    setMatchedUniversalDoc(null);
     setMatchedAdminPost(null);
     setMatchedProfile(null);
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -347,22 +317,12 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
             </div>
 
             {/* =========================================================================
-                RESULT VIEW A: MATCHED POST OR PROFILE AS FULL PDF DOCUMENT
+                RESULT VIEW: MATCHED OFFICIAL PDF DOCUMENT
                ========================================================================= */}
-            {hasSearched && matchedAdminPost && (
+            {hasSearched && matchedUniversalDoc && (
               <div className="pt-2 animate-in fade-in duration-200">
                 <FullPdfDocumentViewer
-                  document={postToUnifiedDoc(matchedAdminPost, 'australia')}
-                  onSearchAnother={handleReset}
-                  onClose={onClose}
-                />
-              </div>
-            )}
-
-            {hasSearched && !matchedAdminPost && matchedProfile && (
-              <div className="pt-2 animate-in fade-in duration-200">
-                <FullPdfDocumentViewer
-                  document={profileToUnifiedDoc(matchedProfile)}
+                  document={matchedUniversalDoc}
                   onSearchAnother={handleReset}
                   onClose={onClose}
                 />
@@ -370,9 +330,9 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
             )}
 
             {/* =========================================================================
-                RESULT VIEW C: NOT FOUND
+                RESULT VIEW: NOT FOUND
                ========================================================================= */}
-            {hasSearched && !matchedAdminPost && !matchedProfile && (
+            {hasSearched && !matchedUniversalDoc && (
               <div className="bg-[#1F1915] border border-[#4A2B18] rounded-xl p-5 text-center space-y-3">
                 <AlertCircle className="w-8 h-8 text-[#FF8E4D] mx-auto" />
                 <div>
@@ -558,7 +518,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                     className={previewMaximized ? 'h-[78vh]' : 'h-[64vh]'}
                   >
                     <iframe
-                      src={`${previewingDoc.dataUrl}#toolbar=1&navpanes=1&zoom=${previewZoom}`}
+                      src={`${previewingDoc.dataUrl}#toolbar=0&navpanes=0&zoom=${previewZoom}`}
                       title={previewingDoc.name}
                       className="w-full h-full border-none rounded-lg bg-white shadow-2xl"
                     />

@@ -7,6 +7,8 @@ import { DocumentMenuItem, DOCUMENT_MENU_ITEMS } from '../data/menuNavigationIte
 import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from '../utils/menuItemsStorage';
 import { JobCategory } from '../types/jobCircular';
 import { getStoredJobCategories, JOB_CATEGORIES_UPDATED_EVENT } from '../utils/jobCircularStorage';
+import { CanadaMenuItemConfig } from '../types/canada';
+import { getStoredCanadaMenuConfigs, CANADA_MENU_CONFIGS_UPDATED_EVENT } from '../utils/canadaStorage';
 import { AuthUser } from '../types/auth';
 import { logoutAuthUser } from '../utils/authStorage';
 
@@ -21,6 +23,7 @@ interface HeaderProps {
   onAdminClick?: () => void;
   onPortalClick?: () => void;
   onSelectMenuItem?: (menuItemId: string) => void;
+  onSelectCanadaItem?: (config: CanadaMenuItemConfig) => void;
   onJobCategoryClick?: (category: JobCategory) => void;
   currentUser?: AuthUser | null;
 }
@@ -36,12 +39,14 @@ export const Header: React.FC<HeaderProps> = ({
   onAdminClick,
   onPortalClick,
   onSelectMenuItem,
+  onSelectCanadaItem,
   onJobCategoryClick,
   currentUser,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLangOpen, setIsLangOpen] = useState(false);
   const [docMenuItems, setDocMenuItems] = useState<DocumentMenuItem[]>(() => getStoredMenuItems());
+  const [canadaMenuItems, setCanadaMenuItems] = useState<CanadaMenuItemConfig[]>(() => getStoredCanadaMenuConfigs());
   const [jobCategories, setJobCategories] = useState<JobCategory[]>(() => getStoredJobCategories());
   const { language, setLanguage, t } = useLanguage();
   const { siteSettings } = useAdminData();
@@ -51,22 +56,30 @@ export const Header: React.FC<HeaderProps> = ({
       setDocMenuItems(getStoredMenuItems());
     };
 
+    const handleCanadaUpdate = () => {
+      setCanadaMenuItems(getStoredCanadaMenuConfigs());
+    };
+
     const handleJobCatsUpdate = () => {
       setJobCategories(getStoredJobCategories());
     };
 
     window.addEventListener(MENU_ITEMS_UPDATED_EVENT, handleUpdate);
+    window.addEventListener(CANADA_MENU_CONFIGS_UPDATED_EVENT, handleCanadaUpdate);
     window.addEventListener(JOB_CATEGORIES_UPDATED_EVENT, handleJobCatsUpdate);
     window.addEventListener('storage', () => {
       handleUpdate();
+      handleCanadaUpdate();
       handleJobCatsUpdate();
     });
 
     return () => {
       window.removeEventListener(MENU_ITEMS_UPDATED_EVENT, handleUpdate);
+      window.removeEventListener(CANADA_MENU_CONFIGS_UPDATED_EVENT, handleCanadaUpdate);
       window.removeEventListener(JOB_CATEGORIES_UPDATED_EVENT, handleJobCatsUpdate);
       window.removeEventListener('storage', () => {
         handleUpdate();
+        handleCanadaUpdate();
         handleJobCatsUpdate();
       });
     };
@@ -82,7 +95,7 @@ export const Header: React.FC<HeaderProps> = ({
   const currentLangLabel = languages.find((l) => l.id === language)?.label || 'English';
 
   const megaMenu = [
-    // Dynamic Document Navigation Items (managed via Admin Panel 3-Line Menu Manager)
+    // Dynamic Australia Document Navigation Items (managed via Admin Panel Australia tab)
     ...docMenuItems.map((item) => ({
       title: item.mainTitle,
       links: [
@@ -92,6 +105,17 @@ export const Header: React.FC<HeaderProps> = ({
         },
       ],
     })),
+    // Dynamic Canada Document Navigation Items (managed via Admin Panel Canada tab)
+    ...canadaMenuItems.map((item) => ({
+      title: item.mainTitle,
+      links: [
+        {
+          label: item.subMenu,
+          action: () => onSelectCanadaItem?.(item),
+        },
+      ],
+    })),
+    // Dynamic Job Circular Categories (managed via Admin Panel Job Circular tab)
     {
       title: 'JOB CIRCULAR',
       links: jobCategories.map((cat) => ({

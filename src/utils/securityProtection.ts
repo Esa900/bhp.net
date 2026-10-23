@@ -89,21 +89,11 @@ export function setupSecurityProtection(): () => void {
     }, 2800);
   };
 
-  const handleVisibilityChange = () => {
-    if (document.hidden) {
-      document.body.classList.add('bhp-screen-shielded');
-    } else {
-      document.body.classList.remove('bhp-screen-shielded');
-    }
-  };
-
-  window.addEventListener('visibilitychange', handleVisibilityChange);
   window.addEventListener('contextmenu', handleContextMenu);
   window.addEventListener('keydown', handleKeyDown, true);
   window.addEventListener('keyup', handleKeyUp, true);
 
   return () => {
-    window.removeEventListener('visibilitychange', handleVisibilityChange);
     window.removeEventListener('contextmenu', handleContextMenu);
     window.removeEventListener('keydown', handleKeyDown, true);
     window.removeEventListener('keyup', handleKeyUp, true);

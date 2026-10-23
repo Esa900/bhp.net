@@ -11,8 +11,10 @@ import {
   Tag,
   Paperclip,
 } from 'lucide-react';
-import { getStoredAdminPosts, findAdminPostByQuery } from '../utils/postsStorage';
+import { getStoredAdminPosts } from '../utils/postsStorage';
+import { getStoredCanadaDocuments } from '../utils/canadaStorage';
 import { AdminPost } from '../types';
+import { CanadaDocumentRecord } from '../types/canada';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -27,11 +29,13 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const [adminPosts, setAdminPosts] = useState<AdminPost[]>([]);
+  const [canadaDocs, setCanadaDocs] = useState<CanadaDocumentRecord[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setAdminPosts(getStoredAdminPosts());
+      setCanadaDocs(getStoredCanadaDocuments());
       setTimeout(() => inputRef.current?.focus(), 50);
     } else {
       setQuery('');
@@ -57,29 +61,71 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       )
     : quickLinks;
 
-  // Filter matched admin posts
+  // Filter matched admin posts (Australia)
   const matchedPosts = trimmed
     ? adminPosts.filter((p) => {
         const cleanTrimmed = trimmed.replace(/[-\s_./]/g, '');
         const cleanRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
         const cleanPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
         const cleanCand = (p.candidateName || '').toLowerCase().replace(/[-\s_./]/g, '');
-        const refMatch = cleanRef.includes(cleanTrimmed) || cleanTrimmed.includes(cleanRef);
-        const passMatch = cleanPass.includes(cleanTrimmed) || cleanTrimmed.includes(cleanPass);
-        const candMatch = (p.candidateName || '').toLowerCase().includes(trimmed) || cleanCand.includes(cleanTrimmed);
-        const titleMatch = p.title.toLowerCase().includes(trimmed);
-        const catMatch = p.category.toLowerCase().includes(trimmed);
-        const docMatch = p.attachedDocuments?.some((d) =>
-          d.name.toLowerCase().includes(trimmed)
+        const cleanId = (p.id || '').toLowerCase().replace(/[-\s_./]/g, '');
+        const cleanVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./]/g, '');
+        return (
+          cleanRef.includes(cleanTrimmed) ||
+          cleanTrimmed.includes(cleanRef) ||
+          cleanPass.includes(cleanTrimmed) ||
+          cleanCand.includes(cleanTrimmed) ||
+          cleanId.includes(cleanTrimmed) ||
+          cleanVrf.includes(cleanTrimmed) ||
+          p.title.toLowerCase().includes(trimmed) ||
+          p.category.toLowerCase().includes(trimmed)
         );
-        return refMatch || passMatch || candMatch || titleMatch || catMatch || docMatch;
+      })
+    : [];
+
+  // Filter matched Canada documents
+  const matchedCanada = trimmed
+    ? canadaDocs.filter((c) => {
+        const cleanTrimmed = trimmed.replace(/[-\s_./]/g, '');
+        const matchField = (val?: string) => {
+          if (!val) return false;
+          const cleanVal = val.toLowerCase().replace(/[-\s_./]/g, '');
+          return cleanVal.includes(cleanTrimmed) || cleanTrimmed.includes(cleanVal);
+        };
+        return (
+          matchField(c.tinOrRef) ||
+          matchField(c.idNumber) ||
+          matchField(c.verificationIdNo) ||
+          matchField(c.transitionIdNo) ||
+          matchField(c.referenceNo) ||
+          matchField(c.passportNumber) ||
+          matchField(c.id) ||
+          c.candidateName.toLowerCase().includes(trimmed) ||
+          c.mainTitle.toLowerCase().includes(trimmed)
+        );
       })
     : [];
 
   const handleSelectAdminPost = (post: AdminPost) => {
     onClose();
     if (onOpenDocumentSearch) {
-      onOpenDocumentSearch('employment-verification', post.refNumber);
+      onOpenDocumentSearch('australia-work-permit', post.refNumber);
+    }
+  };
+
+  const handleSelectCanadaDoc = (doc: CanadaDocumentRecord) => {
+    onClose();
+    if (onOpenDocumentSearch) {
+      onOpenDocumentSearch('australia-work-permit', doc.tinOrRef || doc.referenceNo || doc.idNumber || doc.id);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    onClose();
+    if (onOpenDocumentSearch) {
+      onOpenDocumentSearch('australia-work-permit', query.trim());
     }
   };
 
@@ -90,7 +136,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     >
       <div className="w-full max-w-3xl bg-[#1D1F22] rounded-xl border border-[#34373C] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Search Input Bar */}
-        <div className="flex items-center px-6 py-5 border-b border-[#2C2E33] gap-3">
+        <form onSubmit={handleSubmit} className="flex items-center px-6 py-5 border-b border-[#2C2E33] gap-3">
           <Search className="w-6 h-6 text-[#F25C05] shrink-0" />
           <input
             ref={inputRef}
@@ -98,11 +144,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search reports, ID number, reference number, commodities..."
+            placeholder="Search reports, Reference / ID number, candidate name..."
             className="w-full bg-transparent text-white placeholder-gray-400 text-lg sm:text-xl font-normal focus:outline-none"
           />
           {query && (
             <button
+              type="button"
               onClick={() => setQuery('')}
               className="text-gray-400 hover:text-white p-1 cursor-pointer"
               aria-label="Clear query"
@@ -111,27 +158,37 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             </button>
           )}
           <button
+            type="submit"
+            disabled={!query.trim()}
+            className="px-3.5 py-1.5 bg-[#FF5500] hover:bg-[#E64200] disabled:opacity-40 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shrink-0"
+          >
+            Search
+          </button>
+          <button
             id="search-modal-close-btn"
+            type="button"
             onClick={onClose}
             className="text-gray-400 hover:text-white px-2 py-1 rounded bg-[#2A2D33] text-xs font-semibold uppercase tracking-wider cursor-pointer"
           >
             ESC
           </button>
-        </div>
+        </form>
 
         {/* Results / Quick Topics */}
         <div className="p-6 max-h-[60vh] overflow-y-auto space-y-5">
-          {/* Matched Verified Admin Posts */}
-          {matchedPosts.length > 0 && (
+          {/* Matched Verified Documents (Australia & Canada) */}
+          {(matchedPosts.length > 0 || matchedCanada.length > 0) && (
             <div>
               <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4" />
-                <span>Verified Official Documents ({matchedPosts.length})</span>
+                <span>Verified Official Documents ({matchedPosts.length + matchedCanada.length})</span>
               </div>
               <div className="space-y-2">
+                {/* Australia Posts */}
                 {matchedPosts.map((post) => (
                   <button
                     key={post.id}
+                    type="button"
                     onClick={() => handleSelectAdminPost(post)}
                     className="w-full flex items-center justify-between p-3.5 rounded-lg bg-[#182320] border border-emerald-500/30 hover:bg-[#1E2D29] hover:border-emerald-500/50 transition-colors text-left group cursor-pointer"
                   >
@@ -144,15 +201,24 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                           <span className="text-xs font-mono font-bold text-[#FF8E4D]">
                             {post.refNumber}
                           </span>
+                          <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30">
+                            Australia AU
+                          </span>
                           <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-[#25282F] text-gray-300 font-semibold">
                             {post.category}
                           </span>
                         </div>
                         <div className="text-sm font-semibold text-white group-hover:text-emerald-300 transition-colors truncate mt-0.5">
-                          {post.title}
+                          {post.candidateName ? `${post.candidateName} — ${post.title}` : post.title}
                         </div>
                         <div className="text-xs text-gray-400 flex items-center gap-2 mt-0.5">
                           <span>{post.date}</span>
+                          {post.passportNumber && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono text-gray-300">Passport: {post.passportNumber}</span>
+                            </>
+                          )}
                           {post.attachedDocuments && post.attachedDocuments.length > 0 && (
                             <>
                               <span>•</span>
@@ -166,6 +232,45 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                       </div>
                     </div>
                     <ArrowRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition-all shrink-0" />
+                  </button>
+                ))}
+
+                {/* Canada Documents */}
+                {matchedCanada.map((doc) => (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    onClick={() => handleSelectCanadaDoc(doc)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-lg bg-[#241a18] border border-amber-500/30 hover:bg-[#2c201d] hover:border-amber-500/50 transition-colors text-left group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3 overflow-hidden pr-3">
+                      <div className="p-2 rounded bg-amber-500/20 text-amber-400 shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="overflow-hidden">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-[#FF8E4D]">
+                            {doc.tinOrRef || doc.referenceNo || doc.idNumber}
+                          </span>
+                          <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-bold border border-red-500/30">
+                            Canada CA
+                          </span>
+                        </div>
+                        <div className="text-sm font-semibold text-white group-hover:text-amber-300 transition-colors truncate mt-0.5">
+                          {doc.candidateName} — {doc.mainTitle}
+                        </div>
+                        <div className="text-xs text-gray-400 flex items-center gap-2 mt-0.5">
+                          <span>{doc.issueDate}</span>
+                          {doc.passportNumber && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono text-gray-300">Passport: {doc.passportNumber}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-amber-400 group-hover:translate-x-1 transition-all shrink-0" />
                   </button>
                 ))}
               </div>

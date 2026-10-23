@@ -253,6 +253,10 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
         onAdminClick={handleOpenAdmin}
         onPortalClick={() => handleOpenPortal()}
         onSelectMenuItem={handleSelectMenuItem}
+        onSelectCanadaItem={(cfg) => {
+          setSelectedCanadaConfig(cfg);
+          setIsCanadaSearchOpen(true);
+        }}
         currentUser={currentUser}
         onJobCategoryClick={(category) => {
           setSelectedJobCategory(category);
@@ -262,7 +266,18 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
 
       {/* Main Page Sections */}
       <main className="flex-1">
-        <HeroHeadline onOpenRightMenu={() => setIsRightDrawerOpen(true)} />
+        <HeroHeadline
+          onOpenRightMenu={() => setIsRightDrawerOpen(true)}
+          onSelectAustraliaItem={handleSelectMenuItem}
+          onSelectCanadaItem={(cfg) => {
+            setSelectedCanadaConfig(cfg);
+            setIsCanadaSearchOpen(true);
+          }}
+          onJobCategoryClick={(category) => {
+            setSelectedJobCategory(category);
+            setIsJobCircularOpen(true);
+          }}
+        />
         <HeroBanner />
         <WhatWeProduce onCommoditySelect={(item) => setSelectedCommodity(item)} />
         <BentoGrid
@@ -372,6 +387,10 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
         }}
         onSelectAustraliaItem={(menuItemId) => {
           handleSelectMenuItem(menuItemId);
+        }}
+        onJobCategoryClick={(category) => {
+          setSelectedJobCategory(category);
+          setIsJobCircularOpen(true);
         }}
       />
 

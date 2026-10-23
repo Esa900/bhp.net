@@ -48,6 +48,8 @@ export interface ApplicantProfile {
   ticketNumber?: string; // e.g. QF-948201
   airlineName?: string; // e.g. Qantas Airways
   flightRoute?: string; // e.g. London Heathrow (LHR) -> Perth Airport (PER)
+  photoUrl?: string;
+  passportCountry?: string;
 }
 
 export interface PositiveListOccupation {

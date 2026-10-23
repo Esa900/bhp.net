@@ -512,7 +512,7 @@ export const FullDocumentPdfSheet: React.FC<FullDocumentPdfSheetProps> = ({
                   />
                 ) : currentAttachedDoc.dataUrl.startsWith('data:application/pdf') || currentAttachedDoc.type === 'pdf' ? (
                   <iframe
-                    src={currentAttachedDoc.dataUrl}
+                    src={`${currentAttachedDoc.dataUrl}#toolbar=0&navpanes=0`}
                     title={currentAttachedDoc.name}
                     className="w-full h-[750px] border-none rounded-xl"
                   />

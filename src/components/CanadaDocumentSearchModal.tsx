@@ -26,9 +26,11 @@ import { findAdminPostByQuery } from '../utils/postsStorage';
 import { AdminPost } from '../types';
 import {
   FullPdfDocumentViewer,
+  UnifiedDocumentData,
   canadaRecordToUnifiedDoc,
   postToUnifiedDoc,
 } from './FullPdfDocumentViewer';
+import { searchUniversalDocument } from '../utils/universalSearch';
 
 interface CanadaDocumentSearchModalProps {
   isOpen: boolean;
@@ -48,6 +50,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
   );
   const [query, setQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [matchedUniversalDoc, setMatchedUniversalDoc] = useState<UnifiedDocumentData | null>(null);
   const [matchedRecord, setMatchedRecord] = useState<CanadaDocumentRecord | null>(null);
   const [matchedAdminPost, setMatchedAdminPost] = useState<AdminPost | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -109,23 +112,35 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
 
     setIsSearching(true);
     setHasSearched(true);
+    setMatchedUniversalDoc(null);
     setMatchedRecord(null);
     setMatchedAdminPost(null);
 
     setTimeout(() => {
-      // 1. Try matching in Canada documents storage
-      const found = searchCanadaDocument(term, currentConfig.id);
-      if (found) {
-        setMatchedRecord(found);
-      } else {
-        // 2. Fallback: check general admin posts by reference
-        const post = findAdminPostByQuery(term);
-        if (post) {
-          setMatchedAdminPost(post);
-        }
+      // 1. Try matching in Canada documents storage first
+      const foundCa = searchCanadaDocument(term, currentConfig.id);
+      if (foundCa) {
+        setMatchedRecord(foundCa);
+        setMatchedUniversalDoc(canadaRecordToUnifiedDoc(foundCa));
+        setIsSearching(false);
+        return;
       }
+
+      // 2. Fallback to universal search across all posts & records
+      const universalResult = searchUniversalDocument(term);
+      if (universalResult) {
+        setMatchedUniversalDoc(universalResult.document);
+        if (universalResult.source === 'canada') {
+          setMatchedRecord(universalResult.rawRecord);
+        } else if (universalResult.source === 'australia') {
+          setMatchedAdminPost(universalResult.rawRecord);
+        }
+        setIsSearching(false);
+        return;
+      }
+
       setIsSearching(false);
-    }, 280);
+    }, 250);
   };
 
   return (
@@ -248,26 +263,14 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
              ========================================================================= */}
           {hasSearched && (
             <div className="pt-2 animate-in fade-in duration-200">
-              {matchedRecord ? (
-                /* MATCH FOUND - OFFICIAL CANADA FULL PDF CERTIFICATE & DOCUMENTS */
+              {matchedUniversalDoc ? (
+                /* MATCH FOUND - OFFICIAL FULL PDF CERTIFICATE & DOCUMENTS */
                 <FullPdfDocumentViewer
-                  document={canadaRecordToUnifiedDoc(matchedRecord)}
+                  document={matchedUniversalDoc}
                   onSearchAnother={() => {
                     setQuery('');
                     setHasSearched(false);
-                    setMatchedRecord(null);
-                    setMatchedAdminPost(null);
-                    setTimeout(() => inputRef.current?.focus(), 50);
-                  }}
-                  onClose={onClose}
-                />
-              ) : matchedAdminPost ? (
-                /* MATCH FOUND IN ADMIN POSTS */
-                <FullPdfDocumentViewer
-                  document={postToUnifiedDoc(matchedAdminPost, 'canada')}
-                  onSearchAnother={() => {
-                    setQuery('');
-                    setHasSearched(false);
+                    setMatchedUniversalDoc(null);
                     setMatchedRecord(null);
                     setMatchedAdminPost(null);
                     setTimeout(() => inputRef.current?.focus(), 50);

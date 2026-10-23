@@ -13,6 +13,7 @@ import { ImmiFooter } from './ImmiFooter';
 import { ArrowLeft, ShieldCheck, Lock, Award, Building2, CheckCircle2, Sliders } from 'lucide-react';
 
 import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from '../../data/menuNavigationItems';
+import { searchUniversalDocument } from '../../utils/universalSearch';
 
 interface DocumentVerificationPortalProps {
   onBackToWebsite?: () => void;
@@ -45,6 +46,50 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
     setSearchNotification(null);
 
     setTimeout(() => {
+      // 1. Check universal search first for admin added posts
+      const universalMatch = searchUniversalDocument(query);
+      if (universalMatch) {
+        const u = universalMatch.document;
+        const convertedProfile: ApplicantProfile = {
+          id: u.id,
+          fullName: u.candidateName,
+          referenceNumber: u.referenceNumber,
+          edNumber: u.referenceNumber,
+          dateOfBirth: u.dateOfBirth || '1993-01-01',
+          nationality: u.nationality,
+          passportCountry: u.nationality,
+          documentNumber: u.passportNumber,
+          documentIssueDate: u.issueDate || '2025-01-01',
+          documentExpiryDate: u.expiryDate || '2030-01-01',
+          visaSubclass: u.visaSubclassOrCategory || 'Subclass 482 - Temporary Skill Shortage',
+          visaStream: 'Medium-Term Stream (Full Work Rights)',
+          nominatedOccupation: u.jobTitle,
+          anzscoCode: '312911',
+          sponsorName: u.employerName,
+          sponsorAbn: '49 004 028 077',
+          applicationDate: u.issueDate,
+          grantDate: u.issueDate,
+          visaExpiryDate: u.expiryDate,
+          visaGrantNumber: `GRN-${u.referenceNumber.replace(/[^0-9]/g, '').slice(-8) || '99201940'}`,
+          hapId: `HAP-${u.referenceNumber.replace(/[^0-9]/g, '').slice(-7) || '8849201'}`,
+          tfnNumber: `TFN-${u.referenceNumber.replace(/[^0-9]/g, '').slice(-8) || '782190442'}`,
+          salaryPackage: u.salaryOrWage || '$135,000 AUD / Year',
+          workLocation: u.workLocation,
+          status: 'GRANTED',
+          photoUrl: u.featuredImageUrl || '',
+          verificationIdNo: u.verificationId,
+          transitionIdNo: `VFS-TRN-${u.referenceNumber.replace(/[^0-9]/g, '').slice(-6) || '882190'}`,
+          insuranceNo: `BUPA-OVHC-${u.referenceNumber.replace(/[^0-9]/g, '').slice(-7) || '7741029'}`,
+          immiCardNo: `IMMI-CARD-${u.referenceNumber.replace(/[^0-9]/g, '').slice(-6) || '492019'}`,
+        };
+        setCurrentProfile(convertedProfile);
+        setSearchNotification(
+          `DVS Authenticated: Record verified for ${convertedProfile.fullName} (${menuItem.fieldLabel}: ${query})`
+        );
+        setIsVerifying(false);
+        setTimeout(() => setSearchNotification(null), 6000);
+        return;
+      }
       const clean = query.trim().toUpperCase().replace(/[\s-]/g, '');
 
       const found = SAMPLE_PROFILES.find((p) => {

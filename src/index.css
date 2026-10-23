@@ -15,12 +15,12 @@ img, canvas, iframe {
   pointer-events: auto;
 }
 
-/* Screen Capture & Window Switcher Obscuring Shield */
-body.bhp-screen-shielded #official-certificate-sheet,
-body.bhp-screen-shielded [id^="attached-doc-"] {
-  filter: blur(25px) grayscale(100%) !important;
-  opacity: 0.1 !important;
-  transition: filter 0.05s ease;
+/* Clean print handling */
+@media print {
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 /* Hard Print & PDF-Save Block across entire application */
