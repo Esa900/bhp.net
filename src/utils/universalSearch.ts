@@ -25,7 +25,7 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
   if (!rawQuery || !rawQuery.trim()) return null;
 
   const queryTrimmed = rawQuery.trim().toLowerCase();
-  const cleanQuery = queryTrimmed.replace(/[-\s_./]/g, '');
+  const cleanQuery = queryTrimmed.replace(/[-\s_./#:]/g, '');
   if (!cleanQuery) return null;
 
   // 1. SEARCH AUSTRALIA ADMIN POSTS
@@ -33,10 +33,10 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
     const adminPosts = getStoredAdminPosts();
     // 1a. Exact ID, Ref, Verification, Passport match
     const exactPost = adminPosts.find((p) => {
-      const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
-      const pId = (p.id || '').toLowerCase().replace(/[-\s_./]/g, '');
-      const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./]/g, '');
-      const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
+      const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      const pId = (p.id || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
       return (
         pRef === cleanQuery ||
         pId === cleanQuery ||
@@ -54,10 +54,10 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
 
     // 1b. Partial Ref, ID, Passport match
     const partialPost = adminPosts.find((p) => {
-      const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
-      const pId = (p.id || '').toLowerCase().replace(/[-\s_./]/g, '');
-      const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./]/g, '');
-      const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
+      const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      const pId = (p.id || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
       return (
         (pRef && (pRef.includes(cleanQuery) || cleanQuery.includes(pRef))) ||
         (pId && (pId.includes(cleanQuery) || cleanQuery.includes(pId))) ||
@@ -76,7 +76,7 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
     // 1c. Candidate Name match
     const candPost = adminPosts.find((p) => {
       if (!p.candidateName) return false;
-      const cleanCand = p.candidateName.toLowerCase().replace(/[-\s_./]/g, '');
+      const cleanCand = p.candidateName.toLowerCase().replace(/[-\s_./#:]/g, '');
       return (
         p.candidateName.toLowerCase().includes(queryTrimmed) ||
         cleanCand.includes(cleanQuery)
@@ -87,6 +87,22 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
         document: postToUnifiedDoc(candPost, 'australia'),
         source: 'australia',
         rawRecord: candPost,
+      };
+    }
+
+    // 1d. Title or Attached Document name match
+    const titlePost = adminPosts.find((p) => {
+      const cleanTitle = (p.title || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      const hasDoc = p.attachedDocuments?.some((doc) =>
+        (doc.name || '').toLowerCase().replace(/[-\s_./#:]/g, '').includes(cleanQuery)
+      );
+      return cleanTitle.includes(cleanQuery) || hasDoc;
+    });
+    if (titlePost) {
+      return {
+        document: postToUnifiedDoc(titlePost, 'australia'),
+        source: 'australia',
+        rawRecord: titlePost,
       };
     }
   } catch (err) {
@@ -100,7 +116,7 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
     const exactCa = canadaDocs.find((c) => {
       const match = (val?: string) => {
         if (!val) return false;
-        return val.toLowerCase().replace(/[-\s_./]/g, '') === cleanQuery;
+        return val.toLowerCase().replace(/[-\s_./#:]/g, '') === cleanQuery;
       };
       return (
         match(c.tinOrRef) ||
@@ -126,7 +142,7 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
     const partialCa = canadaDocs.find((c) => {
       const match = (val?: string) => {
         if (!val) return false;
-        const cleanVal = val.toLowerCase().replace(/[-\s_./]/g, '');
+        const cleanVal = val.toLowerCase().replace(/[-\s_./#:]/g, '');
         return cleanVal.includes(cleanQuery) || cleanQuery.includes(cleanVal);
       };
       return (
@@ -138,7 +154,8 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
         match(c.officialDocNumber) ||
         match(c.lmiaNumber) ||
         match(c.passportNumber) ||
-        match(c.id)
+        match(c.id) ||
+        match(c.mainTitle)
       );
     });
     if (partialCa) {
@@ -152,7 +169,7 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
     // 2c. Candidate Name match
     const candCa = canadaDocs.find((c) => {
       if (!c.candidateName) return false;
-      const cleanCand = c.candidateName.toLowerCase().replace(/[-\s_./]/g, '');
+      const cleanCand = c.candidateName.toLowerCase().replace(/[-\s_./#:]/g, '');
       return (
         c.candidateName.toLowerCase().includes(queryTrimmed) ||
         cleanCand.includes(cleanQuery)

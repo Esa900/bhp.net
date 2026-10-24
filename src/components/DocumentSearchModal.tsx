@@ -190,8 +190,17 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         return;
       }
 
+      // 3. Fallback direct match in admin posts
+      const directPost = findAdminPostByQuery(searchTerm, freshPosts);
+      if (directPost) {
+        setMatchedAdminPost(directPost);
+        setMatchedUniversalDoc(postToUnifiedDoc(directPost, 'australia'));
+        setIsSearching(false);
+        return;
+      }
+
       setIsSearching(false);
-    }, 250);
+    }, 150);
   };
 
   const handleCopyRef = (refNum: string) => {

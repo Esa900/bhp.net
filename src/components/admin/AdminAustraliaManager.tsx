@@ -29,6 +29,7 @@ import {
   ArrowDown,
   Tag,
   Hash,
+  ArrowLeft,
 } from 'lucide-react';
 import { DocumentMenuItem } from '../../data/menuNavigationItems';
 import { DocumentType } from '../../types/portal';
@@ -203,6 +204,47 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       }));
     }
   }, [categories]);
+
+  // Intercept Admin Back press and ESC key so user is NEVER kicked out of Admin
+  useEffect(() => {
+    const handleAdminBack = (e: Event) => {
+      if (selectedPostForView) {
+        e.preventDefault();
+        setSelectedPostForView(null);
+      } else if (isCatModalOpen) {
+        e.preventDefault();
+        setIsCatModalOpen(false);
+      } else if (activeTab === 'add-post') {
+        e.preventDefault();
+        setActiveTab('all-posts');
+        setEditingPostId(null);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedPostForView) {
+          e.stopPropagation();
+          setSelectedPostForView(null);
+        } else if (isCatModalOpen) {
+          e.stopPropagation();
+          setIsCatModalOpen(false);
+        } else if (activeTab === 'add-post') {
+          e.stopPropagation();
+          setActiveTab('all-posts');
+          setEditingPostId(null);
+        }
+      }
+    };
+
+    window.addEventListener('bhp_admin_back_press', handleAdminBack);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('bhp_admin_back_press', handleAdminBack);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedPostForView, isCatModalOpen, activeTab]);
 
   // -------------------------------------------------------------
   // POST ACTIONS
@@ -701,13 +743,19 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                 ক্যাটাগরি সিলেক্ট করুন (যা বাম পাশের ৩ লাইনের মেনু অপশনগুলো থেকে আসে) এবং ডকুমেন্টস আপলোড করুন।
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab('all-posts')}
-              className="px-3 py-1.5 bg-[#252830] text-gray-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer"
-            >
-              Cancel
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('all-posts');
+                  setEditingPostId(null);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-lg text-xs font-bold transition-colors cursor-pointer border border-[#3A3F4C]"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-blue-400" />
+                <span>← Back to Post List (ফিরে যান)</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1063,20 +1111,36 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
             )}
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2C303B]">
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#2C303B]">
             <button
               type="button"
-              onClick={() => setActiveTab('all-posts')}
-              className="px-4 py-2 bg-[#252830] text-gray-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer"
+              onClick={() => {
+                setActiveTab('all-posts');
+                setEditingPostId(null);
+              }}
+              className="px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 transition-colors border border-[#3A3F4C]"
             >
-              Cancel
+              <ArrowLeft className="w-3.5 h-3.5 text-blue-400" />
+              <span>← Back to Post List (ফিরে যান)</span>
             </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold cursor-pointer shadow-lg shadow-blue-600/30 transition-all"
-            >
-              {editingPostId ? 'Save Changes' : 'Publish Australia Post'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('all-posts');
+                  setEditingPostId(null);
+                }}
+                className="px-4 py-2 bg-[#252830] text-gray-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold cursor-pointer shadow-lg shadow-blue-600/30 transition-all"
+              >
+                {editingPostId ? 'Save Changes' : 'Publish Australia Post'}
+              </button>
+            </div>
           </div>
         </form>
       )}
@@ -1312,20 +1376,48 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                   Australia Full Official Document & PDF Preview ({selectedPostForView.refNumber})
                 </h4>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedPostForView(null)}
-                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPostForView(null)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-lg text-xs font-bold transition-colors cursor-pointer border border-[#3A3F4C]"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-blue-400" />
+                  <span>← Back to Post List (ফিরে যান)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPostForView(null)}
+                  className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <FullPdfDocumentViewer
               document={postToUnifiedDoc(selectedPostForView, 'australia')}
               onClose={() => setSelectedPostForView(null)}
             />
+
+            <div className="flex items-center justify-between pt-3 border-t border-[#2C303B]">
+              <button
+                type="button"
+                onClick={() => setSelectedPostForView(null)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer border border-[#3A3F4C]"
+              >
+                <ArrowLeft className="w-4 h-4 text-blue-400" />
+                <span>← Back to Australia Post List (ফিরে যান)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPostForView(null)}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close (বন্ধ করুন)
+              </button>
+            </div>
           </div>
         </div>
       )}

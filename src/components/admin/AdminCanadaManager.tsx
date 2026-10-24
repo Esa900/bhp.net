@@ -26,6 +26,7 @@ import {
   Hash,
   DollarSign,
   Briefcase,
+  ArrowLeft,
 } from 'lucide-react';
 import { CanadaDocumentRecord, CanadaMenuItemConfig, CanadaCategoryType } from '../../types/canada';
 import {
@@ -33,6 +34,7 @@ import {
   addCanadaDocument,
   updateCanadaDocument,
   deleteCanadaDocument,
+  deleteAllCanadaDocuments,
   resetCanadaDocuments,
   CANADA_DOCUMENTS_UPDATED_EVENT,
   getStoredCanadaMenuConfigs,
@@ -197,6 +199,47 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     }
   }, [menuConfigs]);
 
+  // Intercept Admin Back press and ESC key so user is NEVER kicked out of Admin
+  useEffect(() => {
+    const handleAdminBack = (e: Event) => {
+      if (selectedDocForView) {
+        e.preventDefault();
+        setSelectedDocForView(null);
+      } else if (isCatModalOpen) {
+        e.preventDefault();
+        setIsCatModalOpen(false);
+      } else if (activeTab === 'add-post') {
+        e.preventDefault();
+        setActiveTab('all-posts');
+        setEditingDocId(null);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedDocForView) {
+          e.stopPropagation();
+          setSelectedDocForView(null);
+        } else if (isCatModalOpen) {
+          e.stopPropagation();
+          setIsCatModalOpen(false);
+        } else if (activeTab === 'add-post') {
+          e.stopPropagation();
+          setActiveTab('all-posts');
+          setEditingDocId(null);
+        }
+      }
+    };
+
+    window.addEventListener('bhp_admin_back_press', handleAdminBack);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('bhp_admin_back_press', handleAdminBack);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedDocForView, isCatModalOpen, activeTab]);
+
   // When category changes in form, sync title & subMenu
   const handleCategorySelectChange = (catId: string) => {
     const cfg = menuConfigs.find((c) => c.id === catId) || menuConfigs[0];
@@ -282,21 +325,35 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
 
   const handleSavePost = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docForm.candidateName.trim()) {
-      showToast('Error: Candidate name is required.');
-      return;
-    }
-    if (!docForm.passportNumber.trim()) {
-      showToast('Error: Passport number is required.');
-      return;
-    }
+
+    const candidateName = docForm.candidateName.trim() || 'BHP Canada Authorized Client';
+    const passportNumber = docForm.passportNumber.trim() || `CAN-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // Ensure all reference numbers have valid searchable identifiers
+    const baseRef =
+      docForm.tinOrRef?.trim() ||
+      docForm.referenceNo?.trim() ||
+      docForm.idNumber?.trim() ||
+      docForm.verificationIdNo?.trim() ||
+      `REF-CA-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    const postPayload = {
+      ...docForm,
+      candidateName,
+      passportNumber,
+      tinOrRef: docForm.tinOrRef?.trim() || baseRef,
+      referenceNo: docForm.referenceNo?.trim() || baseRef,
+      idNumber: docForm.idNumber?.trim() || baseRef,
+      verificationIdNo: docForm.verificationIdNo?.trim() || baseRef,
+      transitionIdNo: docForm.transitionIdNo?.trim() || baseRef,
+    };
 
     if (editingDocId) {
-      updateCanadaDocument(editingDocId, docForm);
-      showToast(`Canada post for "${docForm.candidateName}" updated.`);
+      updateCanadaDocument(editingDocId, postPayload);
+      showToast(`Canada post for "${candidateName}" updated.`);
     } else {
-      addCanadaDocument(docForm);
-      showToast(`New Canada post for "${docForm.candidateName}" added.`);
+      addCanadaDocument(postPayload);
+      showToast(`Canada post published! Searchable Ref: "${postPayload.tinOrRef}"`);
     }
 
     setDocuments(getStoredCanadaDocuments());
@@ -307,6 +364,14 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     deleteCanadaDocument(id);
     setDocuments(getStoredCanadaDocuments());
     showToast(`Canada post for "${name}" deleted.`);
+  };
+
+  const handleDeleteAllCanadaPosts = () => {
+    if (window.confirm('Are you sure you want to delete all Canada posts? All items will be permanently removed.')) {
+      deleteAllCanadaDocuments();
+      setDocuments([]);
+      showToast('All Canada posts removed successfully.');
+    }
   };
 
   // Document attachment handler
@@ -517,6 +582,18 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                 <Plus className="w-3.5 h-3.5" />
                 <span>New Post</span>
               </button>
+
+              {documents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteAllCanadaPosts}
+                  className="px-3 py-2 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  title="Delete all Canada posts completely"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  <span>Delete All Posts (সব মুছুন)</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -637,13 +714,19 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                 কানাডা ডান পাশের ৩ লাইনের মেনু ক্যাটাগরি সিলেক্ট করুন এবং প্রার্থীর তথ্য ও ভেরিফিকেশন আইডি প্রদান করুন।
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab('all-posts')}
-              className="px-3 py-1.5 bg-[#252830] text-gray-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer"
-            >
-              Cancel
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('all-posts');
+                  setEditingDocId(null);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-lg text-xs font-bold transition-colors cursor-pointer border border-[#3A3F4C]"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-red-400" />
+                <span>← Back to Post List (ফিরে যান)</span>
+              </button>
+            </div>
           </div>
 
           {/* Category selection from Canada 3-line menu */}
@@ -690,11 +773,10 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Candidate Full Name <span className="text-red-400">*</span>
+                  Candidate Full Name (প্রার্থীর নাম)
                 </label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. Mohammad Rafiqul Islam"
                   value={docForm.candidateName}
                   onChange={(e) => setDocForm({ ...docForm, candidateName: e.target.value })}
@@ -704,11 +786,10 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
 
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1">
-                  Passport Number <span className="text-red-400">*</span>
+                  Passport Number (পাসপোর্ট নম্বর)
                 </label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. A08934211"
                   value={docForm.passportNumber}
                   onChange={(e) => setDocForm({ ...docForm, passportNumber: e.target.value })}
@@ -957,20 +1038,36 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2C303B]">
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#2C303B]">
             <button
               type="button"
-              onClick={() => setActiveTab('all-posts')}
-              className="px-4 py-2 bg-[#252830] text-gray-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer"
+              onClick={() => {
+                setActiveTab('all-posts');
+                setEditingDocId(null);
+              }}
+              className="px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1.5 transition-colors border border-[#3A3F4C]"
             >
-              Cancel
+              <ArrowLeft className="w-3.5 h-3.5 text-red-400" />
+              <span>← Back to Post List (ফিরে যান)</span>
             </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold cursor-pointer shadow-lg shadow-red-600/30 transition-all"
-            >
-              {editingDocId ? 'Save Changes' : 'Publish Canada Post'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('all-posts');
+                  setEditingDocId(null);
+                }}
+                className="px-4 py-2 bg-[#252830] text-gray-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold cursor-pointer shadow-lg shadow-red-600/30 transition-all"
+              >
+                {editingDocId ? 'Save Changes' : 'Publish Canada Post'}
+              </button>
+            </div>
           </div>
         </form>
       )}
@@ -1188,20 +1285,48 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                   Canada Full Official Document & PDF Preview ({selectedDocForView.tinOrRef || selectedDocForView.candidateName})
                 </h4>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedDocForView(null)}
-                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDocForView(null)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-lg text-xs font-bold transition-colors cursor-pointer border border-[#3A3F4C]"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 text-red-400" />
+                  <span>← Back to Post List (ফিরে যান)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDocForView(null)}
+                  className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <FullPdfDocumentViewer
               document={canadaRecordToUnifiedDoc(selectedDocForView)}
               onClose={() => setSelectedDocForView(null)}
             />
+
+            <div className="flex items-center justify-between pt-3 border-t border-[#2C303B]">
+              <button
+                type="button"
+                onClick={() => setSelectedDocForView(null)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer border border-[#3A3F4C]"
+              >
+                <ArrowLeft className="w-4 h-4 text-red-400" />
+                <span>← Back to Canada Post List (ফিরে যান)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDocForView(null)}
+                className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close (বন্ধ করুন)
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -20,6 +20,7 @@ import {
   Layers,
   User,
   Hash,
+  ArrowLeft,
 } from 'lucide-react';
 import { AdminPost, AttachedDoc } from '../types';
 import { CanadaDocumentRecord } from '../types/canada';
@@ -189,6 +190,7 @@ interface FullPdfDocumentViewerProps {
 export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   document,
   onSearchAnother,
+  onClose,
 }) => {
   const [zoom, setZoom] = useState<number>(100);
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
@@ -333,6 +335,22 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Search Another</span>
+            </button>
+          )}
+
+          {/* Back Button */}
+          {onClose && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isFullScreen) setIsFullScreen(false);
+                onClose();
+              }}
+              className="px-3.5 py-1.5 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-[#3A3F4C] cursor-pointer flex items-center gap-1.5 shadow-xs"
+              title="Return to post list"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-[#FF5500]" />
+              <span>Back (ফিরে যান)</span>
             </button>
           )}
         </div>

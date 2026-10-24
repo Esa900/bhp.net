@@ -100,8 +100,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           matchField(c.referenceNo) ||
           matchField(c.passportNumber) ||
           matchField(c.id) ||
-          c.candidateName.toLowerCase().includes(trimmed) ||
-          c.mainTitle.toLowerCase().includes(trimmed)
+          (Boolean(c.candidateName) && c.candidateName.toLowerCase().includes(trimmed)) ||
+          (Boolean(c.mainTitle) && c.mainTitle.toLowerCase().includes(trimmed))
         );
       })
     : [];

@@ -122,6 +122,18 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
     }
 
     const handleRouteChange = () => {
+      // If admin is currently open, dispatch back press event first to let subviews intercept
+      if (isAdminOpen && !checkIsAdminRoute()) {
+        const backEvent = new CustomEvent('bhp_admin_back_press', { cancelable: true });
+        const handled = !window.dispatchEvent(backEvent);
+        if (handled) {
+          // Subview (modal / add-edit form) handled the back action!
+          // Maintain /admin route and keep admin open
+          window.history.pushState({ isBhpAdmin: true }, '', '/admin');
+          return;
+        }
+      }
+
       setIsAdminOpen(checkIsAdminRoute());
       const portalActive = checkIsPortalRoute();
       setIsPortalOpen(portalActive);
@@ -139,12 +151,12 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
       window.removeEventListener('popstate', handleRouteChange);
       window.removeEventListener('hashchange', handleRouteChange);
     };
-  }, [checkIsAdminRoute, checkIsPortalRoute]);
+  }, [checkIsAdminRoute, checkIsPortalRoute, isAdminOpen]);
 
   const handleOpenAdmin = () => {
     setIsAdminOpen(true);
     if (!window.location.pathname.includes('/admin')) {
-      window.history.pushState({}, '', '/admin');
+      window.history.pushState({ isBhpAdmin: true }, '', '/admin');
     }
   };
 
@@ -152,7 +164,6 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
     setIsAdminOpen(false);
     if (window.location.pathname.includes('/admin') || window.location.hash.includes('admin') || window.location.search.includes('admin')) {
       window.history.pushState({}, '', isPortalOpen ? '/portal' : '/');
-      window.dispatchEvent(new Event('popstate'));
     }
   };
 

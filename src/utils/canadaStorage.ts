@@ -176,28 +176,39 @@ export const INITIAL_CANADA_DOCUMENTS: CanadaDocumentRecord[] = [
 export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
   try {
     const raw = localStorage.getItem(CANADA_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(INITIAL_CANADA_DOCUMENTS));
-      return INITIAL_CANADA_DOCUMENTS;
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
     }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-    localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(INITIAL_CANADA_DOCUMENTS));
-    return INITIAL_CANADA_DOCUMENTS;
-  } catch {
-    return INITIAL_CANADA_DOCUMENTS;
+  } catch (err) {
+    console.error('Failed to read Canada documents from localStorage:', err);
   }
+
+  // Seed default only if key has never been initialized
+  try {
+    localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(INITIAL_CANADA_DOCUMENTS));
+  } catch (e) {
+    console.error(e);
+  }
+  return INITIAL_CANADA_DOCUMENTS;
 }
 
 export function saveCanadaDocuments(docs: CanadaDocumentRecord[]): void {
   try {
     localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(docs));
-    window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: docs }));
+      window.dispatchEvent(new Event('storage'));
+    }
   } catch (err) {
     console.error('Failed to save Canada documents to localStorage', err);
   }
+}
+
+export function deleteAllCanadaDocuments(): void {
+  saveCanadaDocuments([]);
 }
 
 export function addCanadaDocument(doc: Omit<CanadaDocumentRecord, 'id' | 'createdAt'>): CanadaDocumentRecord {
@@ -241,7 +252,7 @@ export function searchCanadaDocument(
   query: string,
   categoryType?: CanadaMenuItemConfig['id']
 ): CanadaDocumentRecord | null {
-  const clean = query.trim().toLowerCase().replace(/[-\s/]/g, '');
+  const clean = query.trim().toLowerCase().replace(/[-\s_./#:]/g, '');
   if (!clean) return null;
 
   const docs = getStoredCanadaDocuments();
@@ -269,7 +280,7 @@ export function searchCanadaDocument(
 function matchesCanadaRecord(d: CanadaDocumentRecord, clean: string, rawQuery: string): boolean {
   const matchesField = (val?: string) => {
     if (!val) return false;
-    const cleanVal = val.toLowerCase().replace(/[-\s/]/g, '');
+    const cleanVal = val.toLowerCase().replace(/[-\s_./#:]/g, '');
     return cleanVal.includes(clean) || clean.includes(cleanVal);
   };
 
@@ -283,7 +294,12 @@ function matchesCanadaRecord(d: CanadaDocumentRecord, clean: string, rawQuery: s
     matchesField(d.lmiaNumber) ||
     matchesField(d.passportNumber) ||
     matchesField(d.id) ||
-    d.candidateName.toLowerCase().includes(rawQuery.toLowerCase())
+    matchesField(d.mainTitle) ||
+    matchesField(d.subMenu) ||
+    (Boolean(d.candidateName) && (
+      d.candidateName.toLowerCase().includes(rawQuery.toLowerCase()) ||
+      d.candidateName.toLowerCase().replace(/[-\s_./#:]/g, '').includes(clean)
+    ))
   );
 }
 

@@ -35,6 +35,11 @@ import {
 import { useAdminData } from '../../context/AdminDataContext';
 import { NewsItem, AdminPost, AttachedDoc, PostCategory } from '../../types';
 import { FullPdfDocumentViewer, postToUnifiedDoc } from '../FullPdfDocumentViewer';
+import {
+  getStoredAdminPosts,
+  saveStoredAdminPosts,
+  deleteAllStoredAdminPosts,
+} from '../../utils/postsStorage';
 
 interface AdminPostsManagerProps {
   subView: 'all' | 'new' | 'categories';
@@ -83,7 +88,6 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   const { news, addNews, updateNews, deleteNews } = useAdminData();
 
   // Local storage keys
-  const POSTS_STORAGE_KEY = 'bhp_admin_posts_v2';
   const CATEGORIES_STORAGE_KEY = 'bhp_admin_post_categories_v2';
 
   // Initialize Categories
@@ -105,60 +109,21 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     }
   }, [categories]);
 
-  // Initialize Posts
-  const [posts, setPosts] = useState<AdminPost[]>(() => {
-    try {
-      const saved = localStorage.getItem(POSTS_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error(e);
-    }
+  // Initialize Posts from centralized storage
+  const [posts, setPosts] = useState<AdminPost[]>(() => getStoredAdminPosts());
 
-    // Default seed based on initial news
-    return news.map((item, idx) => ({
-      id: item.id || `post-${idx + 1}`,
-      title: item.title,
-      refNumber: `BHP-DOC-2025-${String(idx + 101).padStart(4, '0')}`,
-      content:
-        'BHP continues to advance its global operational priorities, delivering essential resources to empower economic development and clean energy transition across five continents.',
-      category: idx % 2 === 0 ? 'Mining & Resources' : 'Sustainability & ESG',
-      author: 'BHP Corporate Media',
-      date: item.date || '2025-01-15',
-      status: 'Published',
-      imageUrl:
-        item.imageUrl ||
-        'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
-      galleryImages: [
-        item.imageUrl ||
-          'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
-        'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80',
-      ],
-      attachedDocuments: [
-        {
-          id: `doc-${idx}-1`,
-          name: `BHP_Official_Report_${idx + 1}.pdf`,
-          size: '1.42 MB',
-          type: 'pdf',
-          dataUrl: '#',
-          uploadDate: '2025-01-15',
-        },
-      ],
-      readTime: item.readTime || '4 min read',
-      badges: item.badges && item.badges.length > 0 ? item.badges : ['PRESS RELEASE'],
-    }));
-  });
-
-  // Save posts to storage on change
+  // Subscribe to real-time posts changes
   useEffect(() => {
-    try {
-      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: posts }));
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }, [posts]);
+    const handleSync = () => {
+      setPosts(getStoredAdminPosts());
+    };
+    window.addEventListener('bhp_posts_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('bhp_posts_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
 
   // Filter and Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -470,7 +435,9 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     };
 
     if (editingPostId) {
-      setPosts((prev) => prev.map((p) => (p.id === editingPostId ? postToSave : p)));
+      const updated = posts.map((p) => (p.id === editingPostId ? postToSave : p));
+      setPosts(updated);
+      saveStoredAdminPosts(updated);
       showToast(`Post "${postToSave.title}" updated successfully.`);
 
       // Sync with News in AdminDataContext if published
@@ -494,7 +461,9 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
         deleteNews(postToSave.id);
       }
     } else {
-      setPosts((prev) => [postToSave, ...prev]);
+      const updated = [postToSave, ...posts];
+      setPosts(updated);
+      saveStoredAdminPosts(updated);
       showToast(`Post published! Searchable by ID/Ref: "${postToSave.refNumber}"`);
 
       if (postToSave.status === 'Published') {
@@ -516,9 +485,21 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
 
   // Delete Post
   const handleDeletePost = (id: string, title: string) => {
-    setPosts((prev) => prev.filter((p) => p.id !== id));
+    const updated = posts.filter((p) => p.id !== id);
+    setPosts(updated);
+    saveStoredAdminPosts(updated);
     deleteNews(id);
     showToast(`Post "${title}" deleted.`);
+  };
+
+  // Delete All Posts
+  const handleDeleteAllPosts = () => {
+    if (window.confirm('Are you sure you want to delete all posts? All items will be permanently removed.')) {
+      deleteAllStoredAdminPosts();
+      setPosts([]);
+      posts.forEach((p) => deleteNews(p.id));
+      showToast('All posts removed successfully.');
+    }
   };
 
   // Add Category
@@ -1340,6 +1321,18 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                 <option value="Published">Published Only</option>
                 <option value="Draft">Drafts Only</option>
               </select>
+
+              {posts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteAllPosts}
+                  className="px-3 py-2 bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
+                  title="Delete all posts completely"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  <span>Delete All Posts (সব মুছুন)</span>
+                </button>
+              )}
             </div>
           </div>
 

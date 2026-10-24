@@ -148,18 +148,15 @@ All supporting biometric documents, police clearances, and medical certification
  * Retrieve all Admin Posts from LocalStorage (or in-memory cache / initial defaults)
  */
 export const getStoredAdminPosts = (): AdminPost[] => {
-  if (typeof window !== 'undefined' && (window as any).__bhp_admin_posts_cache) {
-    const cached = (window as any).__bhp_admin_posts_cache;
-    if (Array.isArray(cached) && cached.length > 0) {
-      return cached;
-    }
+  if (typeof window !== 'undefined' && Array.isArray((window as any).__bhp_admin_posts_cache)) {
+    return (window as any).__bhp_admin_posts_cache;
   }
 
   try {
     const raw = localStorage.getItem(POSTS_STORAGE_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         if (typeof window !== 'undefined') {
           (window as any).__bhp_admin_posts_cache = parsed;
         }
@@ -169,9 +166,13 @@ export const getStoredAdminPosts = (): AdminPost[] => {
   } catch (err) {
     console.error('Failed to read admin posts from localStorage:', err);
   }
-  // Store and return initial defaults if nothing saved yet
+
+  // Store and return initial defaults only if no key has ever been set
   try {
     localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(INITIAL_DEFAULT_POSTS));
+    if (typeof window !== 'undefined') {
+      (window as any).__bhp_admin_posts_cache = INITIAL_DEFAULT_POSTS;
+    }
   } catch (e) {
     console.error(e);
   }
@@ -216,6 +217,13 @@ export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
 };
 
 /**
+ * Delete all stored Admin Posts completely
+ */
+export const deleteAllStoredAdminPosts = (): void => {
+  saveStoredAdminPosts([]);
+};
+
+/**
  * Find an Admin Post matching user's query (by Reference Number, ID, Passport, Candidate Name, or Title)
  */
 export const findAdminPostByQuery = (
@@ -227,7 +235,7 @@ export const findAdminPostByQuery = (
   const allPosts = postsPool || getStoredAdminPosts();
 
   const queryTrimmed = rawQuery.trim().toLowerCase();
-  const cleanQuery = queryTrimmed.replace(/[-\s_./]/g, '');
+  const cleanQuery = queryTrimmed.replace(/[-\s_./#:]/g, '');
 
   if (!cleanQuery) return null;
 

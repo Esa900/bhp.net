@@ -118,7 +118,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
 
     setTimeout(() => {
       // 1. Try matching in Canada documents storage first
-      const foundCa = searchCanadaDocument(term, currentConfig.id);
+      const foundCa = searchCanadaDocument(term, currentConfig.id) || searchCanadaDocument(term);
       if (foundCa) {
         setMatchedRecord(foundCa);
         setMatchedUniversalDoc(canadaRecordToUnifiedDoc(foundCa));
