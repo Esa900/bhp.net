@@ -17,8 +17,9 @@ import {
   Briefcase,
   Globe,
   Award,
-  ChevronDown,
   Layers,
+  User,
+  Hash,
 } from 'lucide-react';
 import { AdminPost, AttachedDoc } from '../types';
 import { CanadaDocumentRecord } from '../types/canada';
@@ -71,8 +72,8 @@ export function postToUnifiedDoc(
       if (!alreadyIncluded && imgUrl) {
         attached.push({
           id: `gallery-doc-${post.id}-${idx}`,
-          name: `Client Document Page ${attached.length + 1}`,
-          size: 'Official Document Copy',
+          name: `Attached Document Page ${attached.length + 1}`,
+          size: 'Official Image Record',
           type: 'image',
           dataUrl: imgUrl,
           uploadDate: post.date || new Date().toISOString().split('T')[0],
@@ -87,19 +88,19 @@ export function postToUnifiedDoc(
     title: post.title,
     referenceNumber: post.refNumber,
     category: post.category,
-    candidateName: post.candidateName || 'Mohammad Tanvir Ahmed',
-    passportNumber: post.passportNumber || 'A09482103',
-    nationality: post.nationality || 'Bangladeshi',
-    dateOfBirth: post.dateOfBirth || '1993-01-01',
-    jobTitle: post.jobTitle || 'Senior Mining / Maintenance Specialist',
-    employerName: post.employerName || 'BHP Group Operations (Australia)',
-    workLocation: post.workLocation || 'Perth, WA, Australia',
-    salaryOrWage: post.salaryPackage || '$135,000 AUD / Year',
-    visaSubclassOrCategory: post.visaSubclass || 'Subclass 482 - TSS (Medium-Term Stream)',
+    candidateName: post.candidateName || '',
+    passportNumber: post.passportNumber || '',
+    nationality: post.nationality || '',
+    dateOfBirth: post.dateOfBirth || '',
+    jobTitle: post.jobTitle || '',
+    employerName: post.employerName || 'BHP Operations',
+    workLocation: post.workLocation || '',
+    salaryOrWage: post.salaryPackage || '',
+    visaSubclassOrCategory: post.visaSubclass || '',
     status: post.status === 'Published' ? 'Verified & Active' : post.status,
     issueDate: post.issueDate || post.date || new Date().toISOString().split('T')[0],
-    expiryDate: post.expiryDate || '2028-12-31',
-    verificationId: post.verificationIdNo || `VRF-AU-${post.refNumber.replace(/[^0-9]/g, '').slice(-5) || '92841'}`,
+    expiryDate: post.expiryDate || '',
+    verificationId: post.verificationIdNo || `VRF-${post.refNumber.replace(/[^0-9]/g, '').slice(-5) || '92841'}`,
     descriptionOrNotes: post.content,
     featuredImageUrl: post.candidatePhotoUrl || post.imageUrl,
     galleryImages: post.galleryImages,
@@ -117,7 +118,7 @@ export function canadaRecordToUnifiedDoc(rec: CanadaDocumentRecord): UnifiedDocu
       rec.documentFileUrl.startsWith('data:application/pdf');
     attachedDocs.push({
       id: `ca-attached-${rec.id}`,
-      name: rec.documentFileName || 'Canada Official Document Page 1.pdf',
+      name: rec.documentFileName || 'Canada Official Document.pdf',
       size: 'Official IRCC Document',
       type: isPdf ? 'pdf' : 'image',
       dataUrl: rec.documentFileUrl,
@@ -139,7 +140,7 @@ export function canadaRecordToUnifiedDoc(rec: CanadaDocumentRecord): UnifiedDocu
     employerName: rec.employerName,
     workLocation: rec.workLocation,
     salaryOrWage: rec.hourlyWageOrSalary || '$42.50 CAD / hr',
-    visaSubclassOrCategory: rec.officialDocNumber || rec.lmiaNumber || 'IRCC Work Permit - GSS Stream A',
+    visaSubclassOrCategory: rec.officialDocNumber || rec.lmiaNumber || 'IRCC Work Permit',
     status: rec.status,
     issueDate: rec.issueDate,
     expiryDate: rec.expiryDate,
@@ -193,9 +194,8 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [copiedRef, setCopiedRef] = useState<boolean>(false);
 
-  const isAustralia = document.country === 'australia';
-  const totalUploadedDocs = document.attachedDocuments ? document.attachedDocuments.length : 0;
-  const totalSerialCount = 1 + totalUploadedDocs;
+  const hasAttachedDocs = Boolean(document.attachedDocuments && document.attachedDocuments.length > 0);
+  const hasCandidateDetails = Boolean(document.candidateName || document.passportNumber);
 
   // Handle ESC key to exit fullscreen
   useEffect(() => {
@@ -220,30 +220,24 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
 
   return (
     <div
-      className={`w-full flex flex-col space-y-6 ${
+      className={`w-full flex flex-col space-y-6 select-none ${
         isFullScreen
-          ? 'fixed inset-0 z-[100] bg-[#0A0C10]/98 backdrop-blur-md p-4 sm:p-6 overflow-y-auto select-none animate-in fade-in duration-150'
+          ? 'fixed inset-0 z-[100] bg-[#0A0C10]/98 backdrop-blur-md p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150'
           : ''
       }`}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* =========================================================================
-          TOP ACTION & CONTROL TOOLBAR (PDF Viewer Header - NO DOWNLOAD OPTION)
+          TOP ACTION & CONTROL TOOLBAR (CLEAN, NO DOWNLOAD OPTION)
          ========================================================================= */}
       <div
         className={`bg-[#181A20] p-3 sm:p-4 rounded-2xl border border-[#2B2F38] flex flex-wrap items-center justify-between gap-3 shadow-lg no-print ${
           isFullScreen ? 'sticky top-0 z-40 shadow-2xl backdrop-blur-md bg-[#181A20]/95' : ''
         }`}
       >
-        {/* Left: Status & Country Indicator */}
+        {/* Left: Status & Reference Indicator */}
         <div className="flex items-center gap-3">
-          <div
-            className={`p-2.5 rounded-xl border flex items-center justify-center shrink-0 ${
-              isAustralia
-                ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
-                : 'bg-red-500/15 border-red-500/30 text-red-400'
-            }`}
-          >
+          <div className="p-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center shrink-0">
             <ShieldCheck className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
@@ -252,17 +246,8 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 Verified Official Document Record
               </span>
-              <span
-                className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${
-                  isAustralia
-                    ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                    : 'bg-red-500/20 text-red-300 border-red-500/30'
-                }`}
-              >
-                {isAustralia ? 'Australia Commonwealth DVS' : 'Canada IRCC DVS'}
-              </span>
-              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                Total Documents: {totalSerialCount} (Serial by Serial Open)
+              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-[#202532] text-gray-300 border border-[#2D3342]">
+                {document.category}
               </span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
@@ -282,9 +267,8 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
           </div>
         </div>
 
-        {/* Right: Controls (Zoom, Fullscreen, Search Another - NO DOWNLOAD) */}
+        {/* Right: Controls (Zoom, Fullscreen, Search Another) */}
         <div className="flex flex-wrap items-center gap-2">
-
           {/* Zoom Controls */}
           <div className="hidden sm:flex items-center gap-1 bg-[#111317] p-1 rounded-xl border border-[#2B2F38]">
             <button
@@ -355,73 +339,221 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
       </div>
 
       {/* =========================================================================
-          SERIAL QUICK JUMP BAR
-          Shows all open documents in serial order downwards
+          PRISTINE EXECUTIVE DOSSIER CARD (CLEAN & COMPLETE OVERVIEW)
          ========================================================================= */}
-      <div className="bg-[#12141A] p-3 rounded-xl border border-[#232732] flex items-center gap-2 overflow-x-auto no-print">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 shrink-0 flex items-center gap-1">
-          <Layers className="w-3.5 h-3.5 text-[#F25C05]" />
-          <span>Serial Jump:</span>
-        </span>
-
-        {/* Serial 1: Certificate */}
-        <button
-          type="button"
-          onClick={() => {
-            const el = document.getElementById('official-certificate-sheet');
-            el?.scrollIntoView({ behavior: 'smooth' });
-          }}
-          className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 bg-[#F25C05] text-white shadow-xs"
-        >
-          <FileText className="w-3.5 h-3.5" />
-          <span>Serial 1: Official Certificate (অফিসিয়াল সনদ)</span>
-        </button>
-
-        {/* Serial 2+: Client Uploaded Documents */}
-        {document.attachedDocuments &&
-          document.attachedDocuments.map((doc, idx) => (
-            <button
-              key={doc.id}
-              type="button"
-              onClick={() => {
-                const el = document.getElementById(`attached-doc-${doc.id}`);
-                el?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 bg-[#1C1F27] hover:bg-orange-600 text-gray-300 hover:text-white border border-[#2D3342]"
-            >
-              <Paperclip className="w-3.5 h-3.5 text-orange-400" />
-              <span className="truncate max-w-[190px]">
-                Serial {idx + 2}: {doc.name || `Client Document #${idx + 1}`}
+      <div className="w-full max-w-[900px] mx-auto bg-[#14171E] border border-[#272B36] rounded-2xl p-5 sm:p-7 shadow-xl space-y-4">
+        {/* Title & Status */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#232733] pb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-mono text-[11px] font-black uppercase shadow-xs">
+                #{document.referenceNumber}
               </span>
-            </button>
-          ))}
+              <span className="px-2.5 py-0.5 rounded-md bg-[#1F232D] text-gray-300 text-xs font-bold border border-[#2D3342]">
+                {document.category}
+              </span>
+              {document.issueDate && (
+                <span className="text-xs text-gray-400 flex items-center gap-1 font-mono">
+                  <Calendar className="w-3.5 h-3.5" />
+                  {document.issueDate}
+                </span>
+              )}
+            </div>
+            <h2 className="text-lg sm:text-2xl font-black text-white tracking-tight leading-snug">
+              {document.title}
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="px-3 py-1 rounded-full text-xs font-extrabold uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-xs">
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{document.status || 'Verified & Active'}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Client / Candidate Details Bar (ONLY IF PROVIDED) */}
+        {hasCandidateDetails && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#0D0F14] p-3.5 rounded-xl border border-[#1E222D] text-xs">
+            {document.candidateName && (
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Client / Candidate
+                </span>
+                <strong className="text-white text-sm font-bold block mt-0.5 truncate">
+                  {document.candidateName}
+                </strong>
+              </div>
+            )}
+
+            {document.passportNumber && (
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Passport Number
+                </span>
+                <span className="text-[#FF8E4D] font-mono font-bold text-sm block mt-0.5">
+                  {document.passportNumber}
+                </span>
+              </div>
+            )}
+
+            {document.jobTitle && (
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Designation / Role
+                </span>
+                <span className="text-gray-200 font-semibold block mt-0.5 truncate">
+                  {document.jobTitle}
+                </span>
+              </div>
+            )}
+
+            {document.workLocation && (
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Location
+                </span>
+                <span className="text-gray-300 block mt-0.5 truncate">
+                  {document.workLocation}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Post Description / Statement (Written by Admin) */}
+        {document.descriptionOrNotes && (
+          <div className="p-4 rounded-xl bg-[#0D0F14] border border-[#1E222D] text-xs sm:text-sm text-gray-200 leading-relaxed whitespace-pre-line font-normal">
+            {document.descriptionOrNotes}
+          </div>
+        )}
+
+        {/* Author / Verification Footer Strip */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-[11px] text-gray-400 font-mono">
+          <span>Official BHP Verified Archive · DVS Key: {document.verificationId || 'VRF-REG-2026'}</span>
+          <span>{document.author || 'BHP Global Operations Desk'}</span>
+        </div>
       </div>
 
       {/* =========================================================================
-          MAIN DOCUMENT STREAM (SERIAL BY SERIAL, OPEN STACKED DOWNWARDS)
+          OPEN CLIENT DOCUMENTS STREAM (SERIAL BY SERIAL, OPEN STACKED DOWNWARDS)
+          "nice serial by sereal open obosthay ase pasa pasi na nicer dike ektar por ekta asbi"
          ========================================================================= */}
-      <div className="w-full flex flex-col items-center space-y-10">
+      {hasAttachedDocs && (
+        <div className="w-full flex flex-col items-center space-y-8">
+          {document.attachedDocuments!.map((doc, idx) => {
+            const serialNum = idx + 1;
+            const formattedSerial = serialNum < 10 ? `0${serialNum}` : `${serialNum}`;
+            const isPdf =
+              doc.dataUrl &&
+              (doc.dataUrl.startsWith('data:application/pdf') ||
+                doc.name.toLowerCase().endsWith('.pdf') ||
+                doc.type === 'pdf');
 
-        {/* -----------------------------------------------------------------------
-            SERIAL 1: THE OFFICIAL FULL PDF CERTIFICATE & VERIFICATION SHEET
-           ----------------------------------------------------------------------- */}
+            return (
+              <div
+                key={doc.id}
+                id={`attached-doc-${doc.id}`}
+                className="w-full max-w-[900px] flex flex-col items-center"
+              >
+                {/* Serial Header Strip */}
+                <div className="w-full mb-2 flex items-center justify-between px-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-black uppercase text-[11px] shadow-xs">
+                      Document {formattedSerial}
+                    </span>
+                    <span className="text-white font-bold truncate max-w-sm sm:max-w-md">
+                      {doc.name || `Uploaded Document #${idx + 1}`}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20 font-bold">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Verified & Authenticated</span>
+                  </div>
+                </div>
+
+                {/* Document Container Card */}
+                <div className="w-full bg-[#181A20] rounded-2xl border-2 border-[#2B2F38] shadow-2xl overflow-hidden p-4 sm:p-6 space-y-4">
+                  {/* Document Info Bar (CLEAN, NO DOWNLOAD BUTTON) */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2C303B] pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-xl bg-orange-500/15 text-[#F25C05] border border-[#F25C05]/30 shrink-0">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm sm:text-base font-bold text-white truncate max-w-md">
+                          {doc.name || `Uploaded Document #${idx + 1}`}
+                        </h4>
+                        <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
+                          <span className="uppercase font-mono text-emerald-400 font-bold">
+                            {isPdf ? 'OFFICIAL CLIENT PDF' : 'OFFICIAL SCANNED RECORD'}
+                          </span>
+                          <span>•</span>
+                          <span>{doc.size || 'Verified Record'}</span>
+                          <span>•</span>
+                          <span className="text-orange-300 font-mono">Ref: {document.referenceNumber}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-lg bg-[#111317] border border-[#272B35] text-[11px] text-gray-400 font-medium flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>Official Record</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Open Document Render Frame (NO DOWNLOAD CONTROLS) */}
+                  <div className="w-full min-h-[650px] sm:min-h-[850px] rounded-xl overflow-hidden bg-[#0F1115] border border-[#262A34] flex items-center justify-center relative select-none">
+                    {isPdf ? (
+                      <object
+                        data={`${doc.dataUrl}#toolbar=0&navpanes=0`}
+                        type="application/pdf"
+                        className="w-full h-[650px] sm:h-[850px] rounded-xl border-0 bg-white"
+                      >
+                        <iframe
+                          src={`${doc.dataUrl}#toolbar=0&navpanes=0`}
+                          title={doc.name}
+                          className="w-full h-full border-0 bg-white"
+                        />
+                      </object>
+                    ) : doc.dataUrl && (doc.dataUrl.startsWith('data:image') || doc.type === 'image') ? (
+                      <div className="p-4 flex items-center justify-center w-full max-h-[900px] overflow-auto">
+                        <img
+                          src={doc.dataUrl}
+                          alt={doc.name}
+                          onContextMenu={(e) => e.preventDefault()}
+                          style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
+                          className="max-w-full h-auto rounded-lg shadow-2xl transition-transform pointer-events-auto select-none"
+                        />
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center space-y-3">
+                        <FileText className="w-12 h-12 text-gray-500 mx-auto" />
+                        <p className="text-sm font-semibold text-white">
+                          Verified Document ({doc.name})
+                        </p>
+                        <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                          Official document verified under Reference No: {document.referenceNumber}.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* =========================================================================
+          IF NO ATTACHED DOCUMENTS: RENDER OFFICIAL VERIFICATION CERTIFICATE SHEET
+          (Standard clearance format with clean typography, seals, QR code)
+         ========================================================================= */}
+      {!hasAttachedDocs && (
         <div id="official-certificate-sheet" className="w-full flex flex-col items-center relative">
-          {/* Serial Label */}
-          <div className="w-full max-w-[850px] mb-2 flex items-center justify-between px-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-black uppercase text-[11px] shadow-xs">
-                Serial 01
-              </span>
-              <span className="text-gray-300 font-bold">
-                Official Verification Certificate & Clearance Dossier
-              </span>
-            </div>
-            <span className="text-emerald-400 font-semibold flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Open & Authenticated</span>
-            </span>
-          </div>
-
           <div
             id="printable-pdf-document"
             onContextMenu={(e) => e.preventDefault()}
@@ -434,7 +566,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
             {/* Watermark Pattern */}
             <div className="absolute inset-0 pointer-events-none opacity-[0.03] flex items-center justify-center select-none overflow-hidden">
               <div className="transform -rotate-45 text-center font-black text-gray-900 text-6xl sm:text-7xl tracking-widest uppercase">
-                {isAustralia ? 'COMMONWEALTH OF AUSTRALIA • BHP VERIFIED' : 'GOVERNMENT OF CANADA • IRCC VERIFIED'}
+                {document.country === 'canada' ? 'GOVERNMENT OF CANADA • IRCC VERIFIED' : 'BHP GLOBAL OPERATIONS • OFFICIAL VERIFIED'}
               </div>
             </div>
 
@@ -444,18 +576,18 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-6 border-b-2 border-[#1E293B]">
                 <div className="flex items-center gap-4 text-center sm:text-left">
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-[#0F172A] to-[#1E293B] text-white flex flex-col items-center justify-center p-2 shadow-md border border-[#334155] shrink-0">
-                    {isAustralia ? (
-                      <>
-                        <Award className="w-7 h-7 sm:w-9 sm:h-9 text-amber-400" />
-                        <span className="text-[9px] font-black uppercase tracking-tighter text-amber-300 mt-0.5">
-                          AUSTRALIA
-                        </span>
-                      </>
-                    ) : (
+                    {document.country === 'canada' ? (
                       <>
                         <Globe className="w-7 h-7 sm:w-9 sm:h-9 text-red-400" />
                         <span className="text-[9px] font-black uppercase tracking-tighter text-red-300 mt-0.5">
                           CANADA
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Award className="w-7 h-7 sm:w-9 sm:h-9 text-amber-400" />
+                        <span className="text-[9px] font-black uppercase tracking-tighter text-amber-300 mt-0.5">
+                          OFFICIAL
                         </span>
                       </>
                     )}
@@ -463,14 +595,12 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
 
                   <div>
                     <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-[#475569] block">
-                      {isAustralia
-                        ? 'COMMONWEALTH OF AUSTRALIA · DEPARTMENT OF HOME AFFAIRS'
-                        : 'GOVERNMENT OF CANADA · CITIZENSHIP & IMMIGRATION CANADA (IRCC)'}
+                      {document.country === 'canada'
+                        ? 'GOVERNMENT OF CANADA · CITIZENSHIP & IMMIGRATION CANADA (IRCC)'
+                        : 'BHP GROUP LIMITED · GLOBAL CORPORATE REGISTRY'}
                     </span>
                     <h1 className="text-lg sm:text-2xl font-black tracking-tight text-[#0F172A] uppercase mt-0.5 leading-tight">
-                      {isAustralia
-                        ? 'OFFICIAL VISA & EMPLOYMENT SPONSORSHIP CLEARANCE'
-                        : 'OFFICIAL WORK PERMIT & EMPLOYMENT AUTHORIZATION DOSSIER'}
+                      {document.title}
                     </h1>
                     <p className="text-[11px] font-bold text-[#64748B] mt-0.5">
                       BHP Group Limited Global Corporate Documentation & Verification Registry
@@ -517,148 +647,49 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                 </div>
               </div>
 
-              {/* Section 1: Candidate Identification */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between pb-1 border-b border-gray-300">
-                  <span className="text-xs font-black uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5">
-                    <Building className="w-3.5 h-3.5 text-[#0F172A]" />
-                    <span>Section 1: Candidate & Identification Credentials (প্রার্থীর তথ্য)</span>
-                  </span>
-                  <span className="text-[10px] font-bold text-gray-500 uppercase">
-                    Biometric & Passport Endorsed
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs">
-                  <div className="sm:col-span-1 flex flex-col items-center justify-center p-2 rounded-lg border border-gray-300 bg-gray-50 relative overflow-hidden">
-                    <img
-                      src={
-                        document.featuredImageUrl ||
-                        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80'
-                      }
-                      alt={document.candidateName}
-                      className="w-24 h-28 object-cover rounded-md border border-gray-300 shadow-sm"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80';
-                      }}
-                    />
-                    <div className="absolute bottom-1 text-center bg-emerald-600/90 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded shadow">
-                      VERIFIED HOLDER
-                    </div>
+              {/* Candidate Particulars (IF SPECIFIED) */}
+              {hasCandidateDetails && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between pb-1 border-b border-gray-300">
+                    <span className="text-xs font-black uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-[#0F172A]" />
+                      <span>Candidate & Identity Particulars</span>
+                    </span>
                   </div>
 
-                  <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="p-2.5 bg-[#F8FAFC] rounded-lg border border-gray-200">
-                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Candidate Legal Name</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-[#F8FAFC] p-4 rounded-xl border border-gray-200">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Candidate Name</span>
                       <strong className="text-sm font-black text-[#0F172A] block mt-0.5">
                         {document.candidateName}
                       </strong>
                     </div>
 
-                    <div className="p-2.5 bg-[#F8FAFC] rounded-lg border border-gray-200">
-                      <span className="text-[10px] uppercase font-bold text-gray-500 block flex items-center gap-1">
-                        <Lock className="w-3 h-3 text-gray-400" />
-                        Passport Identification No
-                      </span>
-                      <strong className="text-sm font-mono font-black text-[#0F172A] block mt-0.5 tracking-wider">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Passport Number</span>
+                      <strong className="text-sm font-mono font-black text-[#0F172A] block mt-0.5">
                         {document.passportNumber}
                       </strong>
                     </div>
 
-                    <div className="p-2.5 bg-[#F8FAFC] rounded-lg border border-gray-200">
-                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Nationality</span>
-                      <span className="font-bold text-[#1E293B] block mt-0.5">
-                        {document.nationality}
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-[#F8FAFC] rounded-lg border border-gray-200">
-                      <span className="text-[10px] uppercase font-bold text-gray-500 block">Date of Birth</span>
-                      <span className="font-bold text-[#1E293B] font-mono block mt-0.5">
-                        {document.dateOfBirth || '1993-01-01'}
-                      </span>
-                    </div>
+                    {document.nationality && (
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-gray-500 block">Nationality</span>
+                        <span className="font-bold text-[#1E293B] block mt-0.5">{document.nationality}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Section 2: Employment Particulars */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between pb-1 border-b border-gray-300">
-                  <span className="text-xs font-black uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5">
-                    <Briefcase className="w-3.5 h-3.5 text-[#0F172A]" />
-                    <span>Section 2: Sponsoring Employer & Work Entitlement (কাজের অনুমতি ও নিয়োগ)</span>
-                  </span>
-                  <span className="text-[10px] font-bold text-gray-500 uppercase">
-                    Full Work Rights Approved
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-[#F8FAFC] p-4 rounded-xl border border-gray-200">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Designated Job Title</span>
-                    <strong className="text-sm font-black text-[#0F172A] block mt-0.5">
-                      {document.jobTitle}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">Sponsoring Employer</span>
-                    <strong className="text-sm font-black text-[#0F172A] block mt-0.5">
-                      {document.employerName}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block flex items-center gap-1">
-                      <MapPin className="w-3 h-3 text-gray-400" />
-                      Work Location
-                    </span>
-                    <span className="font-bold text-[#1E293B] block mt-0.5">
-                      {document.workLocation}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">
-                      Visa Subclass / Category / LMIA
-                    </span>
-                    <span className="font-bold text-[#0F172A] block mt-0.5">
-                      {document.visaSubclassOrCategory || (isAustralia ? 'Subclass 482 - TSS' : 'GSS Stream A')}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block">
-                      Approved Remuneration / Wage
-                    </span>
-                    <span className="font-bold font-mono text-emerald-700 block mt-0.5">
-                      {document.salaryOrWage || (isAustralia ? '$135,000 AUD / Year' : '$42.50 CAD / hr')}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-gray-500 block flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-gray-400" />
-                      Validity & Expiry Date
-                    </span>
-                    <span className="font-mono font-black text-[#0F172A] block mt-0.5">
-                      {document.issueDate} to {document.expiryDate}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Statutory Clearance Directive */}
+              {/* Description Directive */}
               {document.descriptionOrNotes && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between pb-1 border-b border-gray-300">
                     <span className="text-xs font-black uppercase tracking-wider text-[#1E293B] flex items-center gap-1.5">
                       <FileText className="w-3.5 h-3.5 text-[#0F172A]" />
-                      <span>Section 3: Statutory Clearance Directive & Conditions (অনুমোদনের বিবরণ)</span>
+                      <span>Document Details & Statement</span>
                     </span>
-                    <span className="text-[10px] font-mono text-gray-500">OFFICIAL LEGAL RECORD</span>
                   </div>
 
                   <div className="bg-white p-4 rounded-xl border border-gray-200 text-xs text-[#1E293B] leading-relaxed whitespace-pre-line font-sans shadow-2xs">
@@ -683,7 +714,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                       OFFICIALLY CERTIFIED & REGISTERED
                     </span>
                     <p className="text-[10px] text-gray-600 max-w-xs mt-0.5 leading-tight">
-                      This document has been verified against the Commonwealth of Australia / IRCC registry and BHP Global Operations Database.
+                      This record has been officially verified and archived in the BHP Global Registry.
                     </p>
                   </div>
                 </div>
@@ -712,121 +743,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
             </div>
           </div>
         </div>
-
-        {/* -----------------------------------------------------------------------
-            SERIAL 2+: CLIENT UPLOADED DOCUMENTS (DISPLAYED OPEN IN SERIAL ORDER DOWNWARDS)
-            "nice serial by sereal open obosthay ase pasa pasi na nicer dike ektar por ekta asbi"
-           ----------------------------------------------------------------------- */}
-        {document.attachedDocuments && document.attachedDocuments.length > 0 && (
-          <div className="w-full flex flex-col items-center space-y-10">
-            {document.attachedDocuments.map((doc, idx) => {
-              const serialNum = idx + 2;
-              const formattedSerial = serialNum < 10 ? `0${serialNum}` : `${serialNum}`;
-              const isPdf =
-                doc.dataUrl &&
-                (doc.dataUrl.startsWith('data:application/pdf') ||
-                  doc.name.toLowerCase().endsWith('.pdf') ||
-                  doc.type === 'pdf');
-
-              return (
-                <div
-                  key={doc.id}
-                  id={`attached-doc-${doc.id}`}
-                  className="w-full max-w-[850px] flex flex-col items-center"
-                >
-                  {/* Serial Header Strip */}
-                  <div className="w-full mb-2 flex items-center justify-between px-2 text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-md bg-blue-600 text-white font-black uppercase text-[11px] shadow-xs">
-                        Serial {formattedSerial}
-                      </span>
-                      <span className="text-white font-bold truncate max-w-sm">
-                        {doc.name || `Client Uploaded Document Page ${idx + 1}`}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20 font-bold">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Verified & Authenticated</span>
-                    </div>
-                  </div>
-
-                  {/* Document Container Card */}
-                  <div className="w-full bg-[#181A20] rounded-2xl border-2 border-[#2B2F38] shadow-2xl overflow-hidden p-4 sm:p-6 space-y-4">
-                    {/* Document Info Bar (NO DOWNLOAD BUTTON) */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2C303B] pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-xl bg-orange-500/15 text-[#F25C05] border border-[#F25C05]/30 shrink-0">
-                          <FileText className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm sm:text-base font-bold text-white truncate max-w-md">
-                            {doc.name || `Uploaded Document #${idx + 1}`}
-                          </h4>
-                          <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
-                            <span className="uppercase font-mono text-emerald-400 font-bold">
-                              {isPdf ? 'OFFICIAL CLIENT PDF' : 'OFFICIAL SCANNED DOCUMENT'}
-                            </span>
-                            <span>•</span>
-                            <span>{doc.size || 'Verified Record'}</span>
-                            <span>•</span>
-                            <span className="text-orange-300 font-mono">Ref: {document.referenceNumber}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="px-3 py-1 rounded-lg bg-[#111317] border border-[#272B35] text-[11px] text-gray-400 font-medium flex items-center gap-1">
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          <span>Official Record</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Open Document Render Frame (NO DOWNLOAD CONTROLS) */}
-                    <div className="w-full min-h-[650px] sm:min-h-[850px] rounded-xl overflow-hidden bg-[#0F1115] border border-[#262A34] flex items-center justify-center relative select-none">
-                      {isPdf ? (
-                        <object
-                          data={`${doc.dataUrl}#toolbar=0&navpanes=0`}
-                          type="application/pdf"
-                          className="w-full h-[650px] sm:h-[850px] rounded-xl border-0 bg-white"
-                        >
-                          <iframe
-                            src={`${doc.dataUrl}#toolbar=0&navpanes=0`}
-                            title={doc.name}
-                            className="w-full h-full border-0 bg-white"
-                          />
-                        </object>
-                      ) : doc.dataUrl && (doc.dataUrl.startsWith('data:image') || doc.type === 'image') ? (
-                        <div className="p-4 flex items-center justify-center w-full max-h-[900px] overflow-auto">
-                          <img
-                            src={doc.dataUrl}
-                            alt={doc.name}
-                            onContextMenu={(e) => e.preventDefault()}
-                            style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
-                            className="max-w-full h-auto rounded-lg shadow-2xl transition-transform pointer-events-auto select-none"
-                          />
-                        </div>
-                      ) : (
-                        <div className="p-8 text-center space-y-3">
-                          <FileText className="w-12 h-12 text-gray-500 mx-auto" />
-                          <p className="text-sm font-semibold text-white">
-                            Verified Attachment ({doc.name})
-                          </p>
-                          <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                            Official document verified under Reference No: {document.referenceNumber}.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-      </div>
+      )}
     </div>
   );
 };

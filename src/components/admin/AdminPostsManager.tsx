@@ -30,41 +30,11 @@ import {
   FileCheck,
   Maximize2,
   Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAdminData } from '../../context/AdminDataContext';
-import { NewsItem } from '../../types';
-
-export interface AttachedDoc {
-  id: string;
-  name: string;
-  size: string;
-  type: 'pdf' | 'image' | 'other';
-  dataUrl: string; // Base64 or external URL
-  uploadDate: string;
-}
-
-export interface AdminPost {
-  id: string;
-  title: string;
-  refNumber: string;
-  content: string; // Description
-  category: string;
-  author: string;
-  date: string;
-  status: 'Published' | 'Draft';
-  imageUrl: string; // Primary featured image
-  galleryImages: string[]; // All uploaded pictures ("jotogula pic upload dear suystem ase sob jeno saport neai")
-  attachedDocuments: AttachedDoc[]; // PDF & Document pic upload option
-  readTime: string;
-  badges: string[];
-}
-
-export interface PostCategory {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-}
+import { NewsItem, AdminPost, AttachedDoc, PostCategory } from '../../types';
+import { FullPdfDocumentViewer, postToUnifiedDoc } from '../FullPdfDocumentViewer';
 
 interface AdminPostsManagerProps {
   subView: 'all' | 'new' | 'categories';
@@ -215,6 +185,12 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     attachedDocuments: [] as AttachedDoc[], // PDF and doc pic upload
     readTime: '4 min read',
     badges: 'NEWS, OFFICIAL',
+    candidateName: '',
+    passportNumber: '',
+    jobTitle: '',
+    workLocation: '',
+    salaryPackage: '',
+    visaSubclass: '',
   });
 
   // Inputs for manual URL adds
@@ -249,6 +225,12 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       attachedDocuments: post.attachedDocuments || [],
       readTime: post.readTime,
       badges: post.badges.join(', '),
+      candidateName: post.candidateName || '',
+      passportNumber: post.passportNumber || '',
+      jobTitle: post.jobTitle || '',
+      workLocation: post.workLocation || '',
+      salaryPackage: post.salaryPackage || '',
+      visaSubclass: post.visaSubclass || '',
     });
     onSwitchSubView('new');
   };
@@ -268,6 +250,12 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       attachedDocuments: [],
       readTime: '4 min read',
       badges: 'NEWS, OFFICIAL',
+      candidateName: '',
+      passportNumber: '',
+      jobTitle: '',
+      workLocation: '',
+      salaryPackage: '',
+      visaSubclass: '',
     });
     setSingleImgUrlInput('');
     setPdfUrlInput('');
@@ -473,6 +461,12 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       attachedDocuments: formData.attachedDocuments,
       readTime: formData.readTime,
       badges: badgeArray.length > 0 ? badgeArray : ['NEWS'],
+      candidateName: formData.candidateName.trim() || undefined,
+      passportNumber: formData.passportNumber.trim() || undefined,
+      jobTitle: formData.jobTitle.trim() || undefined,
+      workLocation: formData.workLocation.trim() || undefined,
+      salaryPackage: formData.salaryPackage.trim() || undefined,
+      visaSubclass: formData.visaSubclass.trim() || undefined,
     };
 
     if (editingPostId) {
@@ -711,6 +705,62 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
               <p className="text-[11px] text-gray-400">
                 Official document or press circular tracking number for audits and search.
               </p>
+            </div>
+
+            {/* OPTIONAL: CLIENT / CANDIDATE PARTICULARS */}
+            <div className="bg-[#181A1E] p-4 sm:p-5 rounded-xl border border-[#2B2E35] space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-gray-200 uppercase tracking-wide flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Client / Candidate Particulars (ঐচ্ছিক: ক্লায়েন্টের তথ্য)</span>
+                </label>
+                <span className="text-[10px] text-gray-400 bg-[#252830] px-2 py-0.5 rounded font-mono">Optional</span>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                যদি এই পোস্টটি নির্দিষ্ট কোনো ক্লায়েন্ট বা প্রার্থীর ডকুমেন্টের হয়, তবে নিচে তার নাম ও পাসপোর্ট নম্বর দিন (অন্যথায় খালি রাখুন)।
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-300 block mb-1">Candidate / Client Name (প্রার্থীর নাম)</label>
+                  <input
+                    type="text"
+                    value={formData.candidateName}
+                    onChange={(e) => setFormData({ ...formData, candidateName: e.target.value })}
+                    placeholder="e.g. Mohammad Tanvir Ahmed"
+                    className="w-full bg-[#101114] border border-[#31353E] focus:border-[#0284c7] rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-300 block mb-1">Passport Number (পাসপোর্ট নম্বর)</label>
+                  <input
+                    type="text"
+                    value={formData.passportNumber}
+                    onChange={(e) => setFormData({ ...formData, passportNumber: e.target.value })}
+                    placeholder="e.g. A09482103"
+                    className="w-full bg-[#101114] border border-[#31353E] focus:border-[#0284c7] rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-300 block mb-1">Designation / Role (পদবী)</label>
+                  <input
+                    type="text"
+                    value={formData.jobTitle}
+                    onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
+                    placeholder="e.g. Senior Mining Specialist"
+                    className="w-full bg-[#101114] border border-[#31353E] focus:border-[#0284c7] rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-300 block mb-1">Work Location (কাজের স্থান)</label>
+                  <input
+                    type="text"
+                    value={formData.workLocation}
+                    onChange={(e) => setFormData({ ...formData, workLocation: e.target.value })}
+                    placeholder="e.g. Perth, Western Australia"
+                    className="w-full bg-[#101114] border border-[#31353E] focus:border-[#0284c7] rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* OPTION 3: ADD PICTURES (Multiple Pictures Support - unlimited) */}
@@ -1563,127 +1613,32 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       )}
 
       {/* =========================================================================
-          PREVIEW POST MODAL (SHOWS REF NO, FULL TEXT, PICTURES & PDFS)
+          PREVIEW POST MODAL (CLEAN FULL PDF & DOSSIER VIEWER)
          ========================================================================= */}
       {previewingPost && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-[#181A1E] border border-[#2B2E35] rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl space-y-5 p-6 animate-in zoom-in-95 duration-150">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#2A2E36]">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="px-2 py-0.5 rounded bg-[#0284c7]/20 text-[#38bdf8] font-mono text-xs font-bold border border-[#0284c7]/40">
-                    #{previewingPost.refNumber || 'N/A'}
-                  </span>
-                  <span className="px-2 py-0.5 rounded bg-[#272B33] text-gray-300 text-xs">
-                    {previewingPost.category}
-                  </span>
-                </div>
-                <h3 className="text-lg sm:text-xl font-bold text-white">
-                  {previewingPost.title}
-                </h3>
-                <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
-                  <span>Author: {previewingPost.author}</span>
-                  <span>•</span>
-                  <span>Date: {previewingPost.date}</span>
-                  <span>•</span>
-                  <span>Status: {previewingPost.status}</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewingPost(null)}
-                className="p-2 rounded-lg bg-[#22252C] hover:bg-[#2C3038] text-gray-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Description */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                Post Description / Content
-              </h4>
-              <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-line bg-[#101114] p-4 rounded-xl border border-[#26282E]">
-                {previewingPost.content || 'No content written.'}
-              </p>
-            </div>
-
-            {/* Pictures Gallery */}
-            {previewingPost.galleryImages && previewingPost.galleryImages.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <ImageIcon className="w-3.5 h-3.5 text-[#38bdf8]" />
-                  <span>
-                    Uploaded Pictures Gallery ({previewingPost.galleryImages.length})
-                  </span>
+        <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-[#17181B] border border-[#3A3F4C] text-white w-full max-w-5xl rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 my-8 animate-in zoom-in-95 duration-150 relative">
+            <div className="flex items-center justify-between border-b border-[#2C303B] pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-[#38bdf8]" />
+                <h4 className="font-bold text-sm sm:text-base text-white">
+                  Post Document & Dossier Preview ({previewingPost.refNumber || previewingPost.title})
                 </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {previewingPost.galleryImages.map((img, i) => (
-                    <div
-                      key={i}
-                      className="rounded-lg overflow-hidden border border-[#31353E] h-28 bg-black/40 relative group"
-                    >
-                      <img
-                        src={img}
-                        alt={`Post gallery ${i + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                      <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[10px] bg-black/70 text-white font-mono">
-                        #{i + 1}
-                      </span>
-                    </div>
-                  ))}
-                </div>
               </div>
-            )}
-
-            {/* Attached PDFs */}
-            {previewingPost.attachedDocuments &&
-              previewingPost.attachedDocuments.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Paperclip className="w-3.5 h-3.5 text-red-400" />
-                    <span>
-                      Attached PDF Documents ({previewingPost.attachedDocuments.length})
-                    </span>
-                  </h4>
-                  <div className="space-y-2">
-                    {previewingPost.attachedDocuments.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-[#101114] border border-[#2B2E35]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded bg-red-500/20 text-red-400">
-                            <File className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="text-xs font-bold text-white">{doc.name}</div>
-                            <div className="text-[11px] text-gray-400">
-                              {doc.size} • {doc.uploadDate}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="px-2.5 py-1 bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-xs font-semibold rounded-lg flex items-center gap-1.5">
-                          <span>Attachment</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            {/* Close Button */}
-            <div className="pt-3 border-t border-[#2A2E36] flex justify-end">
               <button
                 type="button"
                 onClick={() => setPreviewingPost(null)}
-                className="px-4 py-2 bg-[#22252C] hover:bg-[#2C3038] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer"
+                title="Close"
               >
-                Close Preview
+                <X className="w-5 h-5" />
               </button>
             </div>
+
+            <FullPdfDocumentViewer
+              document={postToUnifiedDoc(previewingPost, 'australia')}
+              onClose={() => setPreviewingPost(null)}
+            />
           </div>
         </div>
       )}
