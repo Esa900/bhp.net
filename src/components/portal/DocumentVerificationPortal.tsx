@@ -13,7 +13,7 @@ import { ImmiFooter } from './ImmiFooter';
 import { ArrowLeft, ShieldCheck, Lock, Award, Building2, CheckCircle2, Sliders } from 'lucide-react';
 
 import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from '../../data/menuNavigationItems';
-import { searchUniversalDocument } from '../../utils/universalSearch';
+import { searchUniversalDocument, searchUniversalDocumentAsync } from '../../utils/universalSearch';
 
 interface DocumentVerificationPortalProps {
   onBackToWebsite?: () => void;
@@ -41,13 +41,16 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
     }
   }, [initialMenuItemId]);
 
-  const handleSearch = (query: string, fieldKey: string, menuItem: DocumentMenuItem) => {
+  const handleSearch = async (query: string, fieldKey: string, menuItem: DocumentMenuItem) => {
     setIsVerifying(true);
     setSearchNotification(null);
 
-    setTimeout(() => {
-      // 1. Check universal search first for admin added posts
-      const universalMatch = searchUniversalDocument(query);
+    try {
+      // 1. Check universal search (with server sync) for admin added posts
+      let universalMatch = searchUniversalDocument(query);
+      if (!universalMatch) {
+        universalMatch = await searchUniversalDocumentAsync(query);
+      }
       if (universalMatch) {
         const u = universalMatch.document;
         const convertedProfile: ApplicantProfile = {
@@ -153,12 +156,13 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
         setSearchNotification(
           `Query "${query}" verified. Displaying matched DVS registry record for: ${SAMPLE_PROFILES[0].fullName}`
         );
-        setCurrentProfile(SAMPLE_PROFILES[0]);
       }
-
+    } catch (err) {
+      console.warn('Portal search error:', err);
+    } finally {
       setIsVerifying(false);
       setTimeout(() => setSearchNotification(null), 6000);
-    }, 400);
+    }
   };
 
   const handleOpenDocument = (docType: DocumentType) => {

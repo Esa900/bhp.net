@@ -20,6 +20,7 @@ import {
   CANADA_MENU_CONFIGS,
   searchCanadaDocument,
   getStoredCanadaDocuments,
+  syncCanadaDocumentsFromServer,
   CANADA_DOCUMENTS_UPDATED_EVENT,
 } from '../utils/canadaStorage';
 import { findAdminPostByQuery } from '../utils/postsStorage';
@@ -30,7 +31,7 @@ import {
   canadaRecordToUnifiedDoc,
   postToUnifiedDoc,
 } from './FullPdfDocumentViewer';
-import { searchUniversalDocument } from '../utils/universalSearch';
+import { searchUniversalDocument, searchUniversalDocumentAsync } from '../utils/universalSearch';
 
 interface CanadaDocumentSearchModalProps {
   isOpen: boolean;
@@ -68,6 +69,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
   // When modal opens or config changes, reset query & search state
   useEffect(() => {
     if (isOpen) {
+      syncCanadaDocumentsFromServer().catch(() => {});
       setQuery('');
       setHasSearched(false);
       setMatchedRecord(null);
@@ -106,7 +108,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
 
   if (!isOpen) return null;
 
-  const handleSearch = (searchQuery?: string) => {
+  const handleSearch = async (searchQuery?: string) => {
     const term = (searchQuery !== undefined ? searchQuery : query).trim();
     if (!term) return;
 
@@ -116,8 +118,8 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
     setMatchedRecord(null);
     setMatchedAdminPost(null);
 
-    setTimeout(() => {
-      // 1. Try matching in Canada documents storage first
+    try {
+      // 1. Try immediate matching in Canada documents storage
       const foundCa = searchCanadaDocument(term, currentConfig.id) || searchCanadaDocument(term);
       if (foundCa) {
         setMatchedRecord(foundCa);
@@ -126,8 +128,8 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
         return;
       }
 
-      // 2. Fallback to universal search across all posts & records
-      const universalResult = searchUniversalDocument(term);
+      // 2. Perform live async universal search with server sync (for documents created on other devices)
+      const universalResult = await searchUniversalDocumentAsync(term);
       if (universalResult) {
         setMatchedUniversalDoc(universalResult.document);
         if (universalResult.source === 'canada') {
@@ -138,9 +140,11 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
         setIsSearching(false);
         return;
       }
-
+    } catch (err) {
+      console.warn('Canada search error:', err);
+    } finally {
       setIsSearching(false);
-    }, 250);
+    }
   };
 
   return (

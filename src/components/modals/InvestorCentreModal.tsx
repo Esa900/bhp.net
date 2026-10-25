@@ -258,11 +258,11 @@ export const InvestorCentreModal: React.FC<InvestorCentreModalProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => showNotification(`Download initiated: ${rep.title} (${rep.size})`)}
+                      onClick={() => showNotification(`Report available for online review: ${rep.title}`)}
                       className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-[#F25C05] hover:underline cursor-pointer"
                     >
-                      <Download className="w-4 h-4" />
-                      <span>Download PDF</span>
+                      <FileText className="w-4 h-4" />
+                      <span>View Online Summary</span>
                     </button>
                   </div>
                 ))}

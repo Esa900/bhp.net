@@ -173,6 +173,50 @@ export const INITIAL_CANADA_DOCUMENTS: CanadaDocumentRecord[] = [
   },
 ];
 
+/**
+ * Fetch latest Canada documents from server for cross-device synchronization
+ */
+export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRecord[]> {
+  if (typeof window === 'undefined') return getStoredCanadaDocuments();
+
+  try {
+    const res = await fetch('/api/canada-documents', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.documents) && data.documents.length > 0) {
+        try {
+          localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(data.documents));
+        } catch (e) {
+          console.warn('LocalStorage error caching canada documents:', e);
+        }
+        window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: data.documents }));
+        return data.documents;
+      } else if (data && Array.isArray(data.documents) && data.documents.length === 0) {
+        // Push initial/local to server if server is empty
+        const local = getStoredCanadaDocuments();
+        if (local && local.length > 0) {
+          fetch('/api/canada-documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(local),
+          }).catch(console.error);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Network sync for Canada documents skipped:', err);
+  }
+
+  return getStoredCanadaDocuments();
+}
+
+// Auto-sync on startup
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    syncCanadaDocumentsFromServer().catch(() => {});
+  }, 120);
+}
+
 export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
   try {
     const raw = localStorage.getItem(CANADA_STORAGE_KEY);
@@ -196,6 +240,7 @@ export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
 }
 
 export function saveCanadaDocuments(docs: CanadaDocumentRecord[]): void {
+  // 1. Local storage save
   try {
     localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(docs));
     if (typeof window !== 'undefined') {
@@ -204,6 +249,17 @@ export function saveCanadaDocuments(docs: CanadaDocumentRecord[]): void {
     }
   } catch (err) {
     console.error('Failed to save Canada documents to localStorage', err);
+  }
+
+  // 2. Push to server persistence API for cross-device sharing
+  if (typeof window !== 'undefined') {
+    fetch('/api/canada-documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(docs),
+    }).catch((err) => {
+      console.warn('Failed to push Canada documents to server API:', err);
+    });
   }
 }
 

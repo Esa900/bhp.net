@@ -1,0 +1,112 @@
+[
+  {
+    "id": "post-doc-1",
+    "title": "Australia Employment Application & Work Authorization Clearance",
+    "refNumber": "BHP-DOC-2026-0089",
+    "content": "OFFICIAL CORPORATE VERIFICATION & SPONSORSHIP DIRECTIVE:\nThis official document confirms the verified corporate sponsorship, biometric registration, and work permit clearance under BHP Group Limited Global Operations in Western Australia.\n\nKey Details & Authorisations:\n• Primary Sponsor: BHP Group Limited (ABN 49 004 028 077)\n• Operations Zone: Western Australia Iron Ore (WAIO) & Olympic Dam\n• Status: Approved, Verified, and Active in Commonwealth Portal\n• Verification Protocol: Biometric identification and ANZSCO qualification standard compliant.\n\nAll attached circular documentation and verified clearance certificates are certified authentic by the Executive Operations Directorate.",
+    "category": "Employment Application & Verification",
+    "author": "BHP Operations Directorate",
+    "date": "2026-03-12",
+    "status": "Published",
+    "imageUrl": "https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80",
+    "candidateName": "Mohammad Tanvir Ahmed",
+    "passportNumber": "A09482103",
+    "nationality": "Bangladeshi",
+    "dateOfBirth": "1993-04-18",
+    "jobTitle": "Senior Mining Maintenance Specialist",
+    "employerName": "BHP Group Operations (Australia)",
+    "workLocation": "Perth & Pilbara, WA, Australia",
+    "salaryPackage": "$135,000 AUD / Year",
+    "visaSubclass": "Subclass 482 - TSS (Medium-Term Stream)",
+    "issueDate": "2026-01-10",
+    "expiryDate": "2029-01-09",
+    "verificationIdNo": "VRF-AU-928410",
+    "galleryImages": [
+      "https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1200&q=80"
+    ],
+    "attachedDocuments": [
+      {
+        "id": "doc-seed-1",
+        "name": "BHP_Verified_Employment_Clearance_2026.pdf",
+        "size": "2.45 MB",
+        "type": "pdf",
+        "dataUrl": "#",
+        "uploadDate": "2026-03-12"
+      },
+      {
+        "id": "doc-seed-2",
+        "name": "Official_Sponsorship_Permit_Scan.pdf",
+        "size": "1.82 MB",
+        "type": "pdf",
+        "dataUrl": "#",
+        "uploadDate": "2026-03-12"
+      }
+    ],
+    "readTime": "4 min read",
+    "badges": [
+      "OFFICIAL",
+      "VERIFIED DOCUMENT",
+      "BHP 2026"
+    ]
+  },
+  {
+    "id": "post-doc-2",
+    "title": "Commonwealth Skilled Regional Work Visa & Corporate Endorsement",
+    "refNumber": "BHP-VISA-2026-4412",
+    "content": "DEPARTMENT OF HOME AFFAIRS & BHP SPONSORSHIP VERIFICATION:\nOfficial confirmation of Subclass 482 / 186 Nominated Sponsoring Agreement.\n\nVerified Parameters:\n• Employer Sponsoring: BHP Olympic Dam Operations\n• Visa Subclass: Temporary Skill Shortage (Subclass 482 - Medium Term Stream)\n• Sponsoring ID: BHP-SPON-99042\n• Condition: Full Work Rights Approved (Condition 8107 Compliant)\n\nAll supporting biometric documents, police clearances, and medical certifications have been catalogued and endorsed.",
+    "category": "Visa & Immigration Permits",
+    "author": "BHP Global Mobility Desk",
+    "date": "2026-02-28",
+    "status": "Published",
+    "imageUrl": "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80",
+    "candidateName": "Kazi Farhan Mahmud",
+    "passportNumber": "B18492044",
+    "nationality": "Bangladeshi",
+    "dateOfBirth": "1991-09-25",
+    "jobTitle": "Heavy Mobile Equipment Mechanical Engineer",
+    "employerName": "BHP Olympic Dam Operations",
+    "workLocation": "Olympic Dam, South Australia",
+    "salaryPackage": "$142,000 AUD / Year",
+    "visaSubclass": "Subclass 482 - TSS (Employer Nominated)",
+    "issueDate": "2026-02-01",
+    "expiryDate": "2030-01-31",
+    "verificationIdNo": "VRF-AU-441299",
+    "galleryImages": [
+      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80"
+    ],
+    "attachedDocuments": [
+      {
+        "id": "doc-seed-3",
+        "name": "Commonwealth_Visa_Endorsement_Record.pdf",
+        "size": "3.15 MB",
+        "type": "pdf",
+        "dataUrl": "#",
+        "uploadDate": "2026-02-28"
+      }
+    ],
+    "readTime": "3 min read",
+    "badges": [
+      "IMMIGRATION",
+      "VISA GRANTED",
+      "OFFICIAL"
+    ]
+  },
+  {
+    "id": "post-test-device1",
+    "title": "Device 1 Real-time Sync Test",
+    "refNumber": "REF-DEV-770099",
+    "category": "Australia Work Permit Documents",
+    "author": "Admin Phone 1",
+    "date": "2026-03-12",
+    "status": "Published",
+    "candidateName": "Al-Amin Sheikh",
+    "passportNumber": "P99887766",
+    "verificationIdNo": "VRF-AU-770099",
+    "jobTitle": "Senior Mine Geologist",
+    "employerName": "BHP Group Operations",
+    "workLocation": "Pilbara, WA"
+  }
+]

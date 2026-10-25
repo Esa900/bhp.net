@@ -47,13 +47,41 @@ export function getStoredMenuItems(): DocumentMenuItem[] {
 }
 
 /**
- * Save menu items list to localStorage and dispatch update event
+ * Fetch latest menu items from server for multi-device sync
+ */
+export async function syncMenuItemsFromServer(): Promise<DocumentMenuItem[]> {
+  if (typeof window === 'undefined') return getStoredMenuItems();
+
+  try {
+    const res = await fetch('/api/menu-items', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.items) && data.items.length > 0) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.items));
+        window.dispatchEvent(new CustomEvent(MENU_ITEMS_UPDATED_EVENT, { detail: data.items }));
+        return data.items;
+      }
+    }
+  } catch (err) {
+    console.warn('Network sync for menu items skipped:', err);
+  }
+
+  return getStoredMenuItems();
+}
+
+/**
+ * Save menu items list to localStorage and dispatch update event & push to server
  */
 export function saveStoredMenuItems(items: DocumentMenuItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(MENU_ITEMS_UPDATED_EVENT, { detail: items }));
+      fetch('/api/menu-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(items),
+      }).catch((err) => console.warn('Failed to push menu items to server:', err));
     }
   } catch (err) {
     console.error('Failed to save menu items to localStorage:', err);

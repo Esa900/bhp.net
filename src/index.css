@@ -6,29 +6,33 @@ body, html {
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
-  -webkit-touch-callout: none;
+  -webkit-touch-callout: none !important;
 }
 
-img, canvas, iframe {
-  -webkit-user-drag: none;
-  user-drag: none;
-  pointer-events: auto;
+input, textarea {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }
 
-/* Clean print handling */
+/* Prevent image dragging, context menu, and long-press saving */
+img, canvas, iframe, object {
+  -webkit-user-drag: none !important;
+  user-drag: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+/* Absolute Print & PDF-Save Blocker across entire application */
 @media print {
-  body {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  * {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
   }
-}
-
-/* Hard Print & PDF-Save Block across entire application */
-@media print {
   html, body {
     display: none !important;
     visibility: hidden !important;
+    background: #000000 !important;
   }
 }
-
-

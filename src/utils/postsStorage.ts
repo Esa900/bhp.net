@@ -147,6 +147,51 @@ All supporting biometric documents, police clearances, and medical certification
 /**
  * Retrieve all Admin Posts from LocalStorage (or in-memory cache / initial defaults)
  */
+/**
+ * Fetch latest admin posts from server for cross-device synchronization
+ */
+export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
+  if (typeof window === 'undefined') return getStoredAdminPosts();
+
+  try {
+    const res = await fetch('/api/posts', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.posts) && data.posts.length > 0) {
+        (window as any).__bhp_admin_posts_cache = data.posts;
+        try {
+          localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(data.posts));
+        } catch (e) {
+          console.warn('Local storage cache update error:', e);
+        }
+        window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: data.posts }));
+        return data.posts;
+      } else if (data && Array.isArray(data.posts) && data.posts.length === 0) {
+        // If server has no posts yet but local has posts, push local posts to server
+        const local = getStoredAdminPosts();
+        if (local && local.length > 0) {
+          fetch('/api/posts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(local),
+          }).catch(console.error);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Network sync for admin posts skipped (offline or initial boot):', err);
+  }
+
+  return getStoredAdminPosts();
+};
+
+// Auto-trigger sync on module load in browser
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    syncAdminPostsFromServer().catch(() => {});
+  }, 100);
+}
+
 export const getStoredAdminPosts = (): AdminPost[] => {
   if (typeof window !== 'undefined' && Array.isArray((window as any).__bhp_admin_posts_cache)) {
     return (window as any).__bhp_admin_posts_cache;
@@ -180,19 +225,19 @@ export const getStoredAdminPosts = (): AdminPost[] => {
 };
 
 /**
- * Save Admin Posts to LocalStorage and broadcast update event
+ * Save Admin Posts to LocalStorage and push to Server for all other devices
  */
 export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
   if (typeof window !== 'undefined') {
     (window as any).__bhp_admin_posts_cache = posts;
   }
 
+  // 1. Instant local storage save
   try {
     localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
   } catch (err) {
     console.warn('LocalStorage save quota exceeded, preserving newest post and pruning old payloads:', err);
     try {
-      // Keep recent posts with full attached files, lightweight older posts so saving NEVER fails
       const streamlined = posts.map((p, idx) => {
         if (idx < 5) return p;
         return {
@@ -209,15 +254,26 @@ export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
     }
   }
 
-  // Trigger custom event so any listener or modal immediately refreshes
+  // 2. Broadcast local update event
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: posts }));
     window.dispatchEvent(new Event('storage'));
   }
+
+  // 3. PERSIST TO SERVER (CRITICAL: Allows other devices and customer phones to access immediately)
+  if (typeof window !== 'undefined') {
+    fetch('/api/posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(posts),
+    }).catch((err) => {
+      console.warn('Failed to push admin posts to server persistence API:', err);
+    });
+  }
 };
 
 /**
- * Delete all stored Admin Posts completely
+ * Delete all stored Admin Posts completely (both locally and on server)
  */
 export const deleteAllStoredAdminPosts = (): void => {
   saveStoredAdminPosts([]);

@@ -11,8 +11,8 @@ import {
   Tag,
   Paperclip,
 } from 'lucide-react';
-import { getStoredAdminPosts } from '../utils/postsStorage';
-import { getStoredCanadaDocuments } from '../utils/canadaStorage';
+import { getStoredAdminPosts, syncAdminPostsFromServer } from '../utils/postsStorage';
+import { getStoredCanadaDocuments, syncCanadaDocumentsFromServer } from '../utils/canadaStorage';
 import { AdminPost } from '../types';
 import { CanadaDocumentRecord } from '../types/canada';
 
@@ -36,6 +36,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     if (isOpen) {
       setAdminPosts(getStoredAdminPosts());
       setCanadaDocs(getStoredCanadaDocuments());
+      syncAdminPostsFromServer().then((posts) => setAdminPosts(posts)).catch(() => {});
+      syncCanadaDocumentsFromServer().then((docs) => setCanadaDocs(docs)).catch(() => {});
       setTimeout(() => inputRef.current?.focus(), 50);
     } else {
       setQuery('');

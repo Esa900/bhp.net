@@ -309,11 +309,65 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           </div>
         )}
 
+        {/* Mobile Horizontal Tabs (Visible on screens < md) */}
+        <div className="md:hidden flex items-center gap-1.5 p-2 bg-[#181A1D] border-b border-[#282A2F] overflow-x-auto shrink-0 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setActiveTab('user-list')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all ${
+              activeTab === 'user-list' ? 'bg-purple-600 text-white shadow-sm' : 'bg-[#23262D] text-gray-300'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Users ({registeredUsersCount})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('job-circular')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all ${
+              activeTab === 'job-circular' ? 'bg-[#F25C05] text-white shadow-sm' : 'bg-[#23262D] text-gray-300'
+            }`}
+          >
+            <Briefcase className="w-3.5 h-3.5" />
+            <span>Jobs</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('australia')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all ${
+              activeTab === 'australia' ? 'bg-blue-600 text-white shadow-sm' : 'bg-[#23262D] text-gray-300'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Australia (AU)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('canada')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all ${
+              activeTab === 'canada' ? 'bg-red-600 text-white shadow-sm' : 'bg-[#23262D] text-gray-300'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Canada (CA)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all ${
+              activeTab === 'settings' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-[#23262D] text-gray-300'
+            }`}
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>Settings</span>
+          </button>
+        </div>
+
         {/* Body Container with Sidebar and Content */}
         <div className="flex-1 flex overflow-hidden">
           
-          {/* Left Navigation Sidebar - ONLY 3 REQUIRED MODULES */}
-          <aside className="w-60 sm:w-68 bg-[#181A1D] border-r border-[#282A2F] flex flex-col justify-between shrink-0 p-3 overflow-y-auto">
+          {/* Left Navigation Sidebar - Desktop only */}
+          <aside className="hidden md:flex w-60 sm:w-68 bg-[#181A1D] border-r border-[#282A2F] flex-col justify-between shrink-0 p-3 overflow-y-auto">
             <nav className="space-y-2">
               <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-400">
                 Admin Modules

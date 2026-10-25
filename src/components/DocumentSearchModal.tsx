@@ -22,17 +22,16 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { DocumentMenuItem } from '../data/menuNavigationItems';
-import { SAMPLE_PROFILES } from '../data/portalData';
 import { ApplicantProfile } from '../types/portal';
 import { AdminPost, AttachedDoc } from '../types';
-import { getStoredAdminPosts, findAdminPostByQuery } from '../utils/postsStorage';
+import { getStoredAdminPosts, findAdminPostByQuery, syncAdminPostsFromServer } from '../utils/postsStorage';
 import {
   FullPdfDocumentViewer,
   UnifiedDocumentData,
   postToUnifiedDoc,
   profileToUnifiedDoc,
 } from './FullPdfDocumentViewer';
-import { searchUniversalDocument } from '../utils/universalSearch';
+import { searchUniversalDocument, searchUniversalDocumentAsync } from '../utils/universalSearch';
 
 interface DocumentSearchModalProps {
   isOpen: boolean;
@@ -90,6 +89,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
     if (isOpen) {
       const fresh = getStoredAdminPosts();
       setAdminPosts(fresh);
+      syncAdminPostsFromServer().then((posts) => setAdminPosts(posts)).catch(() => {});
       setPreviewingDoc(null);
       setPreviewZoom(100);
       setPreviewMaximized(false);
@@ -162,7 +162,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
 
   if (!isOpen || !activeItem) return null;
 
-  const handleSearch = (overrideQuery?: string) => {
+  const handleSearch = async (overrideQuery?: string) => {
     const searchTerm = (overrideQuery !== undefined ? overrideQuery : query).trim();
     if (!searchTerm) return;
 
@@ -172,13 +172,22 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
     setMatchedAdminPost(null);
     setMatchedProfile(null);
 
-    setTimeout(() => {
-      // 1. Refresh latest admin posts from storage to guarantee 100% real-time state
-      const freshPosts = getStoredAdminPosts();
-      setAdminPosts(freshPosts);
+    try {
+      // 1. Instant check in memory
+      const immediate = searchUniversalDocument(searchTerm);
+      if (immediate) {
+        setMatchedUniversalDoc(immediate.document);
+        if (immediate.source === 'australia') {
+          setMatchedAdminPost(immediate.rawRecord);
+        } else if (immediate.source === 'portal') {
+          setMatchedProfile(immediate.rawRecord);
+        }
+        setIsSearching(false);
+        return;
+      }
 
-      // 2. Perform Universal Search across Australia, Canada, and Sample Profiles
-      const result = searchUniversalDocument(searchTerm);
+      // 2. Perform live async search with server fallback (for posts created on other devices)
+      const result = await searchUniversalDocumentAsync(searchTerm);
       if (result) {
         setMatchedUniversalDoc(result.document);
         if (result.source === 'australia') {
@@ -191,6 +200,8 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       }
 
       // 3. Fallback direct match in admin posts
+      const freshPosts = getStoredAdminPosts();
+      setAdminPosts(freshPosts);
       const directPost = findAdminPostByQuery(searchTerm, freshPosts);
       if (directPost) {
         setMatchedAdminPost(directPost);
@@ -198,9 +209,11 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         setIsSearching(false);
         return;
       }
-
+    } catch (err) {
+      console.warn('Search execution error:', err);
+    } finally {
       setIsSearching(false);
-    }, 150);
+    }
   };
 
   const handleCopyRef = (refNum: string) => {

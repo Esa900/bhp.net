@@ -182,15 +182,20 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     const handleCatUpdate = () => {
       setCategories(getStoredMenuItems());
     };
+    const handlePostsUpdate = () => {
+      setPosts(getStoredAdminPosts());
+    };
     const handleStorage = () => {
       setCategories(getStoredMenuItems());
       setPosts(getStoredAdminPosts());
     };
 
     window.addEventListener(MENU_ITEMS_UPDATED_EVENT, handleCatUpdate);
+    window.addEventListener('bhp_posts_updated', handlePostsUpdate);
     window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener(MENU_ITEMS_UPDATED_EVENT, handleCatUpdate);
+      window.removeEventListener('bhp_posts_updated', handlePostsUpdate);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);

@@ -32,17 +32,18 @@ import { AdminPanelModal } from './components/admin/AdminPanelModal';
 import { DocumentVerificationPortal } from './components/portal/DocumentVerificationPortal';
 import { DocumentSearchModal } from './components/DocumentSearchModal';
 import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from './data/menuNavigationItems';
-import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT } from './utils/menuItemsStorage';
+import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT, syncMenuItemsFromServer } from './utils/menuItemsStorage';
 import { JobCategory } from './types/jobCircular';
 import { JobCircularModal } from './components/JobCircularModal';
 import { RightDrawerMenu } from './components/RightDrawerMenu';
 import { CanadaMenuItemConfig } from './types/canada';
-import { CANADA_MENU_CONFIGS } from './utils/canadaStorage';
+import { CANADA_MENU_CONFIGS, syncCanadaDocumentsFromServer } from './utils/canadaStorage';
 import { CanadaDocumentSearchModal } from './components/CanadaDocumentSearchModal';
 import { AuthUser } from './types/auth';
 import { getCurrentAuthUser, BHP_AUTH_STATE_EVENT } from './utils/authStorage';
 import { AuthSecurityGate } from './components/auth/AuthSecurityGate';
 import { setupSecurityProtection } from './utils/securityProtection';
+import { syncAdminPostsFromServer } from './utils/postsStorage';
 
 function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) {
   const { commodities, siteSettings } = useAdminData();
@@ -446,6 +447,26 @@ export function App() {
   useEffect(() => {
     const cleanupSecurity = setupSecurityProtection();
 
+    const triggerFullSync = () => {
+      syncAdminPostsFromServer().catch(() => {});
+      syncCanadaDocumentsFromServer().catch(() => {});
+      syncMenuItemsFromServer().catch(() => {});
+    };
+
+    // Initial cross-device sync
+    triggerFullSync();
+
+    // Fast background sync every 5 seconds so updates made by admin on other devices reflect automatically
+    const syncInterval = setInterval(triggerFullSync, 5000);
+
+    // Immediate sync whenever user switches to this window/tab or browser regains focus
+    const handleFocus = () => triggerFullSync();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        triggerFullSync();
+      }
+    };
+
     const handleAuthChange = () => {
       setCurrentUser(getCurrentAuthUser());
     };
@@ -453,6 +474,8 @@ export function App() {
       setIsAdminRoute(checkIsAdminUrl());
     };
 
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener(BHP_AUTH_STATE_EVENT, handleAuthChange);
     window.addEventListener('storage', handleAuthChange);
     window.addEventListener('popstate', handleRouteChange);
@@ -460,6 +483,9 @@ export function App() {
 
     return () => {
       cleanupSecurity();
+      clearInterval(syncInterval);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener(BHP_AUTH_STATE_EVENT, handleAuthChange);
       window.removeEventListener('storage', handleAuthChange);
       window.removeEventListener('popstate', handleRouteChange);

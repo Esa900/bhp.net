@@ -21,6 +21,7 @@ import {
   User,
   Hash,
   ArrowLeft,
+  Printer,
 } from 'lucide-react';
 import { AdminPost, AttachedDoc } from '../types';
 import { CanadaDocumentRecord } from '../types/canada';
@@ -216,21 +217,27 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
     setTimeout(() => setCopiedRef(false), 2000);
   };
 
-  const handleZoomIn = () => setZoom((z) => Math.min(z + 15, 180));
-  const handleZoomOut = () => setZoom((z) => Math.max(z - 15, 70));
+  const handleZoomIn = () => setZoom((z) => Math.min(z + 25, 250));
+  const handleZoomOut = () => setZoom((z) => Math.max(z - 25, 50));
   const handleZoomReset = () => setZoom(100);
+
+  // Check if real attached uploads exist (not empty or dummy '#')
+  const validAttachedDocs = (document.attachedDocuments || []).filter(
+    (d) => d.dataUrl && d.dataUrl !== '#' && d.dataUrl.length > 5
+  );
+  const hasRealAttachedDocs = validAttachedDocs.length > 0;
 
   return (
     <div
       className={`w-full flex flex-col space-y-6 select-none ${
         isFullScreen
-          ? 'fixed inset-0 z-[100] bg-[#0A0C10]/98 backdrop-blur-md p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-150'
+          ? 'fixed inset-0 z-[100] bg-[#0A0C10]/98 backdrop-blur-md p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-150'
           : ''
       }`}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* =========================================================================
-          TOP ACTION & CONTROL TOOLBAR (CLEAN, NO DOWNLOAD OPTION)
+          TOP ACTION & CONTROL TOOLBAR (MOBILE RESPONSIVE WITH DIRECT ZOOM)
          ========================================================================= */}
       <div
         className={`bg-[#181A20] p-3 sm:p-4 rounded-2xl border border-[#2B2F38] flex flex-wrap items-center justify-between gap-3 shadow-lg no-print ${
@@ -239,14 +246,14 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
       >
         {/* Left: Status & Reference Indicator */}
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center shrink-0">
+          <div className="p-2 sm:p-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center shrink-0">
             <ShieldCheck className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                Verified Official Document Record
+                Official PDF Document
               </span>
               <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-[#202532] text-gray-300 border border-[#2D3342]">
                 {document.category}
@@ -269,41 +276,69 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
           </div>
         </div>
 
-        {/* Right: Controls (Zoom, Fullscreen, Search Another) */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Zoom Controls */}
-          <div className="hidden sm:flex items-center gap-1 bg-[#111317] p-1 rounded-xl border border-[#2B2F38]">
+        {/* Right: Controls (Zoom - Visible on Mobile, Fullscreen, Search Another, Back) */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+          {/* Zoom Controls - ALWAYS VISIBLE ON MOBILE & DESKTOP */}
+          <div className="flex items-center gap-1 bg-[#111317] p-1 rounded-xl border border-[#2B2F38]">
             <button
               type="button"
               onClick={handleZoomOut}
-              className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252830] transition-colors cursor-pointer"
-              title="Zoom Out"
+              className="p-1.5 sm:p-2 text-gray-300 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer active:scale-95"
+              title="Zoom Out (-)"
+              aria-label="Zoom Out"
             >
               <ZoomOut className="w-4 h-4" />
             </button>
             <button
               type="button"
               onClick={handleZoomReset}
-              className="px-2 py-1 text-[11px] font-mono font-bold text-gray-300 hover:text-white rounded hover:bg-[#252830] transition-colors cursor-pointer"
-              title="Reset Zoom"
+              className="px-2 py-1 text-xs font-mono font-bold text-white bg-[#1F2430] hover:bg-[#2B3344] rounded-md transition-colors cursor-pointer border border-[#343F54]"
+              title="Reset Zoom (100%)"
             >
               {zoom}%
             </button>
             <button
               type="button"
               onClick={handleZoomIn}
-              className="p-1.5 text-gray-400 hover:text-white rounded hover:bg-[#252830] transition-colors cursor-pointer"
-              title="Zoom In"
+              className="p-1.5 sm:p-2 text-gray-300 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer active:scale-95"
+              title="Zoom In (+)"
+              aria-label="Zoom In"
             >
               <ZoomIn className="w-4 h-4" />
             </button>
+          </div>
+
+          {/* Quick Zoom Presets */}
+          <div className="hidden xs:flex items-center gap-1">
+            {[100, 150, 200].map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setZoom(level)}
+                className={`px-2 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                  zoom === level
+                    ? 'bg-[#FF5500] text-white border-[#FF5500] shadow-xs'
+                    : 'bg-[#181B22] text-gray-400 hover:text-white border-[#272B35]'
+                }`}
+                title={`Zoom to ${level}%`}
+              >
+                {level}%
+              </button>
+            ))}
+          </div>
+
+          {/* Official Verification Badge */}
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#171920] text-emerald-400 rounded-xl text-xs font-bold border border-emerald-500/30">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden md:inline">Authenticated Record</span>
+            <span className="md:hidden">Verified</span>
           </div>
 
           {/* Full Screen Toggle */}
           <button
             type="button"
             onClick={() => setIsFullScreen(!isFullScreen)}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
               isFullScreen
                 ? 'bg-red-600 hover:bg-red-500 text-white border-red-500 shadow-lg'
                 : 'bg-[#F25C05] hover:bg-[#D94F04] text-white border-[#F25C05] shadow-md'
@@ -313,7 +348,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
             {isFullScreen ? (
               <>
                 <Minimize2 className="w-4 h-4" />
-                <span>Close Full Screen</span>
+                <span className="hidden sm:inline">Close Full Screen</span>
               </>
             ) : (
               <>
@@ -331,7 +366,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                 if (isFullScreen) setIsFullScreen(false);
                 onSearchAnother();
               }}
-              className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+              className="px-2.5 py-1.5 text-xs font-medium text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Search Another</span>
@@ -347,7 +382,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                 onClose();
               }}
               className="px-3.5 py-1.5 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-[#3A3F4C] cursor-pointer flex items-center gap-1.5 shadow-xs"
-              title="Return to post list"
+              title="Return to search or list"
             >
               <ArrowLeft className="w-3.5 h-3.5 text-[#FF5500]" />
               <span>Back (ফিরে যান)</span>
@@ -357,231 +392,43 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
       </div>
 
       {/* =========================================================================
-          PRISTINE EXECUTIVE DOSSIER CARD (CLEAN & COMPLETE OVERVIEW)
+          PRIMARY VIEW: OFFICIAL VERIFICATION CERTIFICATE SHEET (DIRECT PDF FORMAT)
+          (Rendered unconditionally so customers directly see their official PDF document!)
          ========================================================================= */}
-      <div className="w-full max-w-[900px] mx-auto bg-[#14171E] border border-[#272B36] rounded-2xl p-5 sm:p-7 shadow-xl space-y-4">
-        {/* Title & Status */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#232733] pb-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-mono text-[11px] font-black uppercase shadow-xs">
-                #{document.referenceNumber}
-              </span>
-              <span className="px-2.5 py-0.5 rounded-md bg-[#1F232D] text-gray-300 text-xs font-bold border border-[#2D3342]">
-                {document.category}
-              </span>
-              {document.issueDate && (
-                <span className="text-xs text-gray-400 flex items-center gap-1 font-mono">
-                  <Calendar className="w-3.5 h-3.5" />
-                  {document.issueDate}
-                </span>
-              )}
-            </div>
-            <h2 className="text-lg sm:text-2xl font-black text-white tracking-tight leading-snug">
-              {document.title}
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="px-3 py-1 rounded-full text-xs font-extrabold uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-xs">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{document.status || 'Verified & Active'}</span>
-            </span>
-          </div>
+      <div id="official-certificate-sheet" className="w-full flex flex-col items-center relative">
+        {/* Mobile touch-pan info strip */}
+        <div className="w-full max-w-[850px] mb-2 px-2 flex items-center justify-between text-xs text-gray-400">
+          <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+            <ShieldCheck className="w-4 h-4" />
+            <span>Official PDF Verification Sheet</span>
+          </span>
+          <span className="text-[11px] text-gray-400 font-mono">
+            Zoom Level: <span className="text-white font-bold">{zoom}%</span> {zoom > 100 && '(Pan / Scroll enabled)'}
+          </span>
         </div>
 
-        {/* Client / Candidate Details Bar (ONLY IF PROVIDED) */}
-        {hasCandidateDetails && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#0D0F14] p-3.5 rounded-xl border border-[#1E222D] text-xs">
-            {document.candidateName && (
-              <div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                  Client / Candidate
-                </span>
-                <strong className="text-white text-sm font-bold block mt-0.5 truncate">
-                  {document.candidateName}
-                </strong>
-              </div>
-            )}
-
-            {document.passportNumber && (
-              <div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                  Passport Number
-                </span>
-                <span className="text-[#FF8E4D] font-mono font-bold text-sm block mt-0.5">
-                  {document.passportNumber}
-                </span>
-              </div>
-            )}
-
-            {document.jobTitle && (
-              <div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                  Designation / Role
-                </span>
-                <span className="text-gray-200 font-semibold block mt-0.5 truncate">
-                  {document.jobTitle}
-                </span>
-              </div>
-            )}
-
-            {document.workLocation && (
-              <div>
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                  Location
-                </span>
-                <span className="text-gray-300 block mt-0.5 truncate">
-                  {document.workLocation}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Post Description / Statement (Written by Admin) */}
-        {document.descriptionOrNotes && (
-          <div className="p-4 rounded-xl bg-[#0D0F14] border border-[#1E222D] text-xs sm:text-sm text-gray-200 leading-relaxed whitespace-pre-line font-normal">
-            {document.descriptionOrNotes}
-          </div>
-        )}
-
-        {/* Author / Verification Footer Strip */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-[11px] text-gray-400 font-mono">
-          <span>Official BHP Verified Archive · DVS Key: {document.verificationId || 'VRF-REG-2026'}</span>
-          <span>{document.author || 'BHP Global Operations Desk'}</span>
-        </div>
-      </div>
-
-      {/* =========================================================================
-          OPEN CLIENT DOCUMENTS STREAM (SERIAL BY SERIAL, OPEN STACKED DOWNWARDS)
-          "nice serial by sereal open obosthay ase pasa pasi na nicer dike ektar por ekta asbi"
-         ========================================================================= */}
-      {hasAttachedDocs && (
-        <div className="w-full flex flex-col items-center space-y-8">
-          {document.attachedDocuments!.map((doc, idx) => {
-            const serialNum = idx + 1;
-            const formattedSerial = serialNum < 10 ? `0${serialNum}` : `${serialNum}`;
-            const isPdf =
-              doc.dataUrl &&
-              (doc.dataUrl.startsWith('data:application/pdf') ||
-                doc.name.toLowerCase().endsWith('.pdf') ||
-                doc.type === 'pdf');
-
-            return (
-              <div
-                key={doc.id}
-                id={`attached-doc-${doc.id}`}
-                className="w-full max-w-[900px] flex flex-col items-center"
-              >
-                {/* Serial Header Strip */}
-                <div className="w-full mb-2 flex items-center justify-between px-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-black uppercase text-[11px] shadow-xs">
-                      Document {formattedSerial}
-                    </span>
-                    <span className="text-white font-bold truncate max-w-sm sm:max-w-md">
-                      {doc.name || `Uploaded Document #${idx + 1}`}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20 font-bold">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Verified & Authenticated</span>
-                  </div>
-                </div>
-
-                {/* Document Container Card */}
-                <div className="w-full bg-[#181A20] rounded-2xl border-2 border-[#2B2F38] shadow-2xl overflow-hidden p-4 sm:p-6 space-y-4">
-                  {/* Document Info Bar (CLEAN, NO DOWNLOAD BUTTON) */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2C303B] pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-orange-500/15 text-[#F25C05] border border-[#F25C05]/30 shrink-0">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h4 className="text-sm sm:text-base font-bold text-white truncate max-w-md">
-                          {doc.name || `Uploaded Document #${idx + 1}`}
-                        </h4>
-                        <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
-                          <span className="uppercase font-mono text-emerald-400 font-bold">
-                            {isPdf ? 'OFFICIAL CLIENT PDF' : 'OFFICIAL SCANNED RECORD'}
-                          </span>
-                          <span>•</span>
-                          <span>{doc.size || 'Verified Record'}</span>
-                          <span>•</span>
-                          <span className="text-orange-300 font-mono">Ref: {document.referenceNumber}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 rounded-lg bg-[#111317] border border-[#272B35] text-[11px] text-gray-400 font-medium flex items-center gap-1">
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        <span>Official Record</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Open Document Render Frame (NO DOWNLOAD CONTROLS) */}
-                  <div className="w-full min-h-[650px] sm:min-h-[850px] rounded-xl overflow-hidden bg-[#0F1115] border border-[#262A34] flex items-center justify-center relative select-none">
-                    {isPdf ? (
-                      <object
-                        data={`${doc.dataUrl}#toolbar=0&navpanes=0`}
-                        type="application/pdf"
-                        className="w-full h-[650px] sm:h-[850px] rounded-xl border-0 bg-white"
-                      >
-                        <iframe
-                          src={`${doc.dataUrl}#toolbar=0&navpanes=0`}
-                          title={doc.name}
-                          className="w-full h-full border-0 bg-white"
-                        />
-                      </object>
-                    ) : doc.dataUrl && (doc.dataUrl.startsWith('data:image') || doc.type === 'image') ? (
-                      <div className="p-4 flex items-center justify-center w-full max-h-[900px] overflow-auto">
-                        <img
-                          src={doc.dataUrl}
-                          alt={doc.name}
-                          onContextMenu={(e) => e.preventDefault()}
-                          style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
-                          className="max-w-full h-auto rounded-lg shadow-2xl transition-transform pointer-events-auto select-none"
-                        />
-                      </div>
-                    ) : (
-                      <div className="p-8 text-center space-y-3">
-                        <FileText className="w-12 h-12 text-gray-500 mx-auto" />
-                        <p className="text-sm font-semibold text-white">
-                          Verified Document ({doc.name})
-                        </p>
-                        <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                          Official document verified under Reference No: {document.referenceNumber}.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* =========================================================================
-          IF NO ATTACHED DOCUMENTS: RENDER OFFICIAL VERIFICATION CERTIFICATE SHEET
-          (Standard clearance format with clean typography, seals, QR code)
-         ========================================================================= */}
-      {!hasAttachedDocs && (
-        <div id="official-certificate-sheet" className="w-full flex flex-col items-center relative">
+        {/* Scrollable pan container so zooming on mobile allows smooth horizontal & vertical scrolling */}
+        <div className="w-full overflow-x-auto overflow-y-visible pb-4 pt-1 flex flex-col items-center touch-pan-x touch-pan-y scrollbar-thin">
           <div
             id="printable-pdf-document"
             onContextMenu={(e) => e.preventDefault()}
             style={{
               transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
               transformOrigin: 'top center',
+              marginBottom: zoom > 100 ? `${(zoom - 100) * 8}px` : undefined,
             }}
-            className="w-full max-w-[850px] bg-white text-[#111] p-6 sm:p-10 rounded-2xl shadow-2xl border-4 border-[#202530] relative select-none transition-all duration-150"
+            className="w-full max-w-[850px] bg-white text-[#111] p-5 sm:p-10 rounded-2xl shadow-2xl border-4 border-[#202530] relative select-none transition-transform duration-150 shrink-0"
           >
-            {/* Watermark Pattern */}
+            {/* Official Registry Watermark Grid */}
+            <div className="absolute inset-0 pointer-events-none opacity-[0.04] flex flex-wrap items-center justify-around select-none overflow-hidden p-6 gap-8 z-20">
+              {Array.from({ length: 24 }).map((_, i) => (
+                <div key={i} className="transform -rotate-25 text-center font-black uppercase text-[11px] sm:text-xs tracking-widest text-black select-none pointer-events-none">
+                  {document.country === 'canada' ? 'GOVERNMENT OF CANADA • OFFICIAL ARCHIVE' : 'BHP GROUP LIMITED • VERIFIED ARCHIVE'} • #{document.referenceNumber}
+                </div>
+              ))}
+            </div>
+
+            {/* Central Giant Watermark */}
             <div className="absolute inset-0 pointer-events-none opacity-[0.03] flex items-center justify-center select-none overflow-hidden">
               <div className="transform -rotate-45 text-center font-black text-gray-900 text-6xl sm:text-7xl tracking-widest uppercase">
                 {document.country === 'canada' ? 'GOVERNMENT OF CANADA • IRCC VERIFIED' : 'BHP GLOBAL OPERATIONS • OFFICIAL VERIFIED'}
@@ -589,7 +436,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
             </div>
 
             {/* Microprint Security Outer Frame */}
-            <div className="border-2 border-[#1E293B] p-5 sm:p-8 rounded-xl relative space-y-6">
+            <div className="border-2 border-[#1E293B] p-4 sm:p-8 rounded-xl relative space-y-6">
               {/* Header */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-6 border-b-2 border-[#1E293B]">
                 <div className="flex items-center gap-4 text-center sm:text-left">
@@ -626,7 +473,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end shrink-0 text-right">
+                <div className="flex flex-col items-center sm:items-end shrink-0 text-center sm:text-right">
                   <div className="bg-[#0F172A] text-white px-3 py-1.5 rounded-lg text-center font-mono text-xs font-black tracking-widest shadow-sm">
                     {document.referenceNumber}
                   </div>
@@ -761,7 +608,223 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* =========================================================================
+          SECONDARY VIEW: OPEN CLIENT DOCUMENTS STREAM (IF REAL ATTACHED UPLOADS EXIST)
+         ========================================================================= */}
+      {hasRealAttachedDocs && (
+        <div className="w-full flex flex-col items-center space-y-8 pt-4">
+          <div className="w-full max-w-[900px] flex items-center justify-between px-2 text-xs text-gray-400">
+            <span className="font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <Paperclip className="w-4 h-4 text-[#FF5500]" />
+              <span>Attached Official Uploads & Scanned Records ({validAttachedDocs.length})</span>
+            </span>
+          </div>
+
+          {validAttachedDocs.map((doc, idx) => {
+            const serialNum = idx + 1;
+            const formattedSerial = serialNum < 10 ? `0${serialNum}` : `${serialNum}`;
+            const isPdf =
+              doc.dataUrl &&
+              (doc.dataUrl.startsWith('data:application/pdf') ||
+                doc.name.toLowerCase().endsWith('.pdf') ||
+                doc.type === 'pdf');
+
+            return (
+              <div
+                key={doc.id}
+                id={`attached-doc-${doc.id}`}
+                className="w-full max-w-[900px] flex flex-col items-center"
+              >
+                {/* Serial Header Strip */}
+                <div className="w-full mb-2 flex items-center justify-between px-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-black uppercase text-[11px] shadow-xs">
+                      Document {formattedSerial}
+                    </span>
+                    <span className="text-white font-bold truncate max-w-sm sm:max-w-md">
+                      {doc.name || `Uploaded Document #${idx + 1}`}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20 font-bold">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Verified & Authenticated</span>
+                  </div>
+                </div>
+
+                {/* Document Container Card */}
+                <div className="w-full bg-[#181A20] rounded-2xl border-2 border-[#2B2F38] shadow-2xl overflow-hidden p-4 sm:p-6 space-y-4">
+                  {/* Document Info Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2C303B] pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-xl bg-orange-500/15 text-[#F25C05] border border-[#F25C05]/30 shrink-0">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm sm:text-base font-bold text-white truncate max-w-md">
+                          {doc.name || `Uploaded Document #${idx + 1}`}
+                        </h4>
+                        <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
+                          <span className="uppercase font-mono text-emerald-400 font-bold">
+                            {isPdf ? 'OFFICIAL CLIENT PDF' : 'OFFICIAL SCANNED RECORD'}
+                          </span>
+                          <span>•</span>
+                          <span>{doc.size || 'Verified Record'}</span>
+                          <span>•</span>
+                          <span className="text-orange-300 font-mono">Ref: {document.referenceNumber}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-lg bg-[#111317] border border-[#272B35] text-[11px] text-gray-400 font-medium flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>Official Record</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Open Document Render Frame */}
+                  <div className="w-full min-h-[500px] sm:min-h-[750px] rounded-xl overflow-hidden bg-[#0F1115] border border-[#262A34] flex items-center justify-center relative select-none">
+                    {isPdf ? (
+                      <object
+                        data={`${doc.dataUrl}#toolbar=0&navpanes=0`}
+                        type="application/pdf"
+                        className="w-full h-[500px] sm:h-[750px] rounded-xl border-0 bg-white"
+                      >
+                        <iframe
+                          src={`${doc.dataUrl}#toolbar=0&navpanes=0`}
+                          title={doc.name}
+                          className="w-full h-full border-0 bg-white"
+                        />
+                      </object>
+                    ) : doc.dataUrl && (doc.dataUrl.startsWith('data:image') || doc.type === 'image') ? (
+                      <div className="p-4 flex items-center justify-center w-full max-h-[900px] overflow-auto">
+                        <img
+                          src={doc.dataUrl}
+                          alt={doc.name}
+                          onContextMenu={(e) => e.preventDefault()}
+                          style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center' }}
+                          className="max-w-full h-auto rounded-lg shadow-2xl transition-transform pointer-events-auto select-none"
+                        />
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center space-y-3">
+                        <FileText className="w-12 h-12 text-gray-500 mx-auto" />
+                        <p className="text-sm font-semibold text-white">
+                          Verified Document ({doc.name})
+                        </p>
+                        <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                          Official document verified under Reference No: {document.referenceNumber}.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
+
+      {/* =========================================================================
+          TERTIARY VIEW: PRISTINE EXECUTIVE DOSSIER CARD (COMPLETE METADATA OVERVIEW)
+         ========================================================================= */}
+      <div className="w-full max-w-[900px] mx-auto bg-[#14171E] border border-[#272B36] rounded-2xl p-4 sm:p-7 shadow-xl space-y-4">
+        {/* Title & Status */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#232733] pb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-mono text-[11px] font-black uppercase shadow-xs">
+                #{document.referenceNumber}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-md bg-[#1F232D] text-gray-300 text-xs font-bold border border-[#2D3342]">
+                {document.category}
+              </span>
+              {document.issueDate && (
+                <span className="text-xs text-gray-400 flex items-center gap-1 font-mono">
+                  <Calendar className="w-3.5 h-3.5" />
+                  {document.issueDate}
+                </span>
+              )}
+            </div>
+            <h2 className="text-base sm:text-xl font-black text-white tracking-tight leading-snug">
+              {document.title}
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="px-3 py-1 rounded-full text-xs font-extrabold uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5 shadow-xs">
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{document.status || 'Verified & Active'}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Client / Candidate Details Bar */}
+        {hasCandidateDetails && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-[#0D0F14] p-3.5 rounded-xl border border-[#1E222D] text-xs">
+            {document.candidateName && (
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Client / Candidate
+                </span>
+                <strong className="text-white text-sm font-bold block mt-0.5 truncate">
+                  {document.candidateName}
+                </strong>
+              </div>
+            )}
+
+            {document.passportNumber && (
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Passport Number
+                </span>
+                <span className="text-[#FF8E4D] font-mono font-bold text-sm block mt-0.5">
+                  {document.passportNumber}
+                </span>
+              </div>
+            )}
+
+            {document.jobTitle && (
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Designation / Role
+                </span>
+                <span className="text-gray-200 font-semibold block mt-0.5 truncate">
+                  {document.jobTitle}
+                </span>
+              </div>
+            )}
+
+            {document.workLocation && (
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Location
+                </span>
+                <span className="text-gray-300 block mt-0.5 truncate">
+                  {document.workLocation}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Post Description / Statement */}
+        {document.descriptionOrNotes && (
+          <div className="p-4 rounded-xl bg-[#0D0F14] border border-[#1E222D] text-xs sm:text-sm text-gray-200 leading-relaxed whitespace-pre-line font-normal">
+            {document.descriptionOrNotes}
+          </div>
+        )}
+
+        {/* Author / Verification Footer Strip */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-[11px] text-gray-400 font-mono">
+          <span>Official BHP Verified Archive · DVS Key: {document.verificationId || 'VRF-REG-2026'}</span>
+          <span>{document.author || 'BHP Global Operations Desk'}</span>
+        </div>
+      </div>
     </div>
   );
 };

@@ -1,5 +1,5 @@
-import { getStoredAdminPosts, findAdminPostByQuery } from './postsStorage';
-import { getStoredCanadaDocuments } from './canadaStorage';
+import { getStoredAdminPosts, findAdminPostByQuery, syncAdminPostsFromServer } from './postsStorage';
+import { getStoredCanadaDocuments, syncCanadaDocumentsFromServer } from './canadaStorage';
 import { SAMPLE_PROFILES } from '../data/portalData';
 import {
   UnifiedDocumentData,
@@ -219,6 +219,55 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
     }
   } catch (err) {
     console.warn('Error querying sample profiles:', err);
+  }
+
+  return null;
+}
+
+/**
+ * Asynchronous Universal Search with live server sync fallback.
+ * Guarantees that documents newly added by admin on another phone/device
+ * will be retrieved and displayed to the customer immediately.
+ */
+export async function searchUniversalDocumentAsync(rawQuery: string): Promise<UniversalSearchResult | null> {
+  // 1. First try immediate local cache
+  const localMatch = searchUniversalDocument(rawQuery);
+  if (localMatch) return localMatch;
+
+  // 2. Query direct server search endpoint
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(rawQuery)}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.found && data.record) {
+        if (data.source === 'australia') {
+          return {
+            document: postToUnifiedDoc(data.record, 'australia'),
+            source: 'australia',
+            rawRecord: data.record,
+          };
+        } else if (data.source === 'canada') {
+          return {
+            document: canadaRecordToUnifiedDoc(data.record),
+            source: 'canada',
+            rawRecord: data.record,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Server search endpoint error:', err);
+  }
+
+  // 3. Fallback: full server sync of posts and canada docs, then retry search
+  try {
+    await Promise.allSettled([
+      syncAdminPostsFromServer(),
+      syncCanadaDocumentsFromServer(),
+    ]);
+    return searchUniversalDocument(rawQuery);
+  } catch (syncErr) {
+    console.warn('Sync fallback error:', syncErr);
   }
 
   return null;
