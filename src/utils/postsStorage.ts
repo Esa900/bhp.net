@@ -148,7 +148,8 @@ All supporting biometric documents, police clearances, and medical certification
  * Retrieve all Admin Posts from LocalStorage (or in-memory cache / initial defaults)
  */
 /**
- * Fetch latest admin posts from server for cross-device synchronization
+ * Fetch latest admin posts from server with SMART TWO-WAY MERGE.
+ * Preserves locally created posts and syncs missing posts to and from the server.
  */
 export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
   if (typeof window === 'undefined') return getStoredAdminPosts();
@@ -157,25 +158,46 @@ export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
     const res = await fetch('/api/posts', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
-      if (data && Array.isArray(data.posts) && data.posts.length > 0) {
-        (window as any).__bhp_admin_posts_cache = data.posts;
+      if (data && Array.isArray(data.posts)) {
+        const local = getStoredAdminPosts();
+        const mergedMap = new Map<string, AdminPost>();
+
+        // 1. Add server posts
+        data.posts.forEach((p: AdminPost) => {
+          if (p && p.id) {
+            mergedMap.set(p.id, p);
+          }
+        });
+
+        // 2. Add local posts (ensures any post saved by admin is NEVER overwritten or lost)
+        let hasNewLocalPosts = false;
+        local.forEach((p: AdminPost) => {
+          if (p && p.id && !mergedMap.has(p.id)) {
+            mergedMap.set(p.id, p);
+            hasNewLocalPosts = true;
+          }
+        });
+
+        const mergedList = Array.from(mergedMap.values());
+        (window as any).__bhp_admin_posts_cache = mergedList;
+
         try {
-          localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(data.posts));
+          localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(mergedList));
         } catch (e) {
           console.warn('Local storage cache update error:', e);
         }
-        window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: data.posts }));
-        return data.posts;
-      } else if (data && Array.isArray(data.posts) && data.posts.length === 0) {
-        // If server has no posts yet but local has posts, push local posts to server
-        const local = getStoredAdminPosts();
-        if (local && local.length > 0) {
+
+        // If local had posts that server was missing, push complete merged set to server
+        if (hasNewLocalPosts) {
           fetch('/api/posts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(local),
+            body: JSON.stringify(mergedList),
           }).catch(console.error);
         }
+
+        window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: mergedList }));
+        return mergedList;
       }
     }
   } catch (err) {
@@ -198,10 +220,10 @@ export const getStoredAdminPosts = (): AdminPost[] => {
   }
 
   try {
-    const raw = localStorage.getItem(POSTS_STORAGE_KEY);
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(POSTS_STORAGE_KEY) : null;
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         if (typeof window !== 'undefined') {
           (window as any).__bhp_admin_posts_cache = parsed;
         }
@@ -214,7 +236,9 @@ export const getStoredAdminPosts = (): AdminPost[] => {
 
   // Store and return initial defaults only if no key has ever been set
   try {
-    localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(INITIAL_DEFAULT_POSTS));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(INITIAL_DEFAULT_POSTS));
+    }
     if (typeof window !== 'undefined') {
       (window as any).__bhp_admin_posts_cache = INITIAL_DEFAULT_POSTS;
     }
@@ -225,9 +249,9 @@ export const getStoredAdminPosts = (): AdminPost[] => {
 };
 
 /**
- * Save Admin Posts to LocalStorage and push to Server for all other devices
+ * Save Admin Posts to LocalStorage and push to Server with async confirmation
  */
-export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
+export const saveStoredAdminPostsAsync = async (posts: AdminPost[]): Promise<boolean> => {
   if (typeof window !== 'undefined') {
     (window as any).__bhp_admin_posts_cache = posts;
   }
@@ -236,7 +260,7 @@ export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
   try {
     localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
   } catch (err) {
-    console.warn('LocalStorage save quota exceeded, preserving newest post and pruning old payloads:', err);
+    console.warn('LocalStorage save quota exceeded, saving streamlined list:', err);
     try {
       const streamlined = posts.map((p, idx) => {
         if (idx < 5) return p;
@@ -260,16 +284,30 @@ export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
     window.dispatchEvent(new Event('storage'));
   }
 
-  // 3. PERSIST TO SERVER (CRITICAL: Allows other devices and customer phones to access immediately)
+  // 3. PERSIST TO SERVER
   if (typeof window !== 'undefined') {
-    fetch('/api/posts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(posts),
-    }).catch((err) => {
+    try {
+      const res = await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(posts),
+      });
+      return res.ok;
+    } catch (err) {
       console.warn('Failed to push admin posts to server persistence API:', err);
-    });
+      return false;
+    }
   }
+  return true;
+};
+
+/**
+ * Synchronous wrapper for backwards compatibility
+ */
+export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
+  saveStoredAdminPostsAsync(posts).catch((err) => {
+    console.warn('Background server push error:', err);
+  });
 };
 
 /**
@@ -310,18 +348,41 @@ export const findAdminPostByQuery = (
   });
   if (exactRefMatch) return exactRefMatch;
 
-  // 2. Partial Reference Number, Passport, or ID match
+  // 2. Partial Reference Number, Passport, ID or Digits match
+  const digitsQuery = cleanQuery.replace(/\D/g, '');
   const partialRefMatch = allPosts.find((p) => {
-    const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
-    const pId = (p.id || '').toLowerCase().replace(/[-\s_./]/g, '');
-    const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./]/g, '');
-    const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
-    return (
+    const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+    const pId = (p.id || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+    const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+    const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+    
+    // Check direct substring
+    if (
       (pRef && (pRef.includes(cleanQuery) || cleanQuery.includes(pRef))) ||
       (pId && (pId.includes(cleanQuery) || cleanQuery.includes(pId))) ||
       (pVrf && (pVrf.includes(cleanQuery) || cleanQuery.includes(pVrf))) ||
       (pPass && (pPass.includes(cleanQuery) || cleanQuery.includes(pPass)))
-    );
+    ) {
+      return true;
+    }
+
+    // Check pure numeric match (e.g. user enters "928410" for "REF-AU-928410")
+    if (digitsQuery && digitsQuery.length >= 3) {
+      const refDigits = pRef.replace(/\D/g, '');
+      const vrfDigits = pVrf.replace(/\D/g, '');
+      const passDigits = pPass.replace(/\D/g, '');
+      const idDigits = pId.replace(/\D/g, '');
+      if (
+        (refDigits && (refDigits === digitsQuery || refDigits.includes(digitsQuery) || digitsQuery.includes(refDigits))) ||
+        (vrfDigits && (vrfDigits === digitsQuery || vrfDigits.includes(digitsQuery) || digitsQuery.includes(vrfDigits))) ||
+        (passDigits && (passDigits === digitsQuery || passDigits.includes(digitsQuery))) ||
+        (idDigits && (idDigits === digitsQuery || idDigits.includes(digitsQuery)))
+      ) {
+        return true;
+      }
+    }
+
+    return false;
   });
   if (partialRefMatch) return partialRefMatch;
 
