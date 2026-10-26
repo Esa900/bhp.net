@@ -64,15 +64,18 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     : quickLinks;
 
   // Filter matched admin posts (Australia)
+  const cleanTrimmed = trimmed.replace(/[-\s_./#:]/g, '');
+  const digitsTrimmed = cleanTrimmed.replace(/\D/g, '');
+
   const matchedPosts = trimmed
     ? adminPosts.filter((p) => {
-        const cleanTrimmed = trimmed.replace(/[-\s_./]/g, '');
-        const cleanRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
-        const cleanPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./]/g, '');
-        const cleanCand = (p.candidateName || '').toLowerCase().replace(/[-\s_./]/g, '');
-        const cleanId = (p.id || '').toLowerCase().replace(/[-\s_./]/g, '');
-        const cleanVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./]/g, '');
-        return (
+        const cleanRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const cleanPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const cleanCand = (p.candidateName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const cleanId = (p.id || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const cleanVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+
+        if (
           cleanRef.includes(cleanTrimmed) ||
           cleanTrimmed.includes(cleanRef) ||
           cleanPass.includes(cleanTrimmed) ||
@@ -81,18 +84,43 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           cleanVrf.includes(cleanTrimmed) ||
           p.title.toLowerCase().includes(trimmed) ||
           p.category.toLowerCase().includes(trimmed)
-        );
+        ) {
+          return true;
+        }
+
+        if (digitsTrimmed && digitsTrimmed.length >= 3) {
+          const refDigits = cleanRef.replace(/\D/g, '');
+          const vrfDigits = cleanVrf.replace(/\D/g, '');
+          const passDigits = cleanPass.replace(/\D/g, '');
+          if (
+            (refDigits && (refDigits === digitsTrimmed || refDigits.includes(digitsTrimmed) || digitsTrimmed.includes(refDigits))) ||
+            (vrfDigits && (vrfDigits === digitsTrimmed || vrfDigits.includes(digitsTrimmed) || digitsTrimmed.includes(vrfDigits))) ||
+            (passDigits && (passDigits === digitsTrimmed || passDigits.includes(digitsTrimmed)))
+          ) {
+            return true;
+          }
+        }
+
+        return false;
       })
     : [];
 
   // Filter matched Canada documents
   const matchedCanada = trimmed
     ? canadaDocs.filter((c) => {
-        const cleanTrimmed = trimmed.replace(/[-\s_./]/g, '');
         const matchField = (val?: string) => {
           if (!val) return false;
-          const cleanVal = val.toLowerCase().replace(/[-\s_./]/g, '');
-          return cleanVal.includes(cleanTrimmed) || cleanTrimmed.includes(cleanVal);
+          const cleanVal = val.toLowerCase().replace(/[-\s_./#:]/g, '');
+          if (cleanVal.includes(cleanTrimmed) || cleanTrimmed.includes(cleanVal)) {
+            return true;
+          }
+          if (digitsTrimmed && digitsTrimmed.length >= 3) {
+            const valDigits = cleanVal.replace(/\D/g, '');
+            if (valDigits && (valDigits === digitsTrimmed || valDigits.includes(digitsTrimmed) || digitsTrimmed.includes(valDigits))) {
+              return true;
+            }
+          }
+          return false;
         };
         return (
           matchField(c.tinOrRef) ||

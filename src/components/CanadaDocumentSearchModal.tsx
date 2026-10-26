@@ -94,6 +94,27 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
     };
   }, [hasSearched, query, currentConfig]);
 
+  // Auto-search as customer types their reference number or ID (debounced 260ms)
+  useEffect(() => {
+    if (!isOpen) return;
+    const trimmed = query.trim();
+    if (!trimmed || trimmed.length < 2) {
+      if (trimmed.length === 0 && hasSearched) {
+        setHasSearched(false);
+        setMatchedRecord(null);
+        setMatchedAdminPost(null);
+        setMatchedUniversalDoc(null);
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      handleSearch(trimmed);
+    }, 260);
+
+    return () => clearTimeout(timer);
+  }, [query, isOpen]);
+
   // Esc key listener
   useEffect(() => {
     if (!isOpen) return;

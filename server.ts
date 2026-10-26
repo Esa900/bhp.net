@@ -609,10 +609,21 @@ async function startServer() {
     const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
     const canadaDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
 
+    const digitsQuery = cleanQuery.replace(/\D/g, '');
+
     const matchesClean = (val?: string) => {
       if (!val) return false;
       const clean = val.toLowerCase().replace(/[-\s_./#:]/g, '');
-      return clean === cleanQuery || clean.includes(cleanQuery) || cleanQuery.includes(clean);
+      if (clean === cleanQuery || clean.includes(cleanQuery) || cleanQuery.includes(clean)) {
+        return true;
+      }
+      if (digitsQuery && digitsQuery.length >= 3) {
+        const valDigits = clean.replace(/\D/g, '');
+        if (valDigits && (valDigits === digitsQuery || valDigits.includes(digitsQuery) || digitsQuery.includes(valDigits))) {
+          return true;
+        }
+      }
+      return false;
     };
 
     // 1. Search Australia posts (Exact & Partial across refNumber, id, verificationIdNo, passportNumber, candidateName)

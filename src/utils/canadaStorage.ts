@@ -174,7 +174,8 @@ export const INITIAL_CANADA_DOCUMENTS: CanadaDocumentRecord[] = [
 ];
 
 /**
- * Fetch latest Canada documents from server for cross-device synchronization
+ * Fetch latest Canada documents from server with SMART TWO-WAY MERGE.
+ * Preserves locally created Canada documents and syncs missing documents to and from the server.
  */
 export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRecord[]> {
   if (typeof window === 'undefined') return getStoredCanadaDocuments();
@@ -183,24 +184,44 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
     const res = await fetch('/api/canada-documents', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
-      if (data && Array.isArray(data.documents) && data.documents.length > 0) {
+      if (data && Array.isArray(data.documents)) {
+        const local = getStoredCanadaDocuments();
+        const mergedMap = new Map<string, CanadaDocumentRecord>();
+
+        // 1. Add server documents
+        data.documents.forEach((d: CanadaDocumentRecord) => {
+          if (d && d.id) {
+            mergedMap.set(d.id, d);
+          }
+        });
+
+        // 2. Add local documents (ensures locally created documents are never wiped)
+        let hasNewLocal = false;
+        local.forEach((d: CanadaDocumentRecord) => {
+          if (d && d.id && !mergedMap.has(d.id)) {
+            mergedMap.set(d.id, d);
+            hasNewLocal = true;
+          }
+        });
+
+        const mergedList = Array.from(mergedMap.values());
         try {
-          localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(data.documents));
+          localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(mergedList));
         } catch (e) {
           console.warn('LocalStorage error caching canada documents:', e);
         }
-        window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: data.documents }));
-        return data.documents;
-      } else if (data && Array.isArray(data.documents) && data.documents.length === 0) {
-        // Push initial/local to server if server is empty
-        const local = getStoredCanadaDocuments();
-        if (local && local.length > 0) {
+
+        // If local had new documents that server missed, push merged list to server
+        if (hasNewLocal) {
           fetch('/api/canada-documents', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(local),
+            body: JSON.stringify(mergedList),
           }).catch(console.error);
         }
+
+        window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: mergedList }));
+        return mergedList;
       }
     }
   } catch (err) {
@@ -219,10 +240,10 @@ if (typeof window !== 'undefined') {
 
 export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
   try {
-    const raw = localStorage.getItem(CANADA_STORAGE_KEY);
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(CANADA_STORAGE_KEY) : null;
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed;
       }
     }
@@ -232,14 +253,16 @@ export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
 
   // Seed default only if key has never been initialized
   try {
-    localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(INITIAL_CANADA_DOCUMENTS));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(INITIAL_CANADA_DOCUMENTS));
+    }
   } catch (e) {
     console.error(e);
   }
   return INITIAL_CANADA_DOCUMENTS;
 }
 
-export function saveCanadaDocuments(docs: CanadaDocumentRecord[]): void {
+export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Promise<boolean> {
   // 1. Local storage save
   try {
     localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(docs));
@@ -253,14 +276,25 @@ export function saveCanadaDocuments(docs: CanadaDocumentRecord[]): void {
 
   // 2. Push to server persistence API for cross-device sharing
   if (typeof window !== 'undefined') {
-    fetch('/api/canada-documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(docs),
-    }).catch((err) => {
+    try {
+      const res = await fetch('/api/canada-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(docs),
+      });
+      return res.ok;
+    } catch (err) {
       console.warn('Failed to push Canada documents to server API:', err);
-    });
+      return false;
+    }
   }
+  return true;
+}
+
+export function saveCanadaDocuments(docs: CanadaDocumentRecord[]): void {
+  saveCanadaDocumentsAsync(docs).catch((err) => {
+    console.warn('Background server push error for canada docs:', err);
+  });
 }
 
 export function deleteAllCanadaDocuments(): void {
@@ -334,10 +368,21 @@ export function searchCanadaDocument(
 }
 
 function matchesCanadaRecord(d: CanadaDocumentRecord, clean: string, rawQuery: string): boolean {
+  const digitsQuery = clean.replace(/\D/g, '');
+
   const matchesField = (val?: string) => {
     if (!val) return false;
     const cleanVal = val.toLowerCase().replace(/[-\s_./#:]/g, '');
-    return cleanVal.includes(clean) || clean.includes(cleanVal);
+    if (cleanVal.includes(clean) || clean.includes(cleanVal)) {
+      return true;
+    }
+    if (digitsQuery && digitsQuery.length >= 3) {
+      const valDigits = cleanVal.replace(/\D/g, '');
+      if (valDigits && (valDigits === digitsQuery || valDigits.includes(digitsQuery) || digitsQuery.includes(valDigits))) {
+        return true;
+      }
+    }
+    return false;
   };
 
   return (

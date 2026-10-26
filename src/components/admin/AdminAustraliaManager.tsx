@@ -46,6 +46,7 @@ import { AdminPost, AttachedDoc } from '../../types';
 import {
   getStoredAdminPosts,
   saveStoredAdminPosts,
+  saveStoredAdminPostsAsync,
   addStoredAdminPost,
   updateStoredAdminPost,
   deleteStoredAdminPost,
@@ -313,7 +314,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     setActiveTab('add-post');
   };
 
-  const handleSavePost = (e: React.FormEvent) => {
+  const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!postForm.title.trim()) {
       showToast('Error: Post title is required.');
@@ -358,15 +359,19 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       verificationIdNo: `VRF-AU-${postForm.refNumber.replace(/[^0-9]/g, '') || '99420'}`,
     };
 
+    const currentPosts = getStoredAdminPosts();
+    let updatedPosts: AdminPost[];
     if (editingPostId) {
-      updateStoredAdminPost(editingPostId, postData);
-      showToast(`Post "${postData.title}" updated successfully.`);
+      updatedPosts = currentPosts.map((p) => (p.id === editingPostId ? { ...p, ...postData } : p));
+      await saveStoredAdminPostsAsync(updatedPosts);
+      showToast(`Post "${postData.title}" updated and synchronized!`);
     } else {
-      addStoredAdminPost(postData);
-      showToast(`New post "${postData.title}" added to Australia.`);
+      updatedPosts = [postData, ...currentPosts];
+      await saveStoredAdminPostsAsync(updatedPosts);
+      showToast(`New post "${postData.title}" published! Searchable Ref: "${postData.refNumber}"`);
     }
 
-    setPosts(getStoredAdminPosts());
+    setPosts(updatedPosts);
     setActiveTab('all-posts');
   };
 

@@ -25,11 +25,13 @@ import { DocumentMenuItem } from '../data/menuNavigationItems';
 import { ApplicantProfile } from '../types/portal';
 import { AdminPost, AttachedDoc } from '../types';
 import { getStoredAdminPosts, findAdminPostByQuery, syncAdminPostsFromServer } from '../utils/postsStorage';
+import { getStoredCanadaDocuments, searchCanadaDocument, syncCanadaDocumentsFromServer } from '../utils/canadaStorage';
 import {
   FullPdfDocumentViewer,
   UnifiedDocumentData,
   postToUnifiedDoc,
   profileToUnifiedDoc,
+  canadaRecordToUnifiedDoc,
 } from './FullPdfDocumentViewer';
 import { searchUniversalDocument, searchUniversalDocumentAsync } from '../utils/universalSearch';
 
@@ -108,6 +110,27 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       }
     }
   }, [isOpen, activeItem]);
+
+  // Auto-search as customer types their reference number or ID (debounced 260ms)
+  useEffect(() => {
+    if (!isOpen) return;
+    const trimmed = query.trim();
+    if (!trimmed || trimmed.length < 2) {
+      if (trimmed.length === 0 && hasSearched) {
+        setHasSearched(false);
+        setMatchedUniversalDoc(null);
+        setMatchedAdminPost(null);
+        setMatchedProfile(null);
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      handleSearch(trimmed);
+    }, 260);
+
+    return () => clearTimeout(timer);
+  }, [query, isOpen]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -199,13 +222,21 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         return;
       }
 
-      // 3. Fallback direct match in admin posts
+      // 3. Fallback direct match in Australia posts
       const freshPosts = getStoredAdminPosts();
       setAdminPosts(freshPosts);
       const directPost = findAdminPostByQuery(searchTerm, freshPosts);
       if (directPost) {
         setMatchedAdminPost(directPost);
         setMatchedUniversalDoc(postToUnifiedDoc(directPost, 'australia'));
+        setIsSearching(false);
+        return;
+      }
+
+      // 4. Fallback direct match in Canada documents
+      const directCa = searchCanadaDocument(searchTerm);
+      if (directCa) {
+        setMatchedUniversalDoc(canadaRecordToUnifiedDoc(directCa));
         setIsSearching(false);
         return;
       }

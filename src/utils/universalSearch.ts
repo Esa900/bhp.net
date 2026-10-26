@@ -52,18 +52,39 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
       };
     }
 
-    // 1b. Partial Ref, ID, Passport match
+    // 1b. Partial Ref, ID, Passport, or pure digits match
+    const digitsQuery = cleanQuery.replace(/\D/g, '');
     const partialPost = adminPosts.find((p) => {
       const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
       const pId = (p.id || '').toLowerCase().replace(/[-\s_./#:]/g, '');
       const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
       const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-      return (
+
+      if (
         (pRef && (pRef.includes(cleanQuery) || cleanQuery.includes(pRef))) ||
         (pId && (pId.includes(cleanQuery) || cleanQuery.includes(pId))) ||
         (pVrf && (pVrf.includes(cleanQuery) || cleanQuery.includes(pVrf))) ||
         (pPass && (pPass.includes(cleanQuery) || cleanQuery.includes(pPass)))
-      );
+      ) {
+        return true;
+      }
+
+      if (digitsQuery && digitsQuery.length >= 3) {
+        const refDigits = pRef.replace(/\D/g, '');
+        const vrfDigits = pVrf.replace(/\D/g, '');
+        const passDigits = pPass.replace(/\D/g, '');
+        const idDigits = pId.replace(/\D/g, '');
+        if (
+          (refDigits && (refDigits === digitsQuery || refDigits.includes(digitsQuery) || digitsQuery.includes(refDigits))) ||
+          (vrfDigits && (vrfDigits === digitsQuery || vrfDigits.includes(digitsQuery) || digitsQuery.includes(vrfDigits))) ||
+          (passDigits && (passDigits === digitsQuery || passDigits.includes(digitsQuery))) ||
+          (idDigits && (idDigits === digitsQuery || idDigits.includes(digitsQuery)))
+        ) {
+          return true;
+        }
+      }
+
+      return false;
     });
     if (partialPost) {
       return {
@@ -250,6 +271,12 @@ export async function searchUniversalDocumentAsync(rawQuery: string): Promise<Un
           return {
             document: canadaRecordToUnifiedDoc(data.record),
             source: 'canada',
+            rawRecord: data.record,
+          };
+        } else if (data.source === 'portal') {
+          return {
+            document: profileToUnifiedDoc(data.record),
+            source: 'portal',
             rawRecord: data.record,
           };
         }

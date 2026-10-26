@@ -36,6 +36,7 @@ import {
   deleteCanadaDocument,
   deleteAllCanadaDocuments,
   resetCanadaDocuments,
+  saveCanadaDocumentsAsync,
   CANADA_DOCUMENTS_UPDATED_EVENT,
   getStoredCanadaMenuConfigs,
   addStoredCanadaMenuConfig,
@@ -323,7 +324,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     setActiveTab('add-post');
   };
 
-  const handleSavePost = (e: React.FormEvent) => {
+  const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const candidateName = docForm.candidateName.trim() || 'BHP Canada Authorized Client';
@@ -348,15 +349,29 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       transitionIdNo: docForm.transitionIdNo?.trim() || baseRef,
     };
 
+    const currentDocs = getStoredCanadaDocuments();
+    let updatedDocs: CanadaDocumentRecord[];
+
     if (editingDocId) {
-      updateCanadaDocument(editingDocId, postPayload);
-      showToast(`Canada post for "${candidateName}" updated.`);
+      const idx = currentDocs.findIndex((d) => d.id === editingDocId);
+      if (idx !== -1) {
+        currentDocs[idx] = { ...currentDocs[idx], ...postPayload };
+      }
+      updatedDocs = [...currentDocs];
+      await saveCanadaDocumentsAsync(updatedDocs);
+      showToast(`Canada post for "${candidateName}" updated and synced.`);
     } else {
-      addCanadaDocument(postPayload);
+      const newRec: CanadaDocumentRecord = {
+        ...postPayload,
+        id: `ca-doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        createdAt: new Date().toISOString(),
+      };
+      updatedDocs = [newRec, ...currentDocs];
+      await saveCanadaDocumentsAsync(updatedDocs);
       showToast(`Canada post published! Searchable Ref: "${postPayload.tinOrRef}"`);
     }
 
-    setDocuments(getStoredCanadaDocuments());
+    setDocuments(updatedDocs);
     setActiveTab('all-posts');
   };
 
