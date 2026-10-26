@@ -27,6 +27,7 @@ import { AdminPost, AttachedDoc } from '../types';
 import { CanadaDocumentRecord } from '../types/canada';
 import { ApplicantProfile } from '../types/portal';
 import { PdfCanvasRenderer } from './PdfCanvasRenderer';
+import { OfficialAttachedPdfSheet } from './OfficialAttachedPdfSheet';
 
 export interface UnifiedDocumentData {
   id: string;
@@ -606,16 +607,25 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
       {/* =========================================================================
           SECONDARY VIEW: OPEN CLIENT DOCUMENTS STREAM (IF REAL ATTACHED UPLOADS EXIST)
          ========================================================================= */}
-      {hasRealAttachedDocs && (
-        <div className="w-full flex flex-col items-center space-y-8 pt-4">
-          <div className="w-full max-w-[900px] flex items-center justify-between px-2 text-xs text-gray-400">
-            <span className="font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-              <Paperclip className="w-4 h-4 text-[#FF5500]" />
-              <span>Attached Official Uploads & Scanned Records ({validAttachedDocs.length})</span>
+      {/* =========================================================================
+          SECONDARY VIEW: OPEN CLIENT DOCUMENTS STREAM (ATTACHED WORK PERMIT / OFFICIAL PDF)
+         ========================================================================= */}
+      <div className="w-full flex flex-col items-center space-y-8 pt-4">
+        <div className="w-full max-w-[900px] flex items-center justify-between px-2 text-xs text-gray-400">
+          <span className="font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <Paperclip className="w-4 h-4 text-[#FF5500]" />
+            <span>
+              Attached Official Client Document & Visa Record {hasRealAttachedDocs ? `(${validAttachedDocs.length})` : '(01)'}
             </span>
+          </span>
+          <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20 font-bold">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Official Client Record</span>
           </div>
+        </div>
 
-          {validAttachedDocs.map((doc, idx) => {
+        {hasRealAttachedDocs ? (
+          validAttachedDocs.map((doc, idx) => {
             const serialNum = idx + 1;
             const formattedSerial = serialNum < 10 ? `0${serialNum}` : `${serialNum}`;
             const isPdf =
@@ -700,23 +710,68 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                         />
                       </div>
                     ) : (
-                      <div className="p-8 text-center space-y-3">
-                        <FileText className="w-12 h-12 text-gray-500 mx-auto" />
-                        <p className="text-sm font-semibold text-white">
-                          Verified Document ({doc.name})
-                        </p>
-                        <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                          Official document verified under Reference No: {document.referenceNumber}.
-                        </p>
-                      </div>
+                      <OfficialAttachedPdfSheet document={document} zoom={zoom} />
                     )}
                   </div>
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        ) : (
+          /* When no separate uploaded binary PDF was provided, ALWAYS show the official verified attached Work Permit Application sheet */
+          <div className="w-full max-w-[900px] flex flex-col items-center">
+            <div className="w-full mb-2 flex items-center justify-between px-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-black uppercase text-[11px] shadow-xs">
+                  Document 01
+                </span>
+                <span className="text-white font-bold truncate max-w-sm sm:max-w-md">
+                  {document.title || 'Official Work Permit Application (D Category)'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-md border border-emerald-500/20 font-bold">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Verified & Authenticated</span>
+              </div>
+            </div>
+
+            <div className="w-full bg-[#181A20] rounded-2xl border-2 border-[#2B2F38] shadow-2xl overflow-hidden p-4 sm:p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2C303B] pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-orange-500/15 text-[#F25C05] border border-[#F25C05]/30 shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm sm:text-base font-bold text-white truncate max-w-md">
+                      {document.title || 'Official Work Permit Application'}
+                    </h4>
+                    <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-0.5">
+                      <span className="uppercase font-mono text-emerald-400 font-bold">
+                        OFFICIAL CLIENT PDF
+                      </span>
+                      <span>•</span>
+                      <span>Official IRCC Document</span>
+                      <span>•</span>
+                      <span className="text-orange-300 font-mono">Ref: {document.referenceNumber}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-lg bg-[#111317] border border-[#272B35] text-[11px] text-gray-400 font-medium flex items-center gap-1">
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    <span>Official Record</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="w-full min-h-[400px] rounded-xl overflow-hidden bg-[#0F1115] border border-[#262A34] flex items-center justify-center relative select-none p-2 sm:p-4">
+                <OfficialAttachedPdfSheet document={document} zoom={zoom} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* =========================================================================
           TERTIARY VIEW: PRISTINE EXECUTIVE DOSSIER CARD (COMPLETE METADATA OVERVIEW)

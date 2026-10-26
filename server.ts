@@ -167,11 +167,41 @@ All supporting biometric documents, police clearances, and medical certification
 
 const INITIAL_CANADA_DOCUMENTS = [
   {
+    id: 'ca-doc-egp56',
+    categoryType: 'work-permit-pending',
+    mainTitle: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER',
+    subMenu: 'Work Permit Documents Pending See',
+    tinOrRef: 'EGP56RU55H',
+    referenceNo: 'EGP56RU55H',
+    idNumber: 'EGP56RU55H',
+    verificationIdNo: 'VRF-CAN-56RU55',
+    transitionIdNo: 'VFS-CAN-56RU55',
+    candidateName: 'MD IBRAHIM KHALIL MOZUMDER',
+    passportNumber: 'A99014322',
+    nationality: 'Bangladeshi',
+    dateOfBirth: '1990-06-15',
+    jobTitle: 'Commercial Transport & Heavy Mobile Equipment Operator',
+    employerName: 'BHP Canada Operations Ltd',
+    workLocation: 'Calgary, Alberta, Canada',
+    hourlyWageOrSalary: '$38.50 CAD / hr',
+    workingHours: '40 hrs / week',
+    status: 'Verified & Active',
+    issueDate: '2026-03-02',
+    expiryDate: '2029-03-01',
+    officialDocNumber: 'WP-IRCC-EGP56RU55H',
+    lmiaNumber: 'LMIA-CA-56RU55',
+    documentFileName: 'Canada_Work_Permit_Application_EGP56RU55H.pdf',
+    notes: 'Application for a Work Permit (D Category). Verified and endorsed by BHP Canada & IRCC.',
+    createdAt: '2026-03-02T10:00:00.000Z',
+  },
+  {
     id: 'ca-doc-1',
     categoryType: 'work-permit-docs',
     mainTitle: 'canada Work Permit Documents',
     subMenu: 'Employment Application Document C',
     tinOrRef: 'REF-CA-928410',
+    referenceNo: 'REF-CA-928410',
+    idNumber: 'REF-CA-928410',
     candidateName: 'Mohammad Rafiqul Islam',
     passportNumber: 'A08934211',
     nationality: 'Bangladeshi',
@@ -614,12 +644,15 @@ async function startServer() {
     const matchesClean = (val?: string) => {
       if (!val) return false;
       const clean = val.toLowerCase().replace(/[-\s_./#:]/g, '');
-      if (clean === cleanQuery || clean.includes(cleanQuery) || cleanQuery.includes(clean)) {
+      if (clean === cleanQuery || clean.includes(cleanQuery)) {
         return true;
       }
-      if (digitsQuery && digitsQuery.length >= 3) {
+      if (clean.length >= 6 && cleanQuery.includes(clean)) {
+        return true;
+      }
+      if (digitsQuery && digitsQuery.length >= 4) {
         const valDigits = clean.replace(/\D/g, '');
-        if (valDigits && (valDigits === digitsQuery || valDigits.includes(digitsQuery) || digitsQuery.includes(valDigits))) {
+        if (valDigits && (valDigits === digitsQuery || valDigits.includes(digitsQuery))) {
           return true;
         }
       }

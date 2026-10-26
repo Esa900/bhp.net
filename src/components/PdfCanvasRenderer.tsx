@@ -18,12 +18,25 @@ interface PdfCanvasRendererProps {
   zoom?: number; // 100 is default
 }
 
-function dataUriToUint8Array(dataUri: string): Uint8Array | null {
+async function getPdfBytes(dataUrl: string): Promise<Uint8Array | null> {
+  if (!dataUrl || dataUrl === '#' || dataUrl.length < 10) return null;
+
+  // 1. Try native fetch - fastest and works natively in browser C++ for data: & blob: URIs without memory limits
   try {
-    if (!dataUri.startsWith('data:')) return null;
-    const base64Index = dataUri.indexOf(';base64,');
+    if (dataUrl.startsWith('data:') || dataUrl.startsWith('blob:') || dataUrl.startsWith('http')) {
+      const res = await fetch(dataUrl);
+      const buffer = await res.arrayBuffer();
+      return new Uint8Array(buffer);
+    }
+  } catch (err) {
+    console.warn('Native fetch conversion of dataUrl failed, attempting string fallback:', err);
+  }
+
+  // 2. String base64 fallback
+  try {
+    const base64Index = dataUrl.indexOf(';base64,');
     if (base64Index !== -1) {
-      const base64 = dataUri.substring(base64Index + 8);
+      const base64 = dataUrl.substring(base64Index + 8);
       const binaryString = atob(base64.replace(/\s/g, ''));
       const len = binaryString.length;
       const bytes = new Uint8Array(len);
@@ -33,7 +46,7 @@ function dataUriToUint8Array(dataUri: string): Uint8Array | null {
       return bytes;
     }
   } catch (err) {
-    console.warn('Failed to parse base64 PDF into Uint8Array:', err);
+    console.warn('Fallback base64 decode failed:', err);
   }
   return null;
 }
@@ -54,7 +67,7 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
     let isCancelled = false;
 
     async function loadPdf() {
-      if (!dataUrl) {
+      if (!dataUrl || dataUrl === '#' || dataUrl.length < 10) {
         setIsLoading(false);
         setError('No document data available.');
         return;
@@ -64,7 +77,7 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
       setError(null);
 
       try {
-        const bytes = dataUriToUint8Array(dataUrl);
+        const bytes = await getPdfBytes(dataUrl);
         const loadingTask = bytes
           ? pdfjsLib.getDocument({
               data: bytes,
