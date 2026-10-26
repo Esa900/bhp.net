@@ -168,6 +168,25 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
     }
   };
 
+  // If a document has matched, directly show FullPdfDocumentViewer in full screen mode as requested
+  if (hasSearched && matchedUniversalDoc) {
+    return (
+      <FullPdfDocumentViewer
+        document={matchedUniversalDoc}
+        defaultFullScreen={true}
+        onSearchAnother={() => {
+          setQuery('');
+          setHasSearched(false);
+          setMatchedUniversalDoc(null);
+          setMatchedRecord(null);
+          setMatchedAdminPost(null);
+          setTimeout(() => inputRef.current?.focus(), 50);
+        }}
+        onClose={onClose}
+      />
+    );
+  }
+
   return (
     <div
       id="canada-search-modal-backdrop"

@@ -21,6 +21,7 @@ import {
 import { NewsItem, AdminPost } from '../../types';
 import { getStoredAdminPosts } from '../../utils/postsStorage';
 import { FullPdfDocumentViewer, postToUnifiedDoc } from '../FullPdfDocumentViewer';
+import { PdfCanvasRenderer } from '../PdfCanvasRenderer';
 
 interface ArticleModalProps {
   article: NewsItem | null;
@@ -343,11 +344,10 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose }) 
                       {/* Document Viewer Frame (Open state, strictly view-only, toolbar disabled) */}
                       <div className="p-2 sm:p-3 bg-[#0B0C0E]">
                         {isPdf ? (
-                          <div className="w-full h-[550px] sm:h-[750px] bg-[#1a1b1e] rounded-lg overflow-hidden border border-[#252830] relative">
-                            <iframe
-                              src={`${doc.dataUrl}#toolbar=0&navpanes=0&scrollbar=1`}
-                              title={doc.name}
-                              className="w-full h-full border-0"
+                          <div className="w-full bg-[#1a1b1e] rounded-lg overflow-hidden border border-[#252830] relative">
+                            <PdfCanvasRenderer
+                              dataUrl={doc.dataUrl}
+                              docName={doc.name}
                             />
                           </div>
                         ) : (

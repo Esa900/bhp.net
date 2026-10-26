@@ -33,6 +33,7 @@ import {
   profileToUnifiedDoc,
   canadaRecordToUnifiedDoc,
 } from './FullPdfDocumentViewer';
+import { PdfCanvasRenderer } from './PdfCanvasRenderer';
 import { searchUniversalDocument, searchUniversalDocumentAsync } from '../utils/universalSearch';
 
 interface DocumentSearchModalProps {
@@ -267,6 +268,18 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
     setMatchedProfile(null);
     setTimeout(() => inputRef.current?.focus(), 50);
   };
+
+  // If a document has matched, directly show FullPdfDocumentViewer in full screen mode as requested
+  if (hasSearched && matchedUniversalDoc) {
+    return (
+      <FullPdfDocumentViewer
+        document={matchedUniversalDoc}
+        defaultFullScreen={true}
+        onSearchAnother={handleReset}
+        onClose={onClose}
+      />
+    );
+  }
 
   return (
     <>
@@ -560,20 +573,13 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
                 (previewingDoc.dataUrl.startsWith('data:application/pdf') ||
                   previewingDoc.dataUrl.includes('.pdf') ||
                   previewingDoc.type === 'pdf') ? (
-                /* PDF View with toolbar enabled and responsive zoom container */
+                /* PDF Canvas View - works on iPhone, Android, and Desktop */
                 <div className="flex-1 w-full overflow-auto bg-[#0a0b0d] rounded-xl flex items-start justify-center p-2 min-h-[50vh] border border-[#252830]">
-                  <div
-                    style={{
-                      width: `${previewZoom}%`,
-                      minWidth: '100%',
-                      transition: 'width 0.2s ease-out',
-                    }}
-                    className={previewMaximized ? 'h-[78vh]' : 'h-[64vh]'}
-                  >
-                    <iframe
-                      src={`${previewingDoc.dataUrl}#toolbar=0&navpanes=0&zoom=${previewZoom}`}
-                      title={previewingDoc.name}
-                      className="w-full h-full border-none rounded-lg bg-white shadow-2xl"
+                  <div className="w-full">
+                    <PdfCanvasRenderer
+                      dataUrl={previewingDoc.dataUrl}
+                      docName={previewingDoc.name}
+                      zoom={previewZoom}
                     />
                   </div>
                 </div>

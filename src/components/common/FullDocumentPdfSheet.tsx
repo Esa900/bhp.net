@@ -22,6 +22,7 @@ import {
   Lock,
   Sparkles,
 } from 'lucide-react';
+import { PdfCanvasRenderer } from '../PdfCanvasRenderer';
 
 export interface UnifiedDocumentData {
   country: 'australia' | 'canada';
@@ -511,11 +512,12 @@ export const FullDocumentPdfSheet: React.FC<FullDocumentPdfSheetProps> = ({
                     className="max-w-full max-h-[85vh] object-contain mx-auto rounded"
                   />
                 ) : currentAttachedDoc.dataUrl.startsWith('data:application/pdf') || currentAttachedDoc.type === 'pdf' ? (
-                  <iframe
-                    src={`${currentAttachedDoc.dataUrl}#toolbar=0&navpanes=0`}
-                    title={currentAttachedDoc.name}
-                    className="w-full h-[750px] border-none rounded-xl"
-                  />
+                  <div className="w-full">
+                    <PdfCanvasRenderer
+                      dataUrl={currentAttachedDoc.dataUrl}
+                      docName={currentAttachedDoc.name}
+                    />
+                  </div>
                 ) : (
                   <div className="text-center p-12 space-y-3">
                     <FileText className="w-12 h-12 text-blue-400 mx-auto" />

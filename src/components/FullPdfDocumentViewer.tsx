@@ -26,6 +26,7 @@ import {
 import { AdminPost, AttachedDoc } from '../types';
 import { CanadaDocumentRecord } from '../types/canada';
 import { ApplicantProfile } from '../types/portal';
+import { PdfCanvasRenderer } from './PdfCanvasRenderer';
 
 export interface UnifiedDocumentData {
   id: string;
@@ -186,15 +187,17 @@ interface FullPdfDocumentViewerProps {
   document: UnifiedDocumentData;
   onSearchAnother?: () => void;
   onClose?: () => void;
+  defaultFullScreen?: boolean;
 }
 
 export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   document,
   onSearchAnother,
   onClose,
+  defaultFullScreen = true,
 }) => {
   const [zoom, setZoom] = useState<number>(100);
-  const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
+  const [isFullScreen, setIsFullScreen] = useState<boolean>(defaultFullScreen);
   const [copiedRef, setCopiedRef] = useState<boolean>(false);
 
   const hasAttachedDocs = Boolean(document.attachedDocuments && document.attachedDocuments.length > 0);
@@ -334,31 +337,20 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
             <span className="md:hidden">Verified</span>
           </div>
 
-          {/* Full Screen Toggle */}
-          <button
-            type="button"
-            onClick={() => setIsFullScreen(!isFullScreen)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
-              isFullScreen
-                ? 'bg-red-600 hover:bg-red-500 text-white border-red-500 shadow-lg'
-                : 'bg-[#F25C05] hover:bg-[#D94F04] text-white border-[#F25C05] shadow-md'
-            }`}
-            title={isFullScreen ? 'Exit Full Screen' : 'Full Screen View'}
-          >
-            {isFullScreen ? (
-              <>
-                <Minimize2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Close Full Screen</span>
-              </>
-            ) : (
-              <>
-                <Maximize2 className="w-4 h-4" />
-                <span>Full Screen</span>
-              </>
-            )}
-          </button>
+          {/* Full Screen Toggle (Only needed if NOT already in full screen) */}
+          {!isFullScreen && (
+            <button
+              type="button"
+              onClick={() => setIsFullScreen(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border bg-[#F25C05] hover:bg-[#D94F04] text-white border-[#F25C05] shadow-md"
+              title="Full Screen View"
+            >
+              <Maximize2 className="w-4 h-4" />
+              <span>Full Screen</span>
+            </button>
+          )}
 
-          {/* Search Another */}
+          {/* Search Another Button */}
           {onSearchAnother && (
             <button
               type="button"
@@ -366,14 +358,15 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                 if (isFullScreen) setIsFullScreen(false);
                 onSearchAnother();
               }}
-              className="px-2.5 py-1.5 text-xs font-medium text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1"
+              className="px-3 py-1.5 text-xs font-bold bg-[#F25C05] hover:bg-[#D94F04] text-white rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 border border-[#F25C05]"
+              title="Search Another Document"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Search Another</span>
+              <span>Search Another</span>
             </button>
           )}
 
-          {/* Back Button */}
+          {/* Back / Close Button */}
           {onClose && (
             <button
               type="button"
@@ -382,7 +375,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                 onClose();
               }}
               className="px-3.5 py-1.5 bg-[#252830] hover:bg-[#323640] text-gray-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-[#3A3F4C] cursor-pointer flex items-center gap-1.5 shadow-xs"
-              title="Return to search or list"
+              title="Return to search"
             >
               <ArrowLeft className="w-3.5 h-3.5 text-[#FF5500]" />
               <span>Back (ফিরে যান)</span>
@@ -687,19 +680,15 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                   </div>
 
                   {/* Open Document Render Frame */}
-                  <div className="w-full min-h-[500px] sm:min-h-[750px] rounded-xl overflow-hidden bg-[#0F1115] border border-[#262A34] flex items-center justify-center relative select-none">
+                  <div className="w-full min-h-[400px] rounded-xl overflow-hidden bg-[#0F1115] border border-[#262A34] flex items-center justify-center relative select-none">
                     {isPdf ? (
-                      <object
-                        data={`${doc.dataUrl}#toolbar=0&navpanes=0`}
-                        type="application/pdf"
-                        className="w-full h-[500px] sm:h-[750px] rounded-xl border-0 bg-white"
-                      >
-                        <iframe
-                          src={`${doc.dataUrl}#toolbar=0&navpanes=0`}
-                          title={doc.name}
-                          className="w-full h-full border-0 bg-white"
+                      <div className="w-full flex items-center justify-center overflow-auto">
+                        <PdfCanvasRenderer
+                          dataUrl={doc.dataUrl}
+                          docName={doc.name}
+                          zoom={zoom}
                         />
-                      </object>
+                      </div>
                     ) : doc.dataUrl && (doc.dataUrl.startsWith('data:image') || doc.type === 'image') ? (
                       <div className="p-4 flex items-center justify-center w-full max-h-[900px] overflow-auto">
                         <img
