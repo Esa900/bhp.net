@@ -106,7 +106,10 @@ export function postToUnifiedDoc(
     expiryDate: post.expiryDate || '',
     verificationId: post.verificationIdNo || `VRF-${post.refNumber.replace(/[^0-9]/g, '').slice(-5) || '92841'}`,
     descriptionOrNotes: post.content,
-    featuredImageUrl: post.candidatePhotoUrl || post.imageUrl,
+    featuredImageUrl:
+      post.candidatePhotoUrl && !post.candidatePhotoUrl.includes('unsplash')
+        ? post.candidatePhotoUrl
+        : (post.imageUrl && !post.imageUrl.includes('unsplash') ? post.imageUrl : undefined),
     galleryImages: post.galleryImages,
     attachedDocuments: attached,
     author: post.author,
@@ -158,6 +161,15 @@ export function canadaRecordToUnifiedDoc(rec: CanadaDocumentRecord): UnifiedDocu
     }
   }
 
+  // Check if candidate photo is uploaded directly or attached as an image
+  const attachedImage = attachedDocs.find(
+    (d) => d.type === 'image' && d.dataUrl && !d.dataUrl.includes('unsplash')
+  )?.dataUrl;
+  const clientPhoto =
+    rec.candidatePhotoUrl && !rec.candidatePhotoUrl.includes('unsplash')
+      ? rec.candidatePhotoUrl
+      : attachedImage;
+
   return {
     id: rec.id,
     country: 'canada',
@@ -180,7 +192,7 @@ export function canadaRecordToUnifiedDoc(rec: CanadaDocumentRecord): UnifiedDocu
     officialDocNumber: rec.officialDocNumber,
     lmiaNumber: rec.lmiaNumber,
     descriptionOrNotes: rec.notes || 'Officially verified and authenticated under Canadian immigration and employer sponsorship regulations.',
-    featuredImageUrl: rec.candidatePhotoUrl,
+    featuredImageUrl: clientPhoto,
     attachedDocuments: attachedDocs,
     author: 'Immigration, Refugees and Citizenship Canada (IRCC) & BHP Canada',
   };

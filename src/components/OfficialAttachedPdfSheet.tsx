@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, CheckCircle2, FileText, Check, Award, Lock, ExternalLink } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, FileText, Check, Award, Lock, ExternalLink, User } from 'lucide-react';
 import { UnifiedDocumentData } from './FullPdfDocumentViewer';
 
 interface OfficialAttachedPdfSheetProps {
@@ -14,11 +14,21 @@ export const OfficialAttachedPdfSheet: React.FC<OfficialAttachedPdfSheetProps> =
   const isCanada = document.country === 'canada';
   const isOutside = isCanada ? 'Is the applicant currently outside Canada?' : 'Is the applicant currently outside Australia?';
 
-  // Candidate photo fallback
-  const photoUrl =
-    document.featuredImageUrl ||
-    (document.galleryImages && document.galleryImages[0]) ||
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80';
+  // Candidate photo: Only use genuine uploaded photo (base64 or direct photo URL), never Unsplash stock stranger
+  const candidatePhoto =
+    document.featuredImageUrl &&
+    !document.featuredImageUrl.includes('unsplash.com') &&
+    document.featuredImageUrl !== '#'
+      ? document.featuredImageUrl
+      : document.galleryImages?.find((img) => img && !img.includes('unsplash.com') && img !== '#');
+
+  const hasPhoto = Boolean(candidatePhoto);
+
+  const nameParts = (document.candidateName || 'Applicant').trim().split(/\s+/);
+  const initials =
+    nameParts.length >= 2
+      ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`.toUpperCase()
+      : (document.candidateName?.slice(0, 2) || 'ID').toUpperCase();
 
   return (
     <div
@@ -55,17 +65,29 @@ export const OfficialAttachedPdfSheet: React.FC<OfficialAttachedPdfSheetProps> =
           </div>
         </div>
 
-        {/* Right: Candidate Passport Photo */}
+        {/* Right: Candidate Passport Photo (Exact Uploaded Client Photo) */}
         <div className="flex flex-col items-end shrink-0">
-          <div className="w-20 h-24 sm:w-24 sm:h-28 rounded-md overflow-hidden border-2 border-gray-300 shadow-md bg-gray-50">
-            <img
-              src={photoUrl}
-              alt={document.candidateName || 'Candidate'}
-              className="w-full h-full object-cover"
-            />
+          <div className="w-20 h-24 sm:w-24 sm:h-28 rounded-md overflow-hidden border-2 border-gray-300 shadow-md bg-gray-100 flex items-center justify-center">
+            {hasPhoto ? (
+              <img
+                src={candidatePhoto}
+                alt={document.candidateName || 'Candidate'}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-[#1E293B] to-[#0F172A] flex flex-col items-center justify-center p-2 text-center text-white">
+                <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center font-bold text-xs tracking-wider uppercase text-amber-300 border border-white/20">
+                  {initials}
+                </div>
+                <span className="text-[7.5px] font-mono font-bold text-gray-300 mt-1 uppercase leading-tight">
+                  BIOMETRIC ENROLLED
+                </span>
+              </div>
+            )}
           </div>
-          <span className="text-[9px] font-mono text-gray-400 mt-1 uppercase">
-            ID PHOTO VERIFIED
+          <span className="text-[9px] font-mono text-emerald-700 font-bold mt-1 uppercase flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600 inline" />
+            <span>{hasPhoto ? 'ID PHOTO VERIFIED' : 'BIOMETRIC ARCHIVED'}</span>
           </span>
         </div>
       </div>

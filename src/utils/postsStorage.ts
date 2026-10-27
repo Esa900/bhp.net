@@ -37,113 +37,21 @@ export const DEFAULT_CATEGORIES: PostCategory[] = [
   },
 ];
 
-export const INITIAL_DEFAULT_POSTS: AdminPost[] = [
-  {
-    id: 'post-doc-1',
-    title: 'Australia Employment Application & Work Authorization Clearance',
-    refNumber: 'BHP-DOC-2026-0089',
-    content: `OFFICIAL CORPORATE VERIFICATION & SPONSORSHIP DIRECTIVE:
-This official document confirms the verified corporate sponsorship, biometric registration, and work permit clearance under BHP Group Limited Global Operations in Western Australia.
+export const isDemoPost = (p: Partial<AdminPost>): boolean => {
+  if (!p || !p.id) return false;
+  return (
+    p.id === 'post-doc-1' ||
+    p.id === 'post-doc-2' ||
+    p.id === 'post-user-test' ||
+    p.id === 'post-test-device1' ||
+    p.refNumber === 'BHP-DOC-2026-0089' ||
+    p.refNumber === 'BHP-VISA-2026-4412' ||
+    p.candidateName === 'Mohammad Tanvir Ahmed' ||
+    p.candidateName === 'Kazi Farhan Mahmud'
+  );
+};
 
-Key Details & Authorisations:
-• Primary Sponsor: BHP Group Limited (ABN 49 004 028 077)
-• Operations Zone: Western Australia Iron Ore (WAIO) & Olympic Dam
-• Status: Approved, Verified, and Active in Commonwealth Portal
-• Verification Protocol: Biometric identification and ANZSCO qualification standard compliant.
-
-All attached circular documentation and verified clearance certificates are certified authentic by the Executive Operations Directorate.`,
-    category: 'Employment Application & Verification',
-    author: 'BHP Operations Directorate',
-    date: '2026-03-12',
-    status: 'Published',
-    imageUrl: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
-    candidateName: 'Mohammad Tanvir Ahmed',
-    passportNumber: 'A09482103',
-    nationality: 'Bangladeshi',
-    dateOfBirth: '1993-04-18',
-    jobTitle: 'Senior Mining Maintenance Specialist',
-    employerName: 'BHP Group Operations (Australia)',
-    workLocation: 'Perth & Pilbara, WA, Australia',
-    salaryPackage: '$135,000 AUD / Year',
-    visaSubclass: 'Subclass 482 - TSS (Medium-Term Stream)',
-    issueDate: '2026-01-10',
-    expiryDate: '2029-01-09',
-    verificationIdNo: 'VRF-AU-928410',
-    galleryImages: [
-      'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
-      'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=80',
-      'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1200&q=80',
-    ],
-    attachedDocuments: [
-      {
-        id: 'doc-seed-1',
-        name: 'BHP_Verified_Employment_Clearance_2026.pdf',
-        size: '2.45 MB',
-        type: 'pdf',
-        dataUrl: '#',
-        uploadDate: '2026-03-12',
-      },
-      {
-        id: 'doc-seed-2',
-        name: 'Official_Sponsorship_Permit_Scan.pdf',
-        size: '1.82 MB',
-        type: 'pdf',
-        dataUrl: '#',
-        uploadDate: '2026-03-12',
-      },
-    ],
-    readTime: '4 min read',
-    badges: ['OFFICIAL', 'VERIFIED DOCUMENT', 'BHP 2026'],
-  },
-  {
-    id: 'post-doc-2',
-    title: 'Commonwealth Skilled Regional Work Visa & Corporate Endorsement',
-    refNumber: 'BHP-VISA-2026-4412',
-    content: `DEPARTMENT OF HOME AFFAIRS & BHP SPONSORSHIP VERIFICATION:
-Official confirmation of Subclass 482 / 186 Nominated Sponsoring Agreement.
-
-Verified Parameters:
-• Employer Sponsoring: BHP Olympic Dam Operations
-• Visa Subclass: Temporary Skill Shortage (Subclass 482 - Medium Term Stream)
-• Sponsoring ID: BHP-SPON-99042
-• Condition: Full Work Rights Approved (Condition 8107 Compliant)
-
-All supporting biometric documents, police clearances, and medical certifications have been catalogued and endorsed.`,
-    category: 'Visa & Immigration Permits',
-    author: 'BHP Global Mobility Desk',
-    date: '2026-02-28',
-    status: 'Published',
-    imageUrl: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80',
-    candidateName: 'Kazi Farhan Mahmud',
-    passportNumber: 'B18492044',
-    nationality: 'Bangladeshi',
-    dateOfBirth: '1991-09-25',
-    jobTitle: 'Heavy Mobile Equipment Mechanical Engineer',
-    employerName: 'BHP Olympic Dam Operations',
-    workLocation: 'Olympic Dam, South Australia',
-    salaryPackage: '$142,000 AUD / Year',
-    visaSubclass: 'Subclass 482 - TSS (Employer Nominated)',
-    issueDate: '2026-02-01',
-    expiryDate: '2030-01-31',
-    verificationIdNo: 'VRF-AU-441299',
-    galleryImages: [
-      'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1200&q=80',
-      'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80',
-    ],
-    attachedDocuments: [
-      {
-        id: 'doc-seed-3',
-        name: 'Commonwealth_Visa_Endorsement_Record.pdf',
-        size: '3.15 MB',
-        type: 'pdf',
-        dataUrl: '#',
-        uploadDate: '2026-02-28',
-      },
-    ],
-    readTime: '3 min read',
-    badges: ['IMMIGRATION', 'VISA GRANTED', 'OFFICIAL'],
-  },
-];
+export const INITIAL_DEFAULT_POSTS: AdminPost[] = [];
 
 /**
  * Retrieve all Admin Posts from LocalStorage (or in-memory cache / initial defaults)
@@ -163,17 +71,17 @@ export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
         const local = getStoredAdminPosts();
         const mergedMap = new Map<string, AdminPost>();
 
-        // 1. Add server posts
+        // 1. Add server posts (exclude demo posts)
         data.posts.forEach((p: AdminPost) => {
-          if (p && p.id) {
+          if (p && p.id && !isDemoPost(p)) {
             mergedMap.set(p.id, p);
           }
         });
 
-        // 2. Add local posts (ensures any post saved by admin is NEVER overwritten or lost)
+        // 2. Add local posts (exclude demo posts)
         let hasNewLocalPosts = false;
         local.forEach((p: AdminPost) => {
-          if (p && p.id && !mergedMap.has(p.id)) {
+          if (p && p.id && !isDemoPost(p) && !mergedMap.has(p.id)) {
             mergedMap.set(p.id, p);
             hasNewLocalPosts = true;
           }
@@ -217,18 +125,21 @@ if (typeof window !== 'undefined') {
 
 export const getStoredAdminPosts = (): AdminPost[] => {
   if (typeof window !== 'undefined' && Array.isArray((window as any).__bhp_admin_posts_cache)) {
-    return (window as any).__bhp_admin_posts_cache;
+    const cached = (window as any).__bhp_admin_posts_cache.filter((p: AdminPost) => !isDemoPost(p));
+    (window as any).__bhp_admin_posts_cache = cached;
+    return cached;
   }
 
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(POSTS_STORAGE_KEY) : null;
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter((p: AdminPost) => !isDemoPost(p));
         if (typeof window !== 'undefined') {
-          (window as any).__bhp_admin_posts_cache = parsed;
+          (window as any).__bhp_admin_posts_cache = cleaned;
         }
-        return parsed;
+        return cleaned;
       }
     }
   } catch (err) {

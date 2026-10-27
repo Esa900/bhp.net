@@ -87,99 +87,6 @@ export const INITIAL_CANADA_DOCUMENTS: CanadaDocumentRecord[] = [
     createdAt: '2026-03-02T10:00:00.000Z',
   },
   {
-    id: 'ca-doc-1',
-    categoryType: 'work-permit-docs',
-    mainTitle: 'canada Work Permit Documents',
-    subMenu: 'Employment Application Document C',
-    tinOrRef: 'REF-CA-928410',
-    referenceNo: 'REF-CA-928410',
-    idNumber: 'REF-CA-928410',
-    candidateName: 'Mohammad Rafiqul Islam',
-    passportNumber: 'A08934211',
-    nationality: 'Bangladeshi',
-    dateOfBirth: '1992-05-14',
-    jobTitle: 'Industrial Electrician',
-    employerName: 'BHP Canada Operations Ltd (Jansen Project)',
-    workLocation: 'Saskatoon, Saskatchewan, Canada',
-    hourlyWageOrSalary: '$42.50 CAD / hr',
-    workingHours: '40 hrs / week (Overtime available)',
-    status: 'Verified',
-    issueDate: '2025-11-10',
-    expiryDate: '2028-11-09',
-    officialDocNumber: 'IRCC-WP-2025-928410',
-    lmiaNumber: 'LMIA-CA-884210',
-    notes: 'Employment Application approved under Global Skills Strategy Stream A.',
-    createdAt: '2025-11-10T10:00:00.000Z',
-  },
-  {
-    id: 'ca-doc-2',
-    categoryType: 'offer-letter',
-    mainTitle: 'Offer Letter of Employment Pending',
-    subMenu: 'Offer Letter of Employment C',
-    idNumber: 'CA-ED-88412',
-    candidateName: 'Tanvir Hossain Chowdhury',
-    passportNumber: 'B19482033',
-    nationality: 'Bangladeshi',
-    dateOfBirth: '1994-08-22',
-    jobTitle: 'Heavy Machinery Mechanic',
-    employerName: 'Canadian Mining Resources Inc.',
-    workLocation: 'Edmonton, Alberta, Canada',
-    hourlyWageOrSalary: '$39.00 CAD / hr',
-    workingHours: '42 hrs / week',
-    status: 'Approved',
-    issueDate: '2026-01-15',
-    expiryDate: '2028-01-14',
-    officialDocNumber: 'OFF-EMP-2026-88412',
-    lmiaNumber: 'LMIA-AB-992100',
-    notes: 'Offer letter signed and acknowledged. FIFO accommodation and health coverage included.',
-    createdAt: '2026-01-15T12:30:00.000Z',
-  },
-  {
-    id: 'ca-doc-3',
-    categoryType: 'job-confirmation',
-    mainTitle: 'Job Confirmation Pending',
-    subMenu: 'Job Confirmation Pending See',
-    verificationIdNo: 'VRF-CAN-99420',
-    candidateName: 'Shahidul Alam',
-    passportNumber: 'A12903488',
-    nationality: 'Bangladeshi',
-    dateOfBirth: '1990-11-03',
-    jobTitle: 'Food Packaging & Processing Specialist',
-    employerName: 'Maple Leaf Agro & Foods Canada',
-    workLocation: 'Mississauga, Ontario, Canada',
-    hourlyWageOrSalary: '$28.75 CAD / hr',
-    workingHours: '40 hrs / week',
-    status: 'Verified',
-    issueDate: '2026-02-01',
-    expiryDate: '2027-02-01',
-    officialDocNumber: 'JC-VRF-CAN-99420',
-    lmiaNumber: 'LMIA-ON-441209',
-    notes: 'Job confirmation authenticated by provincial employer registry.',
-    createdAt: '2026-02-01T09:15:00.000Z',
-  },
-  {
-    id: 'ca-doc-4',
-    categoryType: 'biometric-vfs',
-    mainTitle: 'Biometric Received Paper of VFS Global Document Pending',
-    subMenu: 'Biometric Received Paper of VFS Global Document Pending See',
-    transitionIdNo: 'VFS-CAN-882190',
-    candidateName: 'Nusrat Jahan',
-    passportNumber: 'B07765129',
-    nationality: 'Bangladeshi',
-    dateOfBirth: '1996-03-19',
-    jobTitle: 'Quality Assurance Inspector',
-    employerName: 'BHP Global Supply Canada',
-    workLocation: 'Vancouver, British Columbia, Canada',
-    hourlyWageOrSalary: '$34.00 CAD / hr',
-    workingHours: '37.5 hrs / week',
-    status: 'Verified',
-    issueDate: '2026-02-18',
-    expiryDate: '2036-02-18',
-    officialDocNumber: 'VFS-BIO-882190',
-    notes: 'Biometrics collected at VFS Global Dhaka Centre. Fingerprints and facial scan verified with IRCC portal.',
-    createdAt: '2026-02-18T14:45:00.000Z',
-  },
-  {
     id: 'ca-doc-5',
     categoryType: 'work-permit-pending',
     mainTitle: 'Work Permit Documents Pending',
@@ -209,6 +116,20 @@ export const INITIAL_CANADA_DOCUMENTS: CanadaDocumentRecord[] = [
   },
 ];
 
+export const isDemoCanadaDoc = (c: Partial<CanadaDocumentRecord>): boolean => {
+  if (!c || !c.id) return false;
+  return (
+    c.id === 'ca-doc-1' ||
+    c.id === 'ca-doc-2' ||
+    c.id === 'ca-doc-3' ||
+    c.id === 'ca-doc-4' ||
+    c.candidateName === 'Mohammad Rafiqul Islam' ||
+    c.candidateName === 'Tanvir Hossain Chowdhury' ||
+    c.candidateName === 'Shahidul Alam' ||
+    c.candidateName === 'Nusrat Jahan'
+  );
+};
+
 /**
  * Fetch latest Canada documents from server with SMART TWO-WAY MERGE.
  * Preserves locally created Canada documents and syncs missing documents to and from the server.
@@ -224,17 +145,17 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
         const local = getStoredCanadaDocuments();
         const mergedMap = new Map<string, CanadaDocumentRecord>();
 
-        // 1. Add server documents
+        // 1. Add server documents (exclude demo docs)
         data.documents.forEach((d: CanadaDocumentRecord) => {
-          if (d && d.id) {
+          if (d && d.id && !isDemoCanadaDoc(d)) {
             mergedMap.set(d.id, d);
           }
         });
 
-        // 2. Add local documents (ensures locally created documents are never wiped)
+        // 2. Add local documents (exclude demo docs)
         let hasNewLocal = false;
         local.forEach((d: CanadaDocumentRecord) => {
-          if (d && d.id && !mergedMap.has(d.id)) {
+          if (d && d.id && !isDemoCanadaDoc(d) && !mergedMap.has(d.id)) {
             mergedMap.set(d.id, d);
             hasNewLocal = true;
           }
@@ -279,8 +200,8 @@ export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(CANADA_STORAGE_KEY) : null;
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((d: CanadaDocumentRecord) => !isDemoCanadaDoc(d));
       }
     }
   } catch (err) {
