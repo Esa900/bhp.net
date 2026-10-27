@@ -1,4 +1,5 @@
 import { AdminPost, AttachedDoc, PostCategory } from '../types';
+import { setLargeItem, getLargeItem } from './pdfIndexedDb';
 
 export const POSTS_STORAGE_KEY = 'bhp_admin_posts_v2';
 export const CATEGORIES_STORAGE_KEY = 'bhp_admin_post_categories_v2';
@@ -249,36 +250,26 @@ export const getStoredAdminPosts = (): AdminPost[] => {
 };
 
 /**
- * Save Admin Posts to LocalStorage and push to Server with async confirmation
+ * Save Admin Posts to Memory, IndexedDB, LocalStorage and push to Server with async confirmation
  */
 export const saveStoredAdminPostsAsync = async (posts: AdminPost[]): Promise<boolean> => {
   if (typeof window !== 'undefined') {
     (window as any).__bhp_admin_posts_cache = posts;
   }
 
-  // 1. Instant local storage save
+  // 1. Save full documents to high-capacity IndexedDB (No 5MB limit!)
+  setLargeItem(POSTS_STORAGE_KEY, posts).catch((err) => {
+    console.warn('IndexedDB save warning:', err);
+  });
+
+  // 2. Safe local storage save without ever destroying dataUrl
   try {
     localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
   } catch (err) {
-    console.warn('LocalStorage save quota exceeded, saving streamlined list:', err);
-    try {
-      const streamlined = posts.map((p, idx) => {
-        if (idx < 5) return p;
-        return {
-          ...p,
-          attachedDocuments: p.attachedDocuments?.map((d) => ({
-            ...d,
-            dataUrl: (d.dataUrl && d.dataUrl.length > 50000) ? '#' : d.dataUrl,
-          })),
-        };
-      });
-      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(streamlined));
-    } catch (e2) {
-      console.error('Secondary storage error:', e2);
-    }
+    console.warn('LocalStorage quota reached; full data preserved safely in IndexedDB and memory cache.');
   }
 
-  // 2. Broadcast local update event
+  // 3. Broadcast local update event
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: posts }));
     window.dispatchEvent(new Event('storage'));

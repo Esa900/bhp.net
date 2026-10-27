@@ -28,6 +28,7 @@ import {
   Briefcase,
   ArrowLeft,
 } from 'lucide-react';
+import { AttachedDoc } from '../../types';
 import { CanadaDocumentRecord, CanadaMenuItemConfig, CanadaCategoryType } from '../../types/canada';
 import {
   getStoredCanadaDocuments,
@@ -121,6 +122,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     candidatePhotoUrl?: string;
     documentFileName?: string;
     documentFileUrl?: string;
+    attachedDocuments: AttachedDoc[];
   }>({
     categoryType: 'work-permit-docs',
     mainTitle: 'Canada Work Permit Documents',
@@ -146,6 +148,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     officialDocNumber: '',
     lmiaNumber: '',
     notes: 'Verified and authorized by IRCC and Canadian sponsor.',
+    attachedDocuments: [],
   });
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -287,12 +290,29 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       officialDocNumber: `IRCC-CAN-${Math.floor(100000 + Math.random() * 900000)}`,
       lmiaNumber: `LMIA-CAN-${Math.floor(100000 + Math.random() * 900000)}`,
       notes: 'Verified and authorized by IRCC and Canadian sponsor.',
+      attachedDocuments: [],
     });
     setActiveTab('add-post');
   };
 
   const handleOpenEditPost = (doc: CanadaDocumentRecord) => {
     setEditingDocId(doc.id);
+
+    // Collect all existing attached documents, preserving backward-compatibility with single documentFileUrl
+    const initialAttached: AttachedDoc[] = [];
+    if (doc.attachedDocuments && doc.attachedDocuments.length > 0) {
+      initialAttached.push(...doc.attachedDocuments);
+    } else if (doc.documentFileUrl && doc.documentFileUrl !== '#') {
+      initialAttached.push({
+        id: `ca-attached-${doc.id}-1`,
+        name: doc.documentFileName || 'Canada Official Document.pdf',
+        size: 'Official PDF Document',
+        type: 'pdf',
+        dataUrl: doc.documentFileUrl,
+        uploadDate: doc.issueDate || new Date().toISOString().split('T')[0],
+      });
+    }
+
     setDocForm({
       categoryType: doc.categoryType,
       mainTitle: doc.mainTitle,
@@ -320,6 +340,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       notes: doc.notes || '',
       documentFileName: doc.documentFileName,
       documentFileUrl: doc.documentFileUrl,
+      attachedDocuments: initialAttached,
     });
     setActiveTab('add-post');
   };
@@ -338,6 +359,8 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       docForm.verificationIdNo?.trim() ||
       `REF-CA-${Math.floor(100000 + Math.random() * 900000)}`;
 
+    const primaryPdf = docForm.attachedDocuments[0];
+
     const postPayload = {
       ...docForm,
       candidateName,
@@ -347,6 +370,9 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       idNumber: docForm.idNumber?.trim() || baseRef,
       verificationIdNo: docForm.verificationIdNo?.trim() || baseRef,
       transitionIdNo: docForm.transitionIdNo?.trim() || baseRef,
+      documentFileName: primaryPdf?.name || docForm.documentFileName || '',
+      documentFileUrl: primaryPdf?.dataUrl || docForm.documentFileUrl || '',
+      attachedDocuments: docForm.attachedDocuments,
     };
 
     const currentDocs = getStoredCanadaDocuments();
@@ -359,7 +385,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       }
       updatedDocs = [...currentDocs];
       await saveCanadaDocumentsAsync(updatedDocs);
-      showToast(`Canada post for "${candidateName}" updated and synced.`);
+      showToast(`Canada post for "${candidateName}" updated with ${docForm.attachedDocuments.length} PDF(s).`);
     } else {
       const newRec: CanadaDocumentRecord = {
         ...postPayload,
@@ -368,7 +394,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       };
       updatedDocs = [newRec, ...currentDocs];
       await saveCanadaDocumentsAsync(updatedDocs);
-      showToast(`Canada post published! Searchable Ref: "${postPayload.tinOrRef}"`);
+      showToast(`Canada post published with ${docForm.attachedDocuments.length} PDF(s)! Searchable Ref: "${postPayload.tinOrRef}"`);
     }
 
     setDocuments(updatedDocs);
@@ -389,21 +415,70 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     }
   };
 
-  // Document attachment handler
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Multi-PDF and document upload handler (Supports up to 8+ PDFs)
+  const handleMultiPdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setDocForm((prev) => ({
+    let loaded = 0;
+    const newDocs: AttachedDoc[] = [];
+    const filesList = Array.from(files) as File[];
+
+    filesList.forEach((file) => {
+      const isPdf =
+        file.name.toLowerCase().endsWith('.pdf') ||
+        file.type.includes('pdf') ||
+        file.type.includes('application/pdf');
+      const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : file.type.includes('image') ? 'image' : 'other';
+      const sizeStr =
+        file.size > 1024 * 1024
+          ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+          : `${(file.size / 1024).toFixed(1)} KB`;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        if (result) {
+          newDocs.push({
+            id: `ca-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            name: file.name,
+            size: sizeStr,
+            type: docType,
+            dataUrl: result,
+            uploadDate: new Date().toISOString().split('T')[0],
+          });
+        }
+        loaded++;
+        if (loaded === filesList.length) {
+          setDocForm((prev) => {
+            const updated = [...prev.attachedDocuments, ...newDocs];
+            return {
+              ...prev,
+              attachedDocuments: updated,
+              documentFileName: updated[0]?.name || prev.documentFileName,
+              documentFileUrl: updated[0]?.dataUrl || prev.documentFileUrl,
+            };
+          });
+          showToast(`Successfully added ${newDocs.length} PDF(s)! Total: ${docForm.attachedDocuments.length + newDocs.length} PDFs`);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    e.target.value = '';
+  };
+
+  const handleRemoveAttachedDoc = (docId: string) => {
+    setDocForm((prev) => {
+      const updated = prev.attachedDocuments.filter((d) => d.id !== docId);
+      return {
         ...prev,
-        documentFileName: file.name,
-        documentFileUrl: reader.result as string,
-      }));
-      showToast(`Document "${file.name}" attached.`);
-    };
-    reader.readAsDataURL(file);
+        attachedDocuments: updated,
+        documentFileName: updated[0]?.name || '',
+        documentFileUrl: updated[0]?.dataUrl || '',
+      };
+    });
+    showToast('Document removed.');
   };
 
   // -------------------------------------------------------------
@@ -1025,28 +1100,94 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
               />
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-1">Attach Document File (PDF / Image)</label>
-              <div className="p-3 bg-[#141517] rounded-lg border border-[#2D313A] space-y-2">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-white flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-red-400" />
+                  <span>Attached PDF Documents & Scans (পিডিএফ ফাইলসমূহ)</span>
+                </label>
+                <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30">
+                  {docForm.attachedDocuments.length} PDF{docForm.attachedDocuments.length !== 1 ? 's' : ''} Attached (Up to 8)
+                </span>
+              </div>
+
+              {/* Prominent Add New PDF Button & Controls */}
+              <div className="p-3 bg-[#141517] rounded-xl border border-[#2D313A] space-y-3">
                 <input
                   type="file"
                   ref={fileInputRef}
-                  accept=".pdf,image/*"
-                  onChange={handleFileUpload}
+                  multiple
+                  accept=".pdf, application/pdf, image/*"
+                  onChange={handleMultiPdfUpload}
                   className="hidden"
                   id="ca-doc-upload"
                 />
-                <label
-                  htmlFor="ca-doc-upload"
-                  className="w-full py-2 bg-[#252830] hover:bg-[#323640] text-gray-200 rounded-lg text-xs font-semibold cursor-pointer transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>{docForm.documentFileName ? 'Change Document' : 'Choose Document File'}</span>
-                </label>
-                {docForm.documentFileName && (
-                  <div className="text-[11px] text-emerald-400 truncate flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">{docForm.documentFileName}</span>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 py-3 px-4 bg-gradient-to-r from-red-600 to-[#FF5500] hover:from-red-500 hover:to-[#FF6B1A] text-white rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-2 shadow-md shadow-red-600/20 active:scale-98"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>➕ Add New PDF (নতুন পিডিএফ যোগ করুন)</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-gray-400 leading-normal">
+                  💡 <strong>Edit অপশন থেকে একাধিক পিডিএফ যুক্ত করুন:</strong> পূর্বে পোস্ট করা ডকুমেন্টে Edit-এ গিয়ে 'Add New PDF' চেপে ৭ বা ৮ টি পর্যন্ত পিডিএফ ফাইল বা স্ক্যান কপি যোগ করতে পারবেন।
+                </p>
+
+                {/* List of Attached PDFs */}
+                {docForm.attachedDocuments.length > 0 ? (
+                  <div className="space-y-2 pt-2 border-t border-[#23262E]">
+                    {docForm.attachedDocuments.map((doc, idx) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between p-2.5 rounded-lg bg-[#191C22] border border-[#2B303C] hover:border-red-500/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-mono text-[10px] font-bold shrink-0">
+                            PDF 0{idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-white truncate max-w-[200px] sm:max-w-xs">
+                              {doc.name}
+                            </div>
+                            <div className="text-[10px] text-gray-400 font-mono">
+                              {doc.size || 'Official Document'} • {doc.uploadDate || docForm.issueDate}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {doc.dataUrl && doc.dataUrl !== '#' && (
+                            <a
+                              href={doc.dataUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              download={doc.name}
+                              className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-[#252A36] transition-colors"
+                              title="Download / View"
+                            >
+                              <File className="w-3.5 h-3.5 text-[#38bdf8]" />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttachedDoc(doc.id)}
+                            className="p-1.5 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-950/40 transition-colors cursor-pointer"
+                            title="Remove this PDF"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-[#101216] text-center text-[11px] text-gray-500 border border-[#22252C]">
+                    কোনো পিডিএফ ফাইল এখনো যুক্ত করা হয়নি। 'Add New PDF' বাটনে ক্লিক করে ফাইল নির্বাচন করুন।
                   </div>
                 )}
               </div>

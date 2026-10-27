@@ -1,4 +1,5 @@
 import { CanadaDocumentRecord, CanadaMenuItemConfig } from '../types/canada';
+import { setLargeItem, getLargeItem } from './pdfIndexedDb';
 
 export const CANADA_STORAGE_KEY = 'bhp_canada_documents';
 export const CANADA_DOCUMENTS_UPDATED_EVENT = 'bhp_canada_documents_updated';
@@ -298,18 +299,24 @@ export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
 }
 
 export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Promise<boolean> {
-  // 1. Local storage save
+  // 1. IndexedDB high-capacity storage (preserves all multi-page PDFs without size limits)
+  setLargeItem(CANADA_STORAGE_KEY, docs).catch((err) => {
+    console.warn('IndexedDB save warning for canada docs:', err);
+  });
+
+  // 2. Local storage save
   try {
     localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(docs));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: docs }));
-      window.dispatchEvent(new Event('storage'));
-    }
   } catch (err) {
-    console.error('Failed to save Canada documents to localStorage', err);
+    console.warn('LocalStorage quota reached for canada docs; preserved in IndexedDB.');
   }
 
-  // 2. Push to server persistence API for cross-device sharing
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: docs }));
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  // 3. Push to server persistence API for cross-device sharing
   if (typeof window !== 'undefined') {
     try {
       const res = await fetch('/api/canada-documents', {

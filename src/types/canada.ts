@@ -1,3 +1,5 @@
+import { AttachedDoc } from '../types';
+
 export type CanadaCategoryType =
   | 'work-permit-docs'
   | 'offer-letter'
@@ -41,6 +43,7 @@ export interface CanadaDocumentRecord {
   lmiaNumber?: string;
   documentFileUrl?: string;
   documentFileName?: string;
+  attachedDocuments?: AttachedDoc[];
   notes?: string;
   createdAt: string;
 }

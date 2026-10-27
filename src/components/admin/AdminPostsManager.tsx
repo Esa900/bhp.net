@@ -977,8 +977,8 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                     PDF & Document Upload (পিডিএফ ও ডকুমেন্ট আপলোড অপশন)
                   </span>
                 </label>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
-                  {formData.attachedDocuments.length} Document(s) Attached
+                <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                  {formData.attachedDocuments.length} / 8 PDFs Attached
                 </span>
               </div>
 
@@ -997,18 +997,18 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => pdfFilesInputRef.current?.click()}
-                    className="w-full py-4 px-4 rounded-xl border-2 border-dashed border-[#4D3838] hover:border-red-500 bg-[#171212] hover:bg-[#201515] flex flex-col items-center justify-center gap-2 text-center transition-all cursor-pointer group"
+                    className="w-full py-3.5 px-4 rounded-xl border-2 border-dashed border-[#5A3838] hover:border-red-500 bg-gradient-to-br from-[#1C1313] to-[#251616] hover:from-[#251818] hover:to-[#301C1C] flex flex-col items-center justify-center gap-1.5 text-center transition-all cursor-pointer group shadow-sm active:scale-98"
                   >
-                    <div className="p-2 rounded-full bg-[#261A1A] group-hover:bg-red-500/20 text-red-400 transition-colors">
-                      <FileText className="w-5 h-5" />
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-full bg-[#351D1D] group-hover:bg-red-500/20 text-red-400 transition-colors">
+                        <Plus className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs font-bold text-white group-hover:text-red-400">
+                        ➕ Add New PDF (নতুন পিডিএফ যোগ করুন)
+                      </span>
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-white group-hover:text-red-400">
-                        Upload PDF / Document Files
-                      </div>
-                      <div className="text-[11px] text-gray-400">
-                        Supports PDF files, circular scans & document pics
-                      </div>
+                    <div className="text-[11px] text-gray-400">
+                      একাধিক পিডিএফ সিলেক্ট করুন বা Edit অপশন থেকে ৭-৮ টি পর্যন্ত পিডিএফ যোগ করুন
                     </div>
                   </button>
                 </div>

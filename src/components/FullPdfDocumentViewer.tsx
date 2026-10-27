@@ -116,18 +116,46 @@ export function postToUnifiedDoc(
 /** Helper to convert a CanadaDocumentRecord to UnifiedDocumentData */
 export function canadaRecordToUnifiedDoc(rec: CanadaDocumentRecord): UnifiedDocumentData {
   const attachedDocs: AttachedDoc[] = [];
-  if (rec.documentFileUrl) {
-    const isPdf =
-      rec.documentFileName?.toLowerCase().endsWith('.pdf') ||
-      rec.documentFileUrl.startsWith('data:application/pdf');
-    attachedDocs.push({
-      id: `ca-attached-${rec.id}`,
-      name: rec.documentFileName || 'Canada Official Document.pdf',
-      size: 'Official IRCC Document',
-      type: isPdf ? 'pdf' : 'image',
-      dataUrl: rec.documentFileUrl,
-      uploadDate: rec.issueDate,
+
+  // 1. Add all multiple attached PDF documents
+  if (rec.attachedDocuments && Array.isArray(rec.attachedDocuments)) {
+    rec.attachedDocuments.forEach((doc) => {
+      if (doc && doc.dataUrl && doc.dataUrl !== '#') {
+        let cleanUrl = doc.dataUrl;
+        if (cleanUrl.startsWith('data:application/octet-stream;base64,JVBERi')) {
+          cleanUrl = cleanUrl.replace('data:application/octet-stream', 'data:application/pdf');
+        }
+        attachedDocs.push({
+          ...doc,
+          dataUrl: cleanUrl,
+        });
+      }
     });
+  }
+
+  // 2. Add documentFileUrl if present and not already in attachedDocs
+  if (rec.documentFileUrl && rec.documentFileUrl !== '#') {
+    let cleanUrl = rec.documentFileUrl;
+    if (cleanUrl.startsWith('data:application/octet-stream;base64,JVBERi')) {
+      cleanUrl = cleanUrl.replace('data:application/octet-stream', 'data:application/pdf');
+    }
+    const alreadyExists = attachedDocs.some((d) => d.dataUrl === cleanUrl);
+    if (!alreadyExists) {
+      const isPdf =
+        rec.documentFileName?.toLowerCase().endsWith('.pdf') ||
+        cleanUrl.startsWith('data:application/pdf') ||
+        cleanUrl.includes('application/pdf') ||
+        cleanUrl.includes('JVBERi') ||
+        cleanUrl.startsWith('blob:');
+      attachedDocs.unshift({
+        id: `ca-attached-${rec.id}`,
+        name: rec.documentFileName || 'Canada Official Document.pdf',
+        size: 'Official IRCC Document',
+        type: isPdf ? 'pdf' : 'image',
+        dataUrl: cleanUrl,
+        uploadDate: rec.issueDate,
+      });
+    }
   }
 
   return {
@@ -625,14 +653,39 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
         </div>
 
         {hasRealAttachedDocs ? (
-          validAttachedDocs.map((doc, idx) => {
-            const serialNum = idx + 1;
-            const formattedSerial = serialNum < 10 ? `0${serialNum}` : `${serialNum}`;
-            const isPdf =
-              doc.dataUrl &&
-              (doc.dataUrl.startsWith('data:application/pdf') ||
-                doc.name.toLowerCase().endsWith('.pdf') ||
-                doc.type === 'pdf');
+          <>
+            {validAttachedDocs.length > 1 && (
+              <div className="w-full max-w-[900px] flex items-center gap-2 overflow-x-auto py-1.5 px-2 bg-[#12141A] rounded-xl border border-[#272B36] scrollbar-thin">
+                <span className="text-[11px] font-bold text-[#FF8E4D] shrink-0 uppercase tracking-wider flex items-center gap-1">
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Attached PDFs ({validAttachedDocs.length}):</span>
+                </span>
+                {validAttachedDocs.map((d, i) => (
+                  <a
+                    key={d.id}
+                    href={`#attached-doc-${d.id}`}
+                    className="px-2.5 py-1 rounded-lg bg-[#191D26] hover:bg-[#232936] text-gray-200 hover:text-white text-xs font-semibold border border-[#2B3242] transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <span className="px-1.5 py-0.2 rounded bg-[#FF5500] text-white font-mono text-[10px] font-black">
+                      {i + 1}
+                    </span>
+                    <span className="truncate max-w-[150px]">{d.name}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+            {validAttachedDocs.map((doc, idx) => {
+              const serialNum = idx + 1;
+              const formattedSerial = serialNum < 10 ? `0${serialNum}` : `${serialNum}`;
+              const isPdf =
+                Boolean(doc.dataUrl) &&
+                (doc.type === 'pdf' ||
+                  doc.name.toLowerCase().endsWith('.pdf') ||
+                  doc.dataUrl.startsWith('data:application/pdf') ||
+                  doc.dataUrl.includes('application/pdf') ||
+                  doc.dataUrl.includes('JVBERi') ||
+                  doc.dataUrl.startsWith('blob:') ||
+                  doc.dataUrl.toLowerCase().includes('.pdf'));
 
             return (
               <div
@@ -716,8 +769,9 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                 </div>
               </div>
             );
-          })
-        ) : (
+          })}
+        </>
+      ) : (
           /* When no separate uploaded binary PDF was provided, ALWAYS show the official verified attached Work Permit Application sheet */
           <div className="w-full max-w-[900px] flex flex-col items-center">
             <div className="w-full mb-2 flex items-center justify-between px-2 text-xs">
