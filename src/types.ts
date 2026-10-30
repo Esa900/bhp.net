@@ -63,6 +63,8 @@ export interface AttachedDoc {
   type: 'pdf' | 'image' | 'other';
   dataUrl: string; // Base64 or external URL
   uploadDate: string;
+  sectionTag?: string; // e.g. "Work Permit", "Offer Letter", "Job Confirmation", "Biometrics VFS", "Medical Record", "Statutory Notice"
+  isPrimary?: boolean; // When true, rendered as the top primary PDF view
 }
 
 export interface AdminPost {

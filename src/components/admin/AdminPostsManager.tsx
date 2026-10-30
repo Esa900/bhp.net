@@ -151,6 +151,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     readTime: '4 min read',
     badges: 'NEWS, OFFICIAL',
     candidateName: '',
+    candidatePhotoUrl: '',
     passportNumber: '',
     jobTitle: '',
     workLocation: '',
@@ -166,6 +167,23 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   // Refs for hidden file inputs
   const imageFilesInputRef = useRef<HTMLInputElement>(null);
   const pdfFilesInputRef = useRef<HTMLInputElement>(null);
+  const candidatePhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle Candidate Photo upload
+  const handleCandidatePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormData((prev) => ({
+        ...prev,
+        candidatePhotoUrl: reader.result as string,
+      }));
+      showToast(`Candidate photo "${file.name}" uploaded successfully.`);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   // New Category Form State
   const [catFormData, setCatFormData] = useState({
@@ -191,6 +209,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       readTime: post.readTime,
       badges: post.badges.join(', '),
       candidateName: post.candidateName || '',
+      candidatePhotoUrl: post.candidatePhotoUrl || '',
       passportNumber: post.passportNumber || '',
       jobTitle: post.jobTitle || '',
       workLocation: post.workLocation || '',
@@ -216,6 +235,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       readTime: '4 min read',
       badges: 'NEWS, OFFICIAL',
       candidateName: '',
+      candidatePhotoUrl: '',
       passportNumber: '',
       jobTitle: '',
       workLocation: '',
@@ -225,6 +245,155 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     setSingleImgUrlInput('');
     setPdfUrlInput('');
     setPdfNameInput('');
+  };
+
+  // Quick Add PDF Modal State (For "All Posts" direct addition with section choice)
+  const [quickPostDoc, setQuickPostDoc] = useState<AdminPost | null>(null);
+  const [quickSectionTag, setQuickSectionTag] = useState<string>('Work Permit Documents (ওয়ার্ক পারমিট)');
+  const [customSectionTag, setCustomSectionTag] = useState<string>('');
+  const [quickIsPrimary, setQuickIsPrimary] = useState<boolean>(true);
+  const [quickSelectedFiles, setQuickSelectedFiles] = useState<{ name: string; size: string; type: 'pdf' | 'image' | 'other'; dataUrl: string }[]>([]);
+  const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState<boolean>(false);
+  const quickFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleOpenQuickAddPdf = (post: AdminPost) => {
+    setQuickPostDoc(post);
+    setQuickSectionTag('Work Permit Documents (ওয়ার্ক পারমিট)');
+    setCustomSectionTag('');
+    setQuickIsPrimary(true);
+    setQuickSelectedFiles([]);
+  };
+
+  const handleQuickFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const filesList = Array.from(files) as File[];
+    let loaded = 0;
+    const readFiles: { name: string; size: string; type: 'pdf' | 'image' | 'other'; dataUrl: string }[] = [];
+
+    filesList.forEach((file) => {
+      const isPdf =
+        file.name.toLowerCase().endsWith('.pdf') ||
+        file.type.includes('pdf') ||
+        file.type.includes('application/pdf');
+      const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : file.type.includes('image') ? 'image' : 'other';
+      const sizeStr =
+        file.size > 1024 * 1024
+          ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+          : `${(file.size / 1024).toFixed(1)} KB`;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        if (result) {
+          readFiles.push({
+            name: file.name,
+            size: sizeStr,
+            type: docType,
+            dataUrl: result,
+          });
+        }
+        loaded++;
+        if (loaded === filesList.length) {
+          setQuickSelectedFiles((prev) => [...prev, ...readFiles]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const handleRemoveQuickSelectedFile = (index: number) => {
+    setQuickSelectedFiles((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleSaveQuickAddPdf = async () => {
+    if (!quickPostDoc) return;
+    if (quickSelectedFiles.length === 0) {
+      showToast('Please select at least one PDF or document to upload.');
+      return;
+    }
+
+    setIsUploadingQuickPdf(true);
+    const finalSection =
+      quickSectionTag === 'Other Custom Section' && customSectionTag.trim()
+        ? customSectionTag.trim()
+        : quickSectionTag;
+
+    const targetRef = quickPostDoc.refNumber || quickPostDoc.id;
+
+    try {
+      let latestUpdatedPost: AdminPost | null = null;
+      for (let i = 0; i < quickSelectedFiles.length; i++) {
+        const f = quickSelectedFiles[i];
+        const newDoc: AttachedDoc = {
+          id: `att-au-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          name: f.name,
+          size: f.size,
+          type: f.type,
+          dataUrl: f.dataUrl,
+          sectionTag: finalSection,
+          isPrimary: i === 0 ? quickIsPrimary : false,
+          uploadDate: new Date().toISOString().split('T')[0],
+        };
+
+        const res = await fetch('/api/posts/add-attached-doc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            postId: quickPostDoc.id,
+            refNumber: targetRef,
+            doc: newDoc,
+          }),
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          if (json.post) {
+            latestUpdatedPost = json.post;
+          }
+        }
+      }
+
+      // Update state & local storage
+      const currentPosts = getStoredAdminPosts();
+      const updated = currentPosts.map((p) => {
+        if (p.id === quickPostDoc.id) {
+          return (
+            latestUpdatedPost || {
+              ...p,
+              attachedDocuments: [
+                ...(p.attachedDocuments || []),
+                ...quickSelectedFiles.map((f, i) => ({
+                  id: `att-au-${Date.now()}-${i}`,
+                  name: f.name,
+                  size: f.size,
+                  type: f.type,
+                  dataUrl: f.dataUrl,
+                  sectionTag: finalSection,
+                  isPrimary: i === 0 ? quickIsPrimary : false,
+                  uploadDate: new Date().toISOString().split('T')[0],
+                })),
+              ],
+            }
+          );
+        }
+        return p;
+      });
+
+      saveStoredAdminPosts(updated);
+      setPosts(updated);
+      showToast(
+        `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved to central database.`
+      );
+      setQuickPostDoc(null);
+      setQuickSelectedFiles([]);
+    } catch (err) {
+      console.error('Failed to quick-add PDF:', err);
+      showToast('Error uploading PDF to server.');
+    } finally {
+      setIsUploadingQuickPdf(false);
+    }
   };
 
   // Helper: Auto-generate reference number
@@ -427,6 +596,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       readTime: formData.readTime,
       badges: badgeArray.length > 0 ? badgeArray : ['NEWS'],
       candidateName: formData.candidateName.trim() || undefined,
+      candidatePhotoUrl: formData.candidatePhotoUrl?.trim() || undefined,
       passportNumber: formData.passportNumber.trim() || undefined,
       jobTitle: formData.jobTitle.trim() || undefined,
       workLocation: formData.workLocation.trim() || undefined,
@@ -739,6 +909,71 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                     onChange={(e) => setFormData({ ...formData, workLocation: e.target.value })}
                     placeholder="e.g. Perth, Western Australia"
                     className="w-full bg-[#101114] border border-[#31353E] focus:border-[#0284c7] rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Candidate Picture / Photo Upload (প্রার্থীর ছবি - যা PDF ও সার্টিফিকেটে দেখাবে) */}
+              <div className="p-3 bg-[#131518] rounded-xl border border-[#2B2E35] space-y-2.5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-20 rounded-lg border-2 border-dashed border-[#444] bg-[#0E1013] flex items-center justify-center overflow-hidden shrink-0 relative">
+                      {formData.candidatePhotoUrl ? (
+                        <img
+                          src={formData.candidatePhotoUrl}
+                          alt="Candidate Preview"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <User className="w-6 h-6 text-gray-500" />
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-white block">
+                        Candidate Picture / Photo (প্রার্থীর ছবি)
+                      </span>
+                      <span className="text-[11px] text-gray-400 block mt-0.5">
+                        এই ছবি বা পাসপোর্ট ফটো সরাসরি সার্চ রেজাল্ট এবং অফিসিয়াল PDF সার্টিফিকেটে প্রদর্শিত হবে।
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={candidatePhotoInputRef}
+                      accept="image/*"
+                      onChange={handleCandidatePhotoUpload}
+                      className="hidden"
+                      id="au-candidate-photo-upload"
+                    />
+                    <label
+                      htmlFor="au-candidate-photo-upload"
+                      className="px-3 py-1.5 bg-[#0284c7] hover:bg-[#0369a1] text-white rounded-lg text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Picture (ছবি আপলোড)</span>
+                    </label>
+
+                    {formData.candidatePhotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, candidatePhotoUrl: '' }))}
+                        className="px-2.5 py-1.5 bg-[#252830] hover:bg-[#30333C] text-gray-300 hover:text-red-400 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <input
+                    type="url"
+                    value={formData.candidatePhotoUrl}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, candidatePhotoUrl: e.target.value }))}
+                    placeholder="Or paste candidate photo direct image URL (https://...)"
+                    className="w-full bg-[#101114] border border-[#2B2E35] focus:border-[#0284c7] rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -1445,6 +1680,15 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
+                                onClick={() => handleOpenQuickAddPdf(post)}
+                                className="px-2 py-1 rounded bg-[#0284c7]/20 hover:bg-[#0284c7] text-[#38bdf8] hover:text-white border border-[#0284c7]/40 text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
+                                title="Add New PDF to this client post"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>+ PDF</span>
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => setPreviewingPost(post)}
                                 className="p-1.5 rounded text-gray-400 hover:text-[#38bdf8] hover:bg-[#2C3038] transition-colors cursor-pointer"
                                 title="View details"
@@ -1632,6 +1876,200 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
               document={postToUnifiedDoc(previewingPost, 'australia')}
               onClose={() => setPreviewingPost(null)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          QUICK ADD PDF MODAL (WITH SECTION SELECTION FOR CLIENT)
+         ========================================================================= */}
+      {quickPostDoc && (
+        <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-[#17181B] border border-[#3A3F4C] text-white w-full max-w-xl rounded-2xl p-5 sm:p-7 shadow-2xl space-y-5 my-8 animate-in zoom-in-95 duration-150 relative">
+            <div className="flex items-center justify-between border-b border-[#2C303B] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-[#0284c7]/20 text-[#38bdf8]">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-base text-white">
+                    Add New PDF (নতুন পিডিএফ যোগ করুন)
+                  </h4>
+                  <p className="text-xs text-gray-400">
+                    Client: <strong className="text-white">{quickPostDoc.candidateName || quickPostDoc.title}</strong> · Ref: <strong className="text-amber-400 font-mono">#{quickPostDoc.refNumber}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickPostDoc(null);
+                  setQuickSelectedFiles([]);
+                }}
+                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Target Client Reference ID Lock Info */}
+            <div className="p-3 bg-[#111316] rounded-xl border border-[#262A34] flex items-center justify-between gap-3 text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-gray-400 block">Candidate / Title</span>
+                <span className="font-bold text-white text-sm">{quickPostDoc.candidateName || quickPostDoc.title}</span>
+                {quickPostDoc.passportNumber && (
+                  <span className="text-gray-400 block text-[11px]">Passport: {quickPostDoc.passportNumber}</span>
+                )}
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-gray-400 block">Locked Reference Number</span>
+                <span className="font-mono font-bold text-[#38bdf8] text-sm">
+                  #{quickPostDoc.refNumber}
+                </span>
+                <span className="text-[10px] text-emerald-400 font-semibold block">✓ Auto-tied to this ID</span>
+              </div>
+            </div>
+
+            {/* Section Selection */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-white flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-[#38bdf8]" />
+                <span>Select Display Section (কোন সেকশনে পিডিএফটি দেখাবে নির্বাচন করুন):</span>
+              </label>
+              <select
+                value={quickSectionTag}
+                onChange={(e) => setQuickSectionTag(e.target.value)}
+                className="w-full bg-[#111316] border border-[#2D313A] rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-[#0284c7] cursor-pointer font-medium"
+              >
+                <option value="Work Permit Documents (ওয়ার্ক পারমিট)">Work Permit Documents (ওয়ার্ক পারমিট)</option>
+                <option value="Job Confirmation & Offer Letter (অফার লেটার)">Job Confirmation & Offer Letter (অফার লেটার)</option>
+                <option value="Biometrics & VFS Global (বায়োমেট্রিক ও ভিএফএস)">Biometrics & VFS Global (বায়োমেট্রিক ও ভিএফএস)</option>
+                <option value="Medical Examination (মেডিকেল রিপোর্ট)">Medical Examination (মেডিকেল রিপোর্ট)</option>
+                <option value="Visa Grant Authorization (ভিসা অনুমোদন)">Visa Grant Authorization (ভিসা অনুমোদন)</option>
+                <option value="Identity & Passport Dossier (আইডেন্টিটি রেকর্ড)">Identity & Passport Dossier (আইডেন্টিটি রেকর্ড)</option>
+                <option value="Employment Agreement & Contract (চুক্তিপত্র)">Employment Agreement & Contract (চুক্তিপত্র)</option>
+                <option value="Other Custom Section">Other Custom Section (অন্যান্য কাস্টম সেকশন)</option>
+              </select>
+
+              {quickSectionTag === 'Other Custom Section' && (
+                <input
+                  type="text"
+                  placeholder="Enter custom section label..."
+                  value={customSectionTag}
+                  onChange={(e) => setCustomSectionTag(e.target.value)}
+                  className="w-full mt-2 bg-[#111316] border border-[#2D313A] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#0284c7]"
+                />
+              )}
+            </div>
+
+            {/* Set as Primary toggle */}
+            <label className="flex items-center gap-2.5 p-3 rounded-xl bg-[#111316] border border-[#262A34] cursor-pointer hover:border-[#353A48] transition-colors">
+              <input
+                type="checkbox"
+                checked={quickIsPrimary}
+                onChange={(e) => setQuickIsPrimary(e.target.checked)}
+                className="w-4 h-4 accent-[#0284c7] rounded cursor-pointer"
+              />
+              <div className="text-xs">
+                <span className="font-bold text-white block">
+                  Set as Primary View (ওপরে মূল পিডিএফ হিসেবে সরাসরি দেখান)
+                </span>
+                <span className="text-gray-400 text-[11px]">
+                  সার্চ রেজাল্টে সবার ওপরে এই পিডিএফটি পূর্ণ পর্দায় দেখাবে, বাকিগুলো নিচে গ্যালারিতে থাকবে।
+                </span>
+              </div>
+            </label>
+
+            {/* File Upload Selector */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-white flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-[#38bdf8]" />
+                <span>Select PDF or Document Files (এক বা একাধিক পিডিএফ ফাইল সিলেক্ট করুন):</span>
+              </label>
+
+              <input
+                type="file"
+                ref={quickFileInputRef}
+                multiple
+                accept=".pdf, application/pdf, image/*"
+                onChange={handleQuickFileSelect}
+                className="hidden"
+                id="quick-post-pdf-file-input"
+              />
+
+              <div
+                onClick={() => quickFileInputRef.current?.click()}
+                className="border-2 border-dashed border-[#343946] hover:border-[#0284c7]/60 bg-[#111316] hover:bg-[#15181E] rounded-xl p-5 text-center cursor-pointer transition-all space-y-2"
+              >
+                <div className="w-10 h-10 mx-auto rounded-full bg-[#0284c7]/10 text-[#38bdf8] flex items-center justify-center">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <div className="text-xs font-bold text-white">
+                  Click to Choose PDF / Scan Files (কম্পিউটার বা ফোন থেকে ফাইল বাছুন)
+                </div>
+                <div className="text-[11px] text-gray-400">
+                  সাপোর্ট করে: PDF, JPG, PNG (একাধিক ফাইল একবারে সিলেক্ট করতে পারবেন)
+                </div>
+              </div>
+
+              {/* Selected Files Preview */}
+              {quickSelectedFiles.length > 0 && (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 pt-1">
+                  {quickSelectedFiles.map((file, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-2.5 rounded-lg bg-[#111316] border border-[#262A34] text-xs"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="w-4 h-4 text-[#38bdf8] shrink-0" />
+                        <span className="font-semibold text-white truncate max-w-xs">{file.name}</span>
+                        <span className="text-[10px] text-gray-400 font-mono shrink-0">({file.size})</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveQuickSelectedFile(idx)}
+                        className="text-gray-400 hover:text-red-400 p-1 rounded cursor-pointer"
+                        title="Remove"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2C303B]">
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickPostDoc(null);
+                  setQuickSelectedFiles([]);
+                }}
+                disabled={isUploadingQuickPdf}
+                className="px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-300 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+              >
+                Cancel (বাতিল)
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveQuickAddPdf}
+                disabled={isUploadingQuickPdf || quickSelectedFiles.length === 0}
+                className="px-5 py-2.5 bg-gradient-to-r from-[#0284c7] to-[#0369a1] hover:from-[#0369a1] hover:to-[#0284c7] disabled:opacity-50 text-white rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-2 shadow-lg shadow-[#0284c7]/30 active:scale-95"
+              >
+                {isUploadingQuickPdf ? (
+                  <span>Saving to Database...</span>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Upload & Save to Central Database (ডাটাবেসে সেভ করুন)</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

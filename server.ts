@@ -395,6 +395,93 @@ async function startServer() {
     res.json({ success: saved, count: docs.length });
   });
 
+  // Direct endpoint to attach a new PDF to an existing Canada post with section tag
+  app.post('/api/canada-documents/add-attached-doc', (req: Request, res: Response) => {
+    const { docId, referenceNo, attachedDoc } = req.body || {};
+    if (!attachedDoc || (!docId && !referenceNo)) {
+      res.status(400).json({ error: 'Missing attachedDoc or document identifier (docId/referenceNo)' });
+      return;
+    }
+
+    const docs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
+    const targetIdx = docs.findIndex((d) => {
+      if (docId && d.id === docId) return true;
+      if (referenceNo) {
+        const cleanRef = String(referenceNo).toLowerCase().replace(/[-\s_./#:]/g, '');
+        const dTin = (d.tinOrRef || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const dRef = (d.referenceNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const dId = (d.idNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        return dTin === cleanRef || dRef === cleanRef || dId === cleanRef;
+      }
+      return false;
+    });
+
+    if (targetIdx === -1) {
+      res.status(404).json({ error: 'Target Canada record not found' });
+      return;
+    }
+
+    const currentDoc = docs[targetIdx];
+    const currentAttached = Array.isArray(currentDoc.attachedDocuments) ? [...currentDoc.attachedDocuments] : [];
+
+    // If marked primary, unset other primary flags
+    if (attachedDoc.isPrimary) {
+      currentAttached.forEach((d) => (d.isPrimary = false));
+    }
+
+    const updatedAttached = [...currentAttached, attachedDoc];
+    docs[targetIdx] = {
+      ...currentDoc,
+      attachedDocuments: updatedAttached,
+      documentFileUrl: attachedDoc.isPrimary ? attachedDoc.dataUrl : (currentDoc.documentFileUrl || attachedDoc.dataUrl),
+      documentFileName: attachedDoc.isPrimary ? attachedDoc.name : (currentDoc.documentFileName || attachedDoc.name),
+    };
+
+    const saved = writeJsonFile(CANADA_DOCS_FILE, docs);
+    res.json({ success: saved, document: docs[targetIdx] });
+  });
+
+  // Direct endpoint to attach a new PDF to an Australia post with section tag
+  app.post('/api/posts/add-attached-doc', (req: Request, res: Response) => {
+    const { postId, refNumber, attachedDoc } = req.body || {};
+    if (!attachedDoc || (!postId && !refNumber)) {
+      res.status(400).json({ error: 'Missing attachedDoc or post identifier (postId/refNumber)' });
+      return;
+    }
+
+    const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
+    const targetIdx = posts.findIndex((p) => {
+      if (postId && p.id === postId) return true;
+      if (refNumber) {
+        const cleanRef = String(refNumber).toLowerCase().replace(/[-\s_./#:]/g, '');
+        const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        return pRef === cleanRef;
+      }
+      return false;
+    });
+
+    if (targetIdx === -1) {
+      res.status(404).json({ error: 'Target Australia post not found' });
+      return;
+    }
+
+    const currentPost = posts[targetIdx];
+    const currentAttached = Array.isArray(currentPost.attachedDocuments) ? [...currentPost.attachedDocuments] : [];
+
+    if (attachedDoc.isPrimary) {
+      currentAttached.forEach((d) => (d.isPrimary = false));
+    }
+
+    const updatedAttached = [...currentAttached, attachedDoc];
+    posts[targetIdx] = {
+      ...currentPost,
+      attachedDocuments: updatedAttached,
+    };
+
+    const saved = writeJsonFile(POSTS_FILE, posts);
+    res.json({ success: saved, post: posts[targetIdx] });
+  });
+
   // =========================================================================
   // API: 3-LINE MENU ITEMS
   // =========================================================================

@@ -210,24 +210,18 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
   // 3. SEARCH SAMPLE PROFILES
   try {
     const matchedProfile = SAMPLE_PROFILES.find((p) => {
-      const matchField = (val?: string) => {
+      const matchExact = (val?: string) => {
         if (!val) return false;
-        const cleanVal = val.toLowerCase().replace(/[-\s_./]/g, '');
-        return cleanVal.includes(cleanQuery) || cleanQuery.includes(cleanVal);
+        return val.toLowerCase().replace(/[-\s_./]/g, '') === cleanQuery;
       };
 
       return (
-        matchField(p.referenceNumber) ||
-        matchField(p.edNumber) ||
-        matchField(p.documentNumber) ||
-        matchField(p.verificationIdNo) ||
-        matchField(p.transitionIdNo) ||
-        matchField(p.visaGrantNumber) ||
-        matchField(p.insuranceNo) ||
-        matchField(p.immiCardNo) ||
-        matchField(p.tfnNumber) ||
-        p.fullName.toLowerCase().includes(queryTrimmed) ||
-        p.fullName.toLowerCase().replace(/[-\s_./]/g, '').includes(cleanQuery)
+        matchExact(p.referenceNumber) ||
+        matchExact(p.documentNumber) ||
+        matchExact(p.verificationIdNo) ||
+        matchExact(p.transitionIdNo) ||
+        matchExact(p.edNumber) ||
+        matchExact(p.visaGrantNumber)
       );
     });
 
@@ -251,11 +245,7 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
  * will be retrieved and displayed to the customer immediately.
  */
 export async function searchUniversalDocumentAsync(rawQuery: string): Promise<UniversalSearchResult | null> {
-  // 1. First try immediate local cache
-  const localMatch = searchUniversalDocument(rawQuery);
-  if (localMatch) return localMatch;
-
-  // 2. Query direct server search endpoint
+  // 1. Prioritize querying live central server database for real-time worldwide access
   try {
     const res = await fetch(`/api/search?q=${encodeURIComponent(rawQuery)}`, { cache: 'no-store' });
     if (res.ok) {
@@ -285,6 +275,10 @@ export async function searchUniversalDocumentAsync(rawQuery: string): Promise<Un
   } catch (err) {
     console.warn('Server search endpoint error:', err);
   }
+
+  // 2. Fallback to local cache if network offline
+  const localMatch = searchUniversalDocument(rawQuery);
+  if (localMatch) return localMatch;
 
   // 3. Fallback: full server sync of posts and canada docs, then retry search
   try {
