@@ -252,12 +252,28 @@ export async function searchUniversalDocumentAsync(rawQuery: string): Promise<Un
       const data = await res.json();
       if (data && data.found && data.record) {
         if (data.source === 'australia') {
+          try {
+            const currentPosts = getStoredAdminPosts();
+            const existsIdx = currentPosts.findIndex((p) => p.id === data.record.id);
+            const updatedList = existsIdx !== -1
+              ? currentPosts.map((p, i) => (i === existsIdx ? data.record : p))
+              : [data.record, ...currentPosts];
+            localStorage.setItem('bhp_admin_posts', JSON.stringify(updatedList));
+          } catch (_) {}
           return {
             document: postToUnifiedDoc(data.record, 'australia'),
             source: 'australia',
             rawRecord: data.record,
           };
         } else if (data.source === 'canada') {
+          try {
+            const currentDocs = getStoredCanadaDocuments();
+            const existsIdx = currentDocs.findIndex((c) => c.id === data.record.id);
+            const updatedList = existsIdx !== -1
+              ? currentDocs.map((c, i) => (i === existsIdx ? data.record : c))
+              : [data.record, ...currentDocs];
+            localStorage.setItem('bhp_canada_documents', JSON.stringify(updatedList));
+          } catch (_) {}
           return {
             document: canadaRecordToUnifiedDoc(data.record),
             source: 'canada',

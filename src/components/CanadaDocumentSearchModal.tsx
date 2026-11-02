@@ -140,16 +140,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
     setMatchedAdminPost(null);
 
     try {
-      // 1. Try immediate matching in Canada documents storage
-      const foundCa = searchCanadaDocument(term, currentConfig.id) || searchCanadaDocument(term);
-      if (foundCa) {
-        setMatchedRecord(foundCa);
-        setMatchedUniversalDoc(canadaRecordToUnifiedDoc(foundCa));
-        setIsSearching(false);
-        return;
-      }
-
-      // 2. Perform live async universal search with server sync (for documents created on other devices)
+      // 1. Prioritize live server search so documents uploaded from other devices are instantly found worldwide
       const universalResult = await searchUniversalDocumentAsync(term);
       if (universalResult) {
         setMatchedUniversalDoc(universalResult.document);
@@ -158,6 +149,15 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
         } else if (universalResult.source === 'australia') {
           setMatchedAdminPost(universalResult.rawRecord);
         }
+        setIsSearching(false);
+        return;
+      }
+
+      // 2. Fallback to local cache (e.g. if offline)
+      const foundCa = searchCanadaDocument(term, currentConfig.id) || searchCanadaDocument(term);
+      if (foundCa) {
+        setMatchedRecord(foundCa);
+        setMatchedUniversalDoc(canadaRecordToUnifiedDoc(foundCa));
         setIsSearching(false);
         return;
       }

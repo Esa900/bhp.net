@@ -82,9 +82,22 @@ export const INITIAL_CANADA_DOCUMENTS: CanadaDocumentRecord[] = [
     expiryDate: '2029-03-01',
     officialDocNumber: 'WP-IRCC-EGP56RU55H',
     lmiaNumber: 'LMIA-CA-56RU55',
-    documentFileName: 'Canada_Work_Permit_Application_EGP56RU55H.pdf',
+    documentFileName: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+    documentFileUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
     notes: 'Application for a Work Permit (D Category). Verified and endorsed by BHP Canada & IRCC.',
     createdAt: '2026-03-02T10:00:00.000Z',
+    attachedDocuments: [
+      {
+        id: 'att-ca-egp56-pdf',
+        name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+        size: '737 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
+        isPrimary: true,
+        uploadDate: '2026-03-02',
+      },
+    ],
   },
   {
     id: 'ca-doc-5',
@@ -144,16 +157,33 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
       if (data && Array.isArray(data.documents)) {
         const local = getStoredCanadaDocuments();
         const mergedMap = new Map<string, CanadaDocumentRecord>();
+        let hasNewLocal = false;
 
         // 1. Add server documents (exclude demo docs)
-        data.documents.forEach((d: CanadaDocumentRecord) => {
-          if (d && d.id && !isDemoCanadaDoc(d)) {
-            mergedMap.set(d.id, d);
+        data.documents.forEach((serverDoc: CanadaDocumentRecord) => {
+          if (serverDoc && serverDoc.id && !isDemoCanadaDoc(serverDoc)) {
+            const localDoc = local.find((l) => l.id === serverDoc.id);
+            // If local doc has more attached documents than server, merge them
+            if (
+              localDoc &&
+              Array.isArray(localDoc.attachedDocuments) &&
+              localDoc.attachedDocuments.length > 0 &&
+              (!serverDoc.attachedDocuments || serverDoc.attachedDocuments.length === 0)
+            ) {
+              mergedMap.set(serverDoc.id, {
+                ...serverDoc,
+                documentFileUrl: localDoc.documentFileUrl || serverDoc.documentFileUrl,
+                documentFileName: localDoc.documentFileName || serverDoc.documentFileName,
+                attachedDocuments: localDoc.attachedDocuments,
+              });
+              hasNewLocal = true;
+            } else {
+              mergedMap.set(serverDoc.id, serverDoc);
+            }
           }
         });
 
-        // 2. Add local documents (exclude demo docs)
-        let hasNewLocal = false;
+        // 2. Add local documents that are not on the server yet
         local.forEach((d: CanadaDocumentRecord) => {
           if (d && d.id && !isDemoCanadaDoc(d) && !mergedMap.has(d.id)) {
             mergedMap.set(d.id, d);
@@ -168,7 +198,7 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
           console.warn('LocalStorage error caching canada documents:', e);
         }
 
-        // If local had new documents that server missed, push merged list to server
+        // If local had documents that server missed, push merged list to server
         if (hasNewLocal) {
           fetch('/api/canada-documents', {
             method: 'POST',
@@ -220,20 +250,76 @@ export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
 }
 
 export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Promise<boolean> {
-  // 1. IndexedDB high-capacity storage (preserves all multi-page PDFs without size limits)
-  setLargeItem(CANADA_STORAGE_KEY, docs).catch((err) => {
+  // Pre-process: if any attached document has base64 dataUrl, upload to server's disk to keep payload tiny
+  const sanitizedDocs = await Promise.all(
+    docs.map(async (doc) => {
+      const cleanDoc = { ...doc };
+
+      if (cleanDoc.documentFileUrl && cleanDoc.documentFileUrl.startsWith('data:')) {
+        try {
+          const upRes = await fetch('/api/upload-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: cleanDoc.documentFileName || 'Canada_Document.pdf',
+              fileData: cleanDoc.documentFileUrl,
+              type: 'pdf',
+            }),
+          });
+          if (upRes.ok) {
+            const upJson = await upRes.json();
+            if (upJson.fileUrl) {
+              cleanDoc.documentFileUrl = upJson.fileUrl;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (cleanDoc.attachedDocuments && cleanDoc.attachedDocuments.length > 0) {
+        const cleanAttached = await Promise.all(
+          cleanDoc.attachedDocuments.map(async (att) => {
+            if (att.dataUrl && att.dataUrl.startsWith('data:')) {
+              try {
+                const upRes = await fetch('/api/upload-file', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    fileName: att.name || 'Attached_Document.pdf',
+                    fileData: att.dataUrl,
+                    type: att.type,
+                  }),
+                });
+                if (upRes.ok) {
+                  const upJson = await upRes.json();
+                  if (upJson.fileUrl) {
+                    return { ...att, dataUrl: upJson.fileUrl };
+                  }
+                }
+              } catch (_) {}
+            }
+            return att;
+          })
+        );
+        cleanDoc.attachedDocuments = cleanAttached;
+      }
+      return cleanDoc;
+    })
+  );
+
+  // 1. IndexedDB high-capacity storage
+  setLargeItem(CANADA_STORAGE_KEY, sanitizedDocs).catch((err) => {
     console.warn('IndexedDB save warning for canada docs:', err);
   });
 
   // 2. Local storage save
   try {
-    localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(docs));
+    localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(sanitizedDocs));
   } catch (err) {
     console.warn('LocalStorage quota reached for canada docs; preserved in IndexedDB.');
   }
 
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: docs }));
+    window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: sanitizedDocs }));
     window.dispatchEvent(new Event('storage'));
   }
 
@@ -243,7 +329,7 @@ export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Pr
       const res = await fetch('/api/canada-documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(docs),
+        body: JSON.stringify(sanitizedDocs),
       });
       return res.ok;
     } catch (err) {

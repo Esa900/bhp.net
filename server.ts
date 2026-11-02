@@ -84,9 +84,22 @@ const INITIAL_CANADA_DOCUMENTS = [
     expiryDate: '2029-03-01',
     officialDocNumber: 'WP-IRCC-EGP56RU55H',
     lmiaNumber: 'LMIA-CA-56RU55',
-    documentFileName: 'Canada_Work_Permit_Application_EGP56RU55H.pdf',
+    documentFileName: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+    documentFileUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
     notes: 'Application for a Work Permit (D Category). Verified and endorsed by BHP Canada & IRCC.',
     createdAt: '2026-03-02T10:00:00.000Z',
+    attachedDocuments: [
+      {
+        id: 'att-ca-egp56-pdf',
+        name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+        size: '737 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
+        isPrimary: true,
+        uploadDate: '2026-03-02',
+      },
+    ],
   },
   {
     id: 'ca-doc-5',
@@ -317,6 +330,63 @@ const SAMPLE_PORTAL_RECORDS = [
   },
 ];
 
+// Persistent Uploads Directory for attached PDFs and images
+const UPLOADS_DIR = path.resolve(DATA_DIR, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+const PUBLIC_UPLOADS = path.resolve(__dirname, 'public', 'uploads');
+if (!fs.existsSync(PUBLIC_UPLOADS)) {
+  fs.mkdirSync(PUBLIC_UPLOADS, { recursive: true });
+}
+
+// Helper to save base64 string to a file on disk
+function saveBase64ToFile(dataUrl: string, nameHint: string): string {
+  if (!dataUrl || !dataUrl.startsWith('data:') || dataUrl.length < 50) return dataUrl;
+  try {
+    const commaIdx = dataUrl.indexOf(',');
+    const base64Str = commaIdx !== -1 ? dataUrl.substring(commaIdx + 1) : dataUrl;
+    const buffer = Buffer.from(base64Str, 'base64');
+    const isPdf = dataUrl.includes('application/pdf') || nameHint.toLowerCase().endsWith('.pdf');
+    const ext = isPdf ? '.pdf' : '.png';
+    const safeBase = nameHint.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.[^/.]+$/, '');
+    const finalFileName = `${Date.now()}_${safeBase}${ext}`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, finalFileName), buffer);
+    try {
+      fs.writeFileSync(path.join(PUBLIC_UPLOADS, finalFileName), buffer);
+    } catch (_) {}
+    return `/uploads/${finalFileName}`;
+  } catch (e) {
+    console.error('Error saving base64 to file:', e);
+    return dataUrl;
+  }
+}
+
+function processBase64InDoc(doc: any) {
+  if (!doc) return doc;
+  if (doc.documentFileUrl && doc.documentFileUrl.startsWith('data:')) {
+    doc.documentFileUrl = saveBase64ToFile(doc.documentFileUrl, doc.documentFileName || 'document.pdf');
+  }
+  if (doc.candidatePhotoUrl && doc.candidatePhotoUrl.startsWith('data:')) {
+    doc.candidatePhotoUrl = saveBase64ToFile(doc.candidatePhotoUrl, 'candidate_photo.png');
+  }
+  if (doc.imageUrl && doc.imageUrl.startsWith('data:')) {
+    doc.imageUrl = saveBase64ToFile(doc.imageUrl, 'primary_image.png');
+  }
+  if (Array.isArray(doc.attachedDocuments)) {
+    doc.attachedDocuments = doc.attachedDocuments.map((att: any) => {
+      if (att && att.dataUrl && att.dataUrl.startsWith('data:')) {
+        return {
+          ...att,
+          dataUrl: saveBase64ToFile(att.dataUrl, att.name || 'attached_doc.pdf'),
+        };
+      }
+      return att;
+    });
+  }
+  return doc;
+}
+
 // Auto-seed files on server boot
 function seedServerStorageIfEmpty() {
   const existingPosts = readJsonFile<any[]>(POSTS_FILE, []);
@@ -325,10 +395,43 @@ function seedServerStorageIfEmpty() {
     console.log('[Server Storage] Seeded posts.json with initial records');
   }
 
-  const existingCaDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, []);
+  let existingCaDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, []);
   if (!existingCaDocs || existingCaDocs.length === 0) {
     writeJsonFile(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
     console.log('[Server Storage] Seeded canada_documents.json with initial records');
+  } else {
+    // Ensure ca-doc-egp56 has the 11-page Canada Visa Application PDF attached if missing
+    let updated = false;
+    existingCaDocs = existingCaDocs.map((doc) => {
+      if (
+        (doc.id === 'ca-doc-egp56' || doc.referenceNo === 'EGP56RU55H' || doc.tinOrRef === 'EGP56RU55H') &&
+        (!doc.attachedDocuments || doc.attachedDocuments.length === 0 || !doc.documentFileUrl)
+      ) {
+        updated = true;
+        return {
+          ...doc,
+          documentFileName: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+          documentFileUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+          attachedDocuments: [
+            {
+              id: 'att-ca-egp56-pdf',
+              name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+              size: '737 KB',
+              type: 'pdf',
+              dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+              sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
+              isPrimary: true,
+              uploadDate: '2026-03-02',
+            },
+          ],
+        };
+      }
+      return doc;
+    });
+    if (updated) {
+      writeJsonFile(CANADA_DOCS_FILE, existingCaDocs);
+      console.log('[Server Storage] Updated ca-doc-egp56 with 11-page Canada Visa Application PDF in canada_documents.json');
+    }
   }
 
   const existingMenuItems = readJsonFile<any[]>(MENU_ITEMS_FILE, []);
@@ -347,6 +450,10 @@ async function startServer() {
   app.use(express.json({ limit: '60mb' }));
   app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 
+  // Static uploads serving for attached PDFs and scanned documents
+  app.use('/uploads', express.static(UPLOADS_DIR));
+  app.use('/uploads', express.static(PUBLIC_UPLOADS));
+
   // CORS headers for multi-device cross-origin support
   app.use((_req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
@@ -360,6 +467,31 @@ async function startServer() {
   });
 
   // =========================================================================
+  // API: DIRECT FILE UPLOAD (Fast, persists directly to disk on server)
+  // =========================================================================
+  app.post('/api/upload-file', (req: Request, res: Response) => {
+    try {
+      const { fileName, fileData, type } = req.body || {};
+      if (!fileData || typeof fileData !== 'string') {
+        res.status(400).json({ error: 'Missing fileData' });
+        return;
+      }
+      const safeName = (fileName || `upload_${Date.now()}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileUrl = saveBase64ToFile(fileData, safeName);
+      const isPdf = fileUrl.endsWith('.pdf') || type === 'pdf';
+      res.json({
+        success: true,
+        fileName: fileName || safeName,
+        fileUrl,
+        type: isPdf ? 'pdf' : (type || 'other'),
+      });
+    } catch (err) {
+      console.error('Upload endpoint error:', err);
+      res.status(500).json({ error: 'Failed to process file upload' });
+    }
+  });
+
+  // =========================================================================
   // API: AUSTRALIA POSTS (Cross-device persistence)
   // =========================================================================
   app.get('/api/posts', (_req: Request, res: Response) => {
@@ -368,11 +500,12 @@ async function startServer() {
   });
 
   app.post('/api/posts', (req: Request, res: Response) => {
-    const posts = Array.isArray(req.body) ? req.body : req.body?.posts;
-    if (!Array.isArray(posts)) {
+    const rawPosts = Array.isArray(req.body) ? req.body : req.body?.posts;
+    if (!Array.isArray(rawPosts)) {
       res.status(400).json({ error: 'Expected an array of posts' });
       return;
     }
+    const posts = rawPosts.map(processBase64InDoc);
     const saved = writeJsonFile(POSTS_FILE, posts);
     res.json({ success: saved, count: posts.length });
   });
@@ -386,21 +519,28 @@ async function startServer() {
   });
 
   app.post('/api/canada-documents', (req: Request, res: Response) => {
-    const docs = Array.isArray(req.body) ? req.body : req.body?.documents;
-    if (!Array.isArray(docs)) {
+    const rawDocs = Array.isArray(req.body) ? req.body : req.body?.documents;
+    if (!Array.isArray(rawDocs)) {
       res.status(400).json({ error: 'Expected an array of canada documents' });
       return;
     }
+    const docs = rawDocs.map(processBase64InDoc);
     const saved = writeJsonFile(CANADA_DOCS_FILE, docs);
     res.json({ success: saved, count: docs.length });
   });
 
   // Direct endpoint to attach a new PDF to an existing Canada post with section tag
   app.post('/api/canada-documents/add-attached-doc', (req: Request, res: Response) => {
-    const { docId, referenceNo, attachedDoc } = req.body || {};
-    if (!attachedDoc || (!docId && !referenceNo)) {
-      res.status(400).json({ error: 'Missing attachedDoc or document identifier (docId/referenceNo)' });
+    const { docId, referenceNo } = req.body || {};
+    const attachedDocRaw = req.body?.attachedDoc || req.body?.doc;
+    if (!attachedDocRaw || (!docId && !referenceNo)) {
+      res.status(400).json({ error: 'Missing attachedDoc/doc or document identifier (docId/referenceNo)' });
       return;
+    }
+
+    let attachedDoc = { ...attachedDocRaw };
+    if (attachedDoc.dataUrl && attachedDoc.dataUrl.startsWith('data:')) {
+      attachedDoc.dataUrl = saveBase64ToFile(attachedDoc.dataUrl, attachedDoc.name || 'document.pdf');
     }
 
     const docs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
@@ -443,10 +583,16 @@ async function startServer() {
 
   // Direct endpoint to attach a new PDF to an Australia post with section tag
   app.post('/api/posts/add-attached-doc', (req: Request, res: Response) => {
-    const { postId, refNumber, attachedDoc } = req.body || {};
-    if (!attachedDoc || (!postId && !refNumber)) {
-      res.status(400).json({ error: 'Missing attachedDoc or post identifier (postId/refNumber)' });
+    const { postId, refNumber } = req.body || {};
+    const attachedDocRaw = req.body?.attachedDoc || req.body?.doc;
+    if (!attachedDocRaw || (!postId && !refNumber)) {
+      res.status(400).json({ error: 'Missing attachedDoc/doc or post identifier (postId/refNumber)' });
       return;
+    }
+
+    let attachedDoc = { ...attachedDocRaw };
+    if (attachedDoc.dataUrl && attachedDoc.dataUrl.startsWith('data:')) {
+      attachedDoc.dataUrl = saveBase64ToFile(attachedDoc.dataUrl, attachedDoc.name || 'document.pdf');
     }
 
     const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);

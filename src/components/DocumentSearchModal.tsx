@@ -197,20 +197,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
     setMatchedProfile(null);
 
     try {
-      // 1. Instant check in memory
-      const immediate = searchUniversalDocument(searchTerm);
-      if (immediate) {
-        setMatchedUniversalDoc(immediate.document);
-        if (immediate.source === 'australia') {
-          setMatchedAdminPost(immediate.rawRecord);
-        } else if (immediate.source === 'portal') {
-          setMatchedProfile(immediate.rawRecord);
-        }
-        setIsSearching(false);
-        return;
-      }
-
-      // 2. Perform live async search with server fallback (for posts created on other devices)
+      // 1. Prioritize live server search so documents/posts uploaded from other devices are instantly found worldwide
       const result = await searchUniversalDocumentAsync(searchTerm);
       if (result) {
         setMatchedUniversalDoc(result.document);
@@ -218,6 +205,19 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
           setMatchedAdminPost(result.rawRecord);
         } else if (result.source === 'portal') {
           setMatchedProfile(result.rawRecord);
+        }
+        setIsSearching(false);
+        return;
+      }
+
+      // 2. Fallback to memory and local storage if offline
+      const immediate = searchUniversalDocument(searchTerm);
+      if (immediate) {
+        setMatchedUniversalDoc(immediate.document);
+        if (immediate.source === 'australia') {
+          setMatchedAdminPost(immediate.rawRecord);
+        } else if (immediate.source === 'portal') {
+          setMatchedProfile(immediate.rawRecord);
         }
         setIsSearching(false);
         return;

@@ -23,9 +23,22 @@
     "expiryDate": "2029-03-01",
     "officialDocNumber": "WP-IRCC-EGP56RU55H",
     "lmiaNumber": "LMIA-CA-56RU55",
-    "documentFileName": "Canada_Work_Permit_Application_EGP56RU55H.pdf",
+    "documentFileName": "Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf",
+    "documentFileUrl": "/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf",
     "notes": "Application for a Work Permit (D Category). Verified and endorsed by BHP Canada & IRCC.",
-    "createdAt": "2026-03-02T10:00:00.000Z"
+    "createdAt": "2026-03-02T10:00:00.000Z",
+    "attachedDocuments": [
+      {
+        "id": "att-ca-egp56-pdf",
+        "name": "Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf",
+        "size": "737 KB",
+        "type": "pdf",
+        "dataUrl": "/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf",
+        "sectionTag": "Work Permit Documents (ওয়ার্ক পারমিট)",
+        "isPrimary": true,
+        "uploadDate": "2026-03-02"
+      }
+    ]
   },
   {
     "id": "ca-doc-5",

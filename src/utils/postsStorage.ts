@@ -164,35 +164,91 @@ export const getStoredAdminPosts = (): AdminPost[] => {
  * Save Admin Posts to Memory, IndexedDB, LocalStorage and push to Server with async confirmation
  */
 export const saveStoredAdminPostsAsync = async (posts: AdminPost[]): Promise<boolean> => {
+  // Pre-process: if any attached document or image has base64 dataUrl, upload to server disk
+  const sanitizedPosts = await Promise.all(
+    posts.map(async (p) => {
+      const cleanPost = { ...p };
+
+      if (cleanPost.imageUrl && cleanPost.imageUrl.startsWith('data:')) {
+        try {
+          const upRes = await fetch('/api/upload-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: 'post_cover.png',
+              fileData: cleanPost.imageUrl,
+              type: 'image',
+            }),
+          });
+          if (upRes.ok) {
+            const upJson = await upRes.json();
+            if (upJson.fileUrl) {
+              cleanPost.imageUrl = upJson.fileUrl;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (cleanPost.attachedDocuments && cleanPost.attachedDocuments.length > 0) {
+        const cleanAttached = await Promise.all(
+          cleanPost.attachedDocuments.map(async (att) => {
+            if (att.dataUrl && att.dataUrl.startsWith('data:')) {
+              try {
+                const upRes = await fetch('/api/upload-file', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    fileName: att.name || 'document.pdf',
+                    fileData: att.dataUrl,
+                    type: att.type,
+                  }),
+                });
+                if (upRes.ok) {
+                  const upJson = await upRes.json();
+                  if (upJson.fileUrl) {
+                    return { ...att, dataUrl: upJson.fileUrl };
+                  }
+                }
+              } catch (_) {}
+            }
+            return att;
+          })
+        );
+        cleanPost.attachedDocuments = cleanAttached;
+      }
+      return cleanPost;
+    })
+  );
+
   if (typeof window !== 'undefined') {
-    (window as any).__bhp_admin_posts_cache = posts;
+    (window as any).__bhp_admin_posts_cache = sanitizedPosts;
   }
 
   // 1. Save full documents to high-capacity IndexedDB (No 5MB limit!)
-  setLargeItem(POSTS_STORAGE_KEY, posts).catch((err) => {
+  setLargeItem(POSTS_STORAGE_KEY, sanitizedPosts).catch((err) => {
     console.warn('IndexedDB save warning:', err);
   });
 
   // 2. Safe local storage save without ever destroying dataUrl
   try {
-    localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
+    localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(sanitizedPosts));
   } catch (err) {
     console.warn('LocalStorage quota reached; full data preserved safely in IndexedDB and memory cache.');
   }
 
   // 3. Broadcast local update event
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: posts }));
+    window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: sanitizedPosts }));
     window.dispatchEvent(new Event('storage'));
   }
 
-  // 3. PERSIST TO SERVER
+  // 4. PERSIST TO SERVER
   if (typeof window !== 'undefined') {
     try {
       const res = await fetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(posts),
+        body: JSON.stringify(sanitizedPosts),
       });
       return res.ok;
     } catch (err) {

@@ -31,8 +31,13 @@ async function extractPdfBytes(dataUrl: string): Promise<Uint8Array | null> {
     normalized = normalized.replace('data:application/octet-stream', 'data:application/pdf');
   }
 
-  // 1. Try native fetch API for blob: and http(s) URLs
-  if (normalized.startsWith('blob:') || normalized.startsWith('http://') || normalized.startsWith('https://')) {
+  // 1. Try native fetch API for blob:, http(s) URLs, and relative paths (/uploads/...)
+  if (
+    normalized.startsWith('blob:') ||
+    normalized.startsWith('http://') ||
+    normalized.startsWith('https://') ||
+    normalized.startsWith('/')
+  ) {
     try {
       const res = await fetch(normalized);
       const buffer = await res.arrayBuffer();
