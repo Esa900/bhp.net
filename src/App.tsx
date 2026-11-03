@@ -17,28 +17,31 @@ import { CeoQuote } from './components/CeoQuote';
 import { NewsAlertsSignup } from './components/NewsAlertsSignup';
 import { Footer } from './components/Footer';
 
-// Modals
-import { ProductModal } from './components/modals/ProductModal';
-import { ArticleModal } from './components/modals/ArticleModal';
-import { CareersModal } from './components/modals/CareersModal';
-import { ContactUsModal } from './components/modals/ContactUsModal';
-import { InvestorCentreModal } from './components/modals/InvestorCentreModal';
-import { SupplierModal } from './components/modals/SupplierModal';
-import { LegalModal, LegalDocType } from './components/modals/LegalModal';
-import { CeoMessageModal } from './components/modals/CeoMessageModal';
-import { SearchModal } from './components/SearchModal';
-import { CookieConsentModal } from './components/modals/CookieConsentModal';
-import { AdminPanelModal } from './components/admin/AdminPanelModal';
-import { DocumentVerificationPortal } from './components/portal/DocumentVerificationPortal';
-import { DocumentSearchModal } from './components/DocumentSearchModal';
+// Modals & Sub-Portals (Lazy loaded to ensure lightning fast initial page load)
+import type { LegalDocType } from './components/modals/LegalModal';
+
+const ProductModal = React.lazy(() => import('./components/modals/ProductModal').then((m) => ({ default: m.ProductModal })));
+const ArticleModal = React.lazy(() => import('./components/modals/ArticleModal').then((m) => ({ default: m.ArticleModal })));
+const CareersModal = React.lazy(() => import('./components/modals/CareersModal').then((m) => ({ default: m.CareersModal })));
+const ContactUsModal = React.lazy(() => import('./components/modals/ContactUsModal').then((m) => ({ default: m.ContactUsModal })));
+const InvestorCentreModal = React.lazy(() => import('./components/modals/InvestorCentreModal').then((m) => ({ default: m.InvestorCentreModal })));
+const SupplierModal = React.lazy(() => import('./components/modals/SupplierModal').then((m) => ({ default: m.SupplierModal })));
+const LegalModal = React.lazy(() => import('./components/modals/LegalModal').then((m) => ({ default: m.LegalModal })));
+const CeoMessageModal = React.lazy(() => import('./components/modals/CeoMessageModal').then((m) => ({ default: m.CeoMessageModal })));
+const SearchModal = React.lazy(() => import('./components/SearchModal').then((m) => ({ default: m.SearchModal })));
+const CookieConsentModal = React.lazy(() => import('./components/modals/CookieConsentModal').then((m) => ({ default: m.CookieConsentModal })));
+const AdminPanelModal = React.lazy(() => import('./components/admin/AdminPanelModal').then((m) => ({ default: m.AdminPanelModal })));
+const DocumentVerificationPortal = React.lazy(() => import('./components/portal/DocumentVerificationPortal').then((m) => ({ default: m.DocumentVerificationPortal })));
+const DocumentSearchModal = React.lazy(() => import('./components/DocumentSearchModal').then((m) => ({ default: m.DocumentSearchModal })));
+const CanadaDocumentSearchModal = React.lazy(() => import('./components/CanadaDocumentSearchModal').then((m) => ({ default: m.CanadaDocumentSearchModal })));
+const JobCircularModal = React.lazy(() => import('./components/JobCircularModal').then((m) => ({ default: m.JobCircularModal })));
+const RightDrawerMenu = React.lazy(() => import('./components/RightDrawerMenu').then((m) => ({ default: m.RightDrawerMenu })));
+
 import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from './data/menuNavigationItems';
 import { getStoredMenuItems, MENU_ITEMS_UPDATED_EVENT, syncMenuItemsFromServer } from './utils/menuItemsStorage';
 import { JobCategory } from './types/jobCircular';
-import { JobCircularModal } from './components/JobCircularModal';
-import { RightDrawerMenu } from './components/RightDrawerMenu';
 import { CanadaMenuItemConfig } from './types/canada';
 import { CANADA_MENU_CONFIGS, syncCanadaDocumentsFromServer } from './utils/canadaStorage';
-import { CanadaDocumentSearchModal } from './components/CanadaDocumentSearchModal';
 import { AuthUser } from './types/auth';
 import { getCurrentAuthUser, BHP_AUTH_STATE_EVENT } from './utils/authStorage';
 import { AuthSecurityGate } from './components/auth/AuthSecurityGate';
@@ -230,16 +233,19 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
   if (isPortalOpen) {
     return (
       <div className="min-h-screen bg-[#F0F2F5]">
-        <DocumentVerificationPortal
-          onBackToWebsite={handleClosePortal}
-          onOpenAdmin={handleOpenAdmin}
-          initialMenuItemId={selectedMenuItemId}
-        />
-        {/* Admin Panel (accessible directly from within the portal) */}
-        <AdminPanelModal
-          isOpen={isAdminOpen}
-          onClose={handleCloseAdmin}
-        />
+        <React.Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#0D0F14] text-white">Loading Verification Portal...</div>}>
+          <DocumentVerificationPortal
+            onBackToWebsite={handleClosePortal}
+            onOpenAdmin={handleOpenAdmin}
+            initialMenuItemId={selectedMenuItemId}
+          />
+          {isAdminOpen && (
+            <AdminPanelModal
+              isOpen={isAdminOpen}
+              onClose={handleCloseAdmin}
+            />
+          )}
+        </React.Suspense>
       </div>
     );
   }
@@ -321,103 +327,135 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
         onOpenPortal={handleOpenPortal}
       />
 
-      {/* Interactive Modals */}
-      <ProductModal
-        commodity={selectedCommodity}
-        onClose={() => setSelectedCommodity(null)}
-      />
+      {/* Interactive Modals (Loaded on-demand only when opened) */}
+      <React.Suspense fallback={null}>
+        {selectedCommodity && (
+          <ProductModal
+            commodity={selectedCommodity}
+            onClose={() => setSelectedCommodity(null)}
+          />
+        )}
 
-      <ArticleModal
-        article={selectedArticle}
-        onClose={() => setSelectedArticle(null)}
-      />
+        {selectedArticle && (
+          <ArticleModal
+            article={selectedArticle}
+            onClose={() => setSelectedArticle(null)}
+          />
+        )}
 
-      <CareersModal
-        isOpen={isCareersOpen}
-        onClose={() => setIsCareersOpen(false)}
-      />
+        {isCareersOpen && (
+          <CareersModal
+            isOpen={isCareersOpen}
+            onClose={() => setIsCareersOpen(false)}
+          />
+        )}
 
-      <ContactUsModal
-        isOpen={isContactOpen}
-        onClose={() => setIsContactOpen(false)}
-      />
+        {isContactOpen && (
+          <ContactUsModal
+            isOpen={isContactOpen}
+            onClose={() => setIsContactOpen(false)}
+          />
+        )}
 
-      <InvestorCentreModal
-        isOpen={isInvestorOpen}
-        onClose={() => setIsInvestorOpen(false)}
-      />
+        {isInvestorOpen && (
+          <InvestorCentreModal
+            isOpen={isInvestorOpen}
+            onClose={() => setIsInvestorOpen(false)}
+          />
+        )}
 
-      <SupplierModal
-        isOpen={isSupplierOpen}
-        onClose={() => setIsSupplierOpen(false)}
-      />
+        {isSupplierOpen && (
+          <SupplierModal
+            isOpen={isSupplierOpen}
+            onClose={() => setIsSupplierOpen(false)}
+          />
+        )}
 
-      <LegalModal
-        type={legalDoc}
-        onClose={() => setLegalDoc(null)}
-      />
+        {legalDoc && (
+          <LegalModal
+            type={legalDoc}
+            onClose={() => setLegalDoc(null)}
+          />
+        )}
 
-      <CeoMessageModal
-        isOpen={isCeoOpen}
-        onClose={() => setIsCeoOpen(false)}
-      />
+        {isCeoOpen && (
+          <CeoMessageModal
+            isOpen={isCeoOpen}
+            onClose={() => setIsCeoOpen(false)}
+          />
+        )}
 
-      <SearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onOpenDocumentSearch={(menuItemId, queryText) => {
-          handleSelectMenuItem(menuItemId || 'australia-work-permit', queryText);
-        }}
-      />
+        {isSearchOpen && (
+          <SearchModal
+            isOpen={isSearchOpen}
+            onClose={() => setIsSearchOpen(false)}
+            onOpenDocumentSearch={(menuItemId, queryText) => {
+              handleSelectMenuItem(menuItemId || 'australia-work-permit', queryText);
+            }}
+          />
+        )}
 
-      <CookieConsentModal
-        isOpen={isCookieOpen}
-        onClose={() => setIsCookieOpen(false)}
-      />
+        {isCookieOpen && (
+          <CookieConsentModal
+            isOpen={isCookieOpen}
+            onClose={() => setIsCookieOpen(false)}
+          />
+        )}
 
-      {/* 11 Document Search Option Modal in BHP theme */}
-      <DocumentSearchModal
-        isOpen={isDocSearchOpen}
-        onClose={() => setIsDocSearchOpen(false)}
-        activeItem={selectedDocItem}
-      />
+        {/* 11 Document Search Option Modal in BHP theme */}
+        {isDocSearchOpen && (
+          <DocumentSearchModal
+            isOpen={isDocSearchOpen}
+            onClose={() => setIsDocSearchOpen(false)}
+            activeItem={selectedDocItem}
+          />
+        )}
 
-      {/* Job Circular & Requirements Modal with Online Application Form */}
-      <JobCircularModal
-        isOpen={isJobCircularOpen}
-        onClose={() => setIsJobCircularOpen(false)}
-        category={selectedJobCategory}
-      />
+        {/* Job Circular & Requirements Modal with Online Application Form */}
+        {isJobCircularOpen && (
+          <JobCircularModal
+            isOpen={isJobCircularOpen}
+            onClose={() => setIsJobCircularOpen(false)}
+            category={selectedJobCategory}
+          />
+        )}
 
-      {/* Right Drawer Menu (Triggered from 3-line option below English) */}
-      <RightDrawerMenu
-        isOpen={isRightDrawerOpen}
-        onClose={() => setIsRightDrawerOpen(false)}
-        onSelectCanadaItem={(cfg) => {
-          setSelectedCanadaConfig(cfg);
-          setIsCanadaSearchOpen(true);
-        }}
-        onSelectAustraliaItem={(menuItemId) => {
-          handleSelectMenuItem(menuItemId);
-        }}
-        onJobCategoryClick={(category) => {
-          setSelectedJobCategory(category);
-          setIsJobCircularOpen(true);
-        }}
-      />
+        {/* Right Drawer Menu (Triggered from 3-line option below English) */}
+        {isRightDrawerOpen && (
+          <RightDrawerMenu
+            isOpen={isRightDrawerOpen}
+            onClose={() => setIsRightDrawerOpen(false)}
+            onSelectCanadaItem={(cfg) => {
+              setSelectedCanadaConfig(cfg);
+              setIsCanadaSearchOpen(true);
+            }}
+            onSelectAustraliaItem={(menuItemId) => {
+              handleSelectMenuItem(menuItemId);
+            }}
+            onJobCategoryClick={(category) => {
+              setSelectedJobCategory(category);
+              setIsJobCircularOpen(true);
+            }}
+          />
+        )}
 
-      {/* Canada Document Search Modal (Triggered from 3-line Right Drawer items) */}
-      <CanadaDocumentSearchModal
-        isOpen={isCanadaSearchOpen}
-        onClose={() => setIsCanadaSearchOpen(false)}
-        activeConfig={selectedCanadaConfig}
-      />
+        {/* Canada Document Search Modal (Triggered from 3-line Right Drawer items) */}
+        {isCanadaSearchOpen && (
+          <CanadaDocumentSearchModal
+            isOpen={isCanadaSearchOpen}
+            onClose={() => setIsCanadaSearchOpen(false)}
+            activeConfig={selectedCanadaConfig}
+          />
+        )}
 
-      {/* Admin Panel (accessible via /admin URL or direct link) */}
-      <AdminPanelModal
-        isOpen={isAdminOpen}
-        onClose={handleCloseAdmin}
-      />
+        {/* Admin Panel (accessible via /admin URL or direct link) */}
+        {isAdminOpen && (
+          <AdminPanelModal
+            isOpen={isAdminOpen}
+            onClose={handleCloseAdmin}
+          />
+        )}
+      </React.Suspense>
     </div>
   );
 }

@@ -38,6 +38,7 @@ import { FullPdfDocumentViewer, postToUnifiedDoc } from '../FullPdfDocumentViewe
 import {
   getStoredAdminPosts,
   saveStoredAdminPosts,
+  saveStoredAdminPostsAsync,
   deleteAllStoredAdminPosts,
 } from '../../utils/postsStorage';
 
@@ -562,7 +563,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   };
 
   // Save Post
-  const handleSavePost = (e: React.FormEvent) => {
+  const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim()) {
       alert('Please enter a post title.');
@@ -607,7 +608,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     if (editingPostId) {
       const updated = posts.map((p) => (p.id === editingPostId ? postToSave : p));
       setPosts(updated);
-      saveStoredAdminPosts(updated);
+      await saveStoredAdminPostsAsync(updated);
       showToast(`Post "${postToSave.title}" updated successfully.`);
 
       // Sync with News in AdminDataContext if published
@@ -633,7 +634,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     } else {
       const updated = [postToSave, ...posts];
       setPosts(updated);
-      saveStoredAdminPosts(updated);
+      await saveStoredAdminPostsAsync(updated);
       showToast(`Post published! Searchable by ID/Ref: "${postToSave.refNumber}"`);
 
       if (postToSave.status === 'Published') {

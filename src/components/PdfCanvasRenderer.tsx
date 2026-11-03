@@ -1,17 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
-// Vite local worker asset import (serves from same origin, avoiding mobile browser CORS/Worker SecurityError)
-// @ts-expect-error Vite ?url query asset import
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import { Loader2, FileText, Check, Smartphone, Monitor, Download, ExternalLink, ShieldCheck, ChevronDown } from 'lucide-react';
 
-// Configure PDF.js worker to local bundled script
-try {
-  if (typeof window !== 'undefined' && pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+// Cached dynamic loader for PDF.js (loaded only when a PDF is being rendered, keeping home page bundle lightweight)
+let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | null = null;
+async function getPdfjs(): Promise<typeof import('pdfjs-dist')> {
+  if (!pdfjsPromise) {
+    pdfjsPromise = (async () => {
+      const pdfjs = await import('pdfjs-dist');
+      try {
+        if (typeof window !== 'undefined') {
+          // @ts-expect-error Vite ?url query asset import
+          const workerModule = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+          const workerUrl = workerModule.default || workerModule;
+          if (pdfjs.GlobalWorkerOptions) {
+            pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+          }
+        }
+      } catch (err) {
+        console.warn('PDF.js worker initialization warning:', err);
+      }
+      return pdfjs;
+    })();
   }
-} catch (e) {
-  console.warn('PDF.js worker initialization warning:', e);
+  return pdfjsPromise;
 }
 
 interface PdfCanvasRendererProps {
@@ -88,7 +100,7 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'canvas' | 'iframe'>('canvas');
   const containerRef = useRef<HTMLDivElement>(null);
-  const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
+  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
 
   // Load PDF and create local blob URL
   useEffect(() => {
@@ -121,10 +133,11 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
           }
         }
 
-        // Load into PDF.js with fallback
-        let pdf: pdfjsLib.PDFDocumentProxy;
+        // Load into PDF.js on-demand with fallback
+        const pdfjs = await getPdfjs();
+        let pdf: PDFDocumentProxy;
         try {
-          const loadingTask = pdfjsLib.getDocument({
+          const loadingTask = pdfjs.getDocument({
             data: bytes,
             cMapPacked: true,
           });
@@ -132,7 +145,7 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
         } catch (workerErr) {
           console.warn('PDF.js worker load error, retrying with fallback:', workerErr);
           // Retry with fallback settings
-          const fallbackTask = pdfjsLib.getDocument({
+          const fallbackTask = pdfjs.getDocument({
             data: bytes,
             cMapPacked: true,
             stopAtErrors: false,
@@ -348,7 +361,7 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
 };
 
 interface PdfPageCanvasProps {
-  pdfDoc: pdfjsLib.PDFDocumentProxy;
+  pdfDoc: PDFDocumentProxy;
   pageNumber: number;
   totalPages: number;
 }
@@ -360,7 +373,7 @@ const PdfPageCanvas: React.FC<PdfPageCanvasProps> = ({ pdfDoc, pageNumber, total
 
   useEffect(() => {
     let isCancelled = false;
-    let renderTask: pdfjsLib.RenderTask | null = null;
+    let renderTask: RenderTask | null = null;
 
     async function renderPage() {
       try {

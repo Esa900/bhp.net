@@ -499,8 +499,8 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
         {/* Info Strip */}
         <div className="w-full max-w-[900px] mb-2 px-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-black uppercase text-[11px] shadow-xs">
-              {activeDoc ? 'PRIMARY ATTACHED PDF' : 'PRIMARY OFFICIAL VERIFIED PDF'}
+            <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-black uppercase text-[11px] shadow-xs shrink-0">
+              PRIMARY OFFICIAL VERIFIED PDF
             </span>
             {activeDoc?.sectionTag && (
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 text-[11px]">
@@ -508,7 +508,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
               </span>
             )}
             <span className="text-white font-bold truncate max-w-xs sm:max-w-md">
-              {activeDoc ? activeDoc.name : document.title}
+              {document.title}
             </span>
           </div>
 
