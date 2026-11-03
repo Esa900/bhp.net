@@ -123,9 +123,22 @@ export const INITIAL_CANADA_DOCUMENTS: CanadaDocumentRecord[] = [
     expiryDate: '2028-03-01',
     officialDocNumber: 'WP-IRCC-55102',
     lmiaNumber: 'LMIA-AB-771204',
-    documentFileName: 'Canada_Work_Permit_Pending_WPD-CAN-55102.pdf',
+    documentFileName: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+    documentFileUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
     notes: 'Final statutory work permit issuance under processing by IRCC Edmonton processing centre.',
     createdAt: '2026-03-02T16:20:00.000Z',
+    attachedDocuments: [
+      {
+        id: 'att-ca-wpd55102-pdf',
+        name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+        size: '737 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
+        isPrimary: true,
+        uploadDate: '2026-03-02',
+      },
+    ],
   },
 ];
 
@@ -231,7 +244,34 @@ export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter((d: CanadaDocumentRecord) => !isDemoCanadaDoc(d));
+        const cleaned = parsed
+          .filter((d: CanadaDocumentRecord) => !isDemoCanadaDoc(d))
+          .map((d: CanadaDocumentRecord) => {
+            if (
+              (d.id === 'ca-doc-5' || d.referenceNo === 'WPD-CAN-55102' || d.id === 'ca-doc-egp56' || d.referenceNo === 'EGP56RU55H') &&
+              (!d.attachedDocuments || d.attachedDocuments.length === 0 || !d.documentFileUrl)
+            ) {
+              return {
+                ...d,
+                documentFileName: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+                documentFileUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+                attachedDocuments: [
+                  {
+                    id: `att-ca-${d.id}-pdf`,
+                    name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+                    size: '737 KB',
+                    type: 'pdf' as const,
+                    dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+                    sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
+                    isPrimary: true,
+                    uploadDate: '2026-03-02',
+                  },
+                ],
+              };
+            }
+            return d;
+          });
+        return cleaned;
       }
     }
   } catch (err) {

@@ -65,6 +65,19 @@
     "tinOrRef": "WPD-CAN-55102",
     "idNumber": "WPD-CAN-55102",
     "verificationIdNo": "VRF-CAN-55102",
-    "documentFileName": "Canada_Work_Permit_Pending_WPD-CAN-55102.pdf"
+    "documentFileName": "Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf",
+    "documentFileUrl": "/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf",
+    "attachedDocuments": [
+      {
+        "id": "att-ca-wpd55102-pdf",
+        "name": "Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf",
+        "size": "737 KB",
+        "type": "pdf",
+        "dataUrl": "/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf",
+        "sectionTag": "Work Permit Documents (ওয়ার্ক পারমিট)",
+        "isPrimary": true,
+        "uploadDate": "2026-03-02"
+      }
+    ]
   }
 ]

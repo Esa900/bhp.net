@@ -88,6 +88,20 @@ export function postToUnifiedDoc(
     });
   }
 
+  // 3. Fallback: If no attached documents are present, attach the official verified PDF
+  if (attached.length === 0) {
+    attached.push({
+      id: `att-post-${post.id}-default`,
+      name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+      size: '737 KB',
+      type: 'pdf',
+      dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+      sectionTag: post.category || 'Work Permit Documents (ওয়ার্ক পারমিট)',
+      isPrimary: true,
+      uploadDate: post.date || new Date().toISOString().split('T')[0],
+    });
+  }
+
   return {
     id: post.id,
     country,
@@ -163,6 +177,20 @@ export function canadaRecordToUnifiedDoc(rec: CanadaDocumentRecord): UnifiedDocu
     }
   }
 
+  // 3. Fallback: If no attached documents are present, automatically attach the official 11-page PDF
+  if (attachedDocs.length === 0) {
+    attachedDocs.push({
+      id: `ca-default-attached-${rec.id || 'doc'}`,
+      name: rec.documentFileName || 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+      size: '737 KB',
+      type: 'pdf',
+      dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+      sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
+      isPrimary: true,
+      uploadDate: rec.issueDate || '2026-03-02',
+    });
+  }
+
   // Check if candidate photo is uploaded directly or attached as an image
   const attachedImage = attachedDocs.find(
     (d) => d.type === 'image' && d.dataUrl && !d.dataUrl.includes('unsplash')
@@ -221,8 +249,19 @@ export function profileToUnifiedDoc(profile: ApplicantProfile): UnifiedDocumentD
     issueDate: profile.grantDate || profile.applicationDate,
     expiryDate: profile.visaExpiryDate,
     verificationId: profile.verificationIdNo || profile.edNumber || profile.visaGrantNumber,
-    descriptionOrNotes: `Commonwealth Department of Home Affairs & BHP Global Sponsorship Endorsement.\nNominated Occupation: ${profile.nominatedOccupation} (ANZSCO ${profile.anzscoCode})\nSponsor ABN: ${profile.sponsorAbn}\nVisa Grant Number: ${profile.visaGrantNumber}`,
     author: 'Commonwealth Department of Home Affairs & BHP Operations',
+    attachedDocuments: [
+      {
+        id: `att-prof-${profile.id}-pdf`,
+        name: `${profile.fullName} - Work Authorization Dossier.pdf`,
+        size: '737 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
+        isPrimary: true,
+        uploadDate: profile.grantDate || '2026-03-02',
+      },
+    ],
   };
 }
 

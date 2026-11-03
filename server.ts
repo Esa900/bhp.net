@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -165,7 +165,20 @@ const INITIAL_CANADA_DOCUMENTS = [
     tinOrRef: 'WPD-CAN-55102',
     idNumber: 'WPD-CAN-55102',
     verificationIdNo: 'VRF-CAN-55102',
-    documentFileName: 'Canada_Work_Permit_Pending_WPD-CAN-55102.pdf',
+    documentFileName: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+    documentFileUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+    attachedDocuments: [
+      {
+        id: 'att-ca-wpd55102-pdf',
+        name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+        size: '737 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
+        isPrimary: true,
+        uploadDate: '2026-03-02',
+      },
+    ],
   },
 ];
 
@@ -448,11 +461,18 @@ function seedServerStorageIfEmpty() {
     writeJsonFile(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
     console.log('[Server Storage] Seeded canada_documents.json with initial records');
   } else {
-    // Ensure ca-doc-egp56 has the 11-page Canada Visa Application PDF attached if missing
+    // Ensure ca-doc-egp56 and ca-doc-5 have the 11-page Canada Visa Application PDF attached if missing
     let updated = false;
     existingCaDocs = existingCaDocs.map((doc) => {
+      const isTargetDoc =
+        doc.id === 'ca-doc-egp56' ||
+        doc.id === 'ca-doc-5' ||
+        doc.referenceNo === 'EGP56RU55H' ||
+        doc.tinOrRef === 'EGP56RU55H' ||
+        doc.referenceNo === 'WPD-CAN-55102' ||
+        doc.tinOrRef === 'WPD-CAN-55102';
       if (
-        (doc.id === 'ca-doc-egp56' || doc.referenceNo === 'EGP56RU55H' || doc.tinOrRef === 'EGP56RU55H') &&
+        isTargetDoc &&
         (!doc.attachedDocuments || doc.attachedDocuments.length === 0 || !doc.documentFileUrl)
       ) {
         updated = true;
@@ -462,7 +482,7 @@ function seedServerStorageIfEmpty() {
           documentFileUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
           attachedDocuments: [
             {
-              id: 'att-ca-egp56-pdf',
+              id: `att-ca-${doc.id || 'doc'}-pdf`,
               name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
               size: '737 KB',
               type: 'pdf',
@@ -478,7 +498,7 @@ function seedServerStorageIfEmpty() {
     });
     if (updated) {
       writeJsonFile(CANADA_DOCS_FILE, existingCaDocs);
-      console.log('[Server Storage] Updated ca-doc-egp56 with 11-page Canada Visa Application PDF in canada_documents.json');
+      console.log('[Server Storage] Updated ca-doc-egp56 and ca-doc-5 with 11-page Canada Visa Application PDF in canada_documents.json');
     }
   }
 
