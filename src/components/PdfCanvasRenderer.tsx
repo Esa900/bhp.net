@@ -121,13 +121,25 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
           }
         }
 
-        // Load into PDF.js
-        const loadingTask = pdfjsLib.getDocument({
-          data: bytes,
-          cMapPacked: true,
-        });
+        // Load into PDF.js with fallback
+        let pdf: pdfjsLib.PDFDocumentProxy;
+        try {
+          const loadingTask = pdfjsLib.getDocument({
+            data: bytes,
+            cMapPacked: true,
+          });
+          pdf = await loadingTask.promise;
+        } catch (workerErr) {
+          console.warn('PDF.js worker load error, retrying with fallback:', workerErr);
+          // Retry with fallback settings
+          const fallbackTask = pdfjsLib.getDocument({
+            data: bytes,
+            cMapPacked: true,
+            stopAtErrors: false,
+          });
+          pdf = await fallbackTask.promise;
+        }
 
-        const pdf = await loadingTask.promise;
         if (isCancelled) return;
 
         pdfDocRef.current = pdf;
@@ -353,6 +365,12 @@ const PdfPageCanvas: React.FC<PdfPageCanvasProps> = ({ pdfDoc, pageNumber, total
     async function renderPage() {
       try {
         setPageLoading(true);
+        // Stagger page rendering on mobile so Page 1 renders instantly and remaining pages stream in smoothly
+        if (pageNumber > 1) {
+          await new Promise((r) => setTimeout(r, Math.min((pageNumber - 1) * 75, 750)));
+          if (isCancelled) return;
+        }
+
         const page = await pdfDoc.getPage(pageNumber);
         if (isCancelled || !canvasRef.current) return;
 

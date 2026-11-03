@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getStoredAdminPosts, syncAdminPostsFromServer } from '../utils/postsStorage';
 import { getStoredCanadaDocuments, syncCanadaDocumentsFromServer } from '../utils/canadaStorage';
+import { searchUniversalDocumentAsync, UniversalSearchResult } from '../utils/universalSearch';
 import { AdminPost } from '../types';
 import { CanadaDocumentRecord } from '../types/canada';
 
@@ -30,19 +31,47 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const [query, setQuery] = useState('');
   const [adminPosts, setAdminPosts] = useState<AdminPost[]>([]);
   const [canadaDocs, setCanadaDocs] = useState<CanadaDocumentRecord[]>([]);
+  const [serverResult, setServerResult] = useState<UniversalSearchResult | null>(null);
+  const [isSearchingLive, setIsSearchingLive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setAdminPosts(getStoredAdminPosts());
       setCanadaDocs(getStoredCanadaDocuments());
+      setServerResult(null);
       syncAdminPostsFromServer().then((posts) => setAdminPosts(posts)).catch(() => {});
       syncCanadaDocumentsFromServer().then((docs) => setCanadaDocs(docs)).catch(() => {});
       setTimeout(() => inputRef.current?.focus(), 50);
     } else {
       setQuery('');
+      setServerResult(null);
     }
   }, [isOpen]);
+
+  // Live debounced server search for mobile and desktop
+  useEffect(() => {
+    if (!isOpen) return;
+    const trimmed = query.trim();
+    if (!trimmed || trimmed.length < 2) {
+      setServerResult(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingLive(true);
+      try {
+        const res = await searchUniversalDocumentAsync(trimmed);
+        setServerResult(res);
+      } catch (err) {
+        console.warn('Live search error:', err);
+      } finally {
+        setIsSearchingLive(false);
+      }
+    }, 180);
+
+    return () => clearTimeout(timer);
+  }, [query, isOpen]);
 
   if (!isOpen) return null;
 
@@ -150,12 +179,21 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  const handleSelectServerResult = (res: UniversalSearchResult) => {
     onClose();
     if (onOpenDocumentSearch) {
-      onOpenDocumentSearch('australia-work-permit', query.trim());
+      onOpenDocumentSearch('australia-work-permit', res.document.referenceNumber);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+    onClose();
+    if (onOpenDocumentSearch) {
+      const target = serverResult?.document?.referenceNumber || q;
+      onOpenDocumentSearch('australia-work-permit', target);
     }
   };
 
@@ -180,7 +218,10 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           {query && (
             <button
               type="button"
-              onClick={() => setQuery('')}
+              onClick={() => {
+                setQuery('');
+                setServerResult(null);
+              }}
               className="text-gray-400 hover:text-white p-1 cursor-pointer"
               aria-label="Clear query"
             >
@@ -206,14 +247,72 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
         {/* Results / Quick Topics */}
         <div className="p-6 max-h-[60vh] overflow-y-auto space-y-5">
-          {/* Matched Verified Documents (Australia & Canada) */}
-          {(matchedPosts.length > 0 || matchedCanada.length > 0) && (
+          {/* Matched Verified Documents (Live Server Match or Local Canada / Australia) */}
+          {(serverResult || matchedPosts.length > 0 || matchedCanada.length > 0) && (
             <div>
-              <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4" />
-                <span>Verified Official Documents ({matchedPosts.length + matchedCanada.length})</span>
+              <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>
+                    Verified Official Documents ({serverResult ? 1 : (matchedPosts.length + matchedCanada.length)})
+                  </span>
+                </div>
+                {isSearchingLive && (
+                  <span className="text-[10px] text-orange-400 animate-pulse font-mono font-bold">
+                    Searching central database...
+                  </span>
+                )}
               </div>
               <div className="space-y-2">
+                {/* 1. Prioritize Server Live Result (Guaranteed Cross-Device Match) */}
+                {serverResult && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectServerResult(serverResult)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-[#18261F] to-[#201D1A] border-2 border-emerald-500/60 hover:border-emerald-400 transition-all text-left group cursor-pointer shadow-lg"
+                  >
+                    <div className="flex items-center gap-3 overflow-hidden pr-3">
+                      <div className="p-2.5 rounded-xl bg-emerald-500/25 text-emerald-300 shrink-0 border border-emerald-500/40">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div className="overflow-hidden">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-mono font-black text-[#FF8E4D]">
+                            {serverResult.document.referenceNumber}
+                          </span>
+                          <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                            {serverResult.source === 'canada' ? 'Canada CA' : 'Australia AU'}
+                          </span>
+                          <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-[#25282F] text-gray-300 font-semibold">
+                            {serverResult.document.category}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors truncate mt-1">
+                          {serverResult.document.candidateName ? `${serverResult.document.candidateName} — ${serverResult.document.title}` : serverResult.document.title}
+                        </div>
+                        <div className="text-xs text-gray-400 flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span>{serverResult.document.issueDate}</span>
+                          {serverResult.document.passportNumber && (
+                            <>
+                              <span>•</span>
+                              <span className="font-mono text-gray-200 font-bold">Passport: {serverResult.document.passportNumber}</span>
+                            </>
+                          )}
+                          {serverResult.document.attachedDocuments && serverResult.document.attachedDocuments.length > 0 && (
+                            <>
+                              <span>•</span>
+                              <span className="flex items-center gap-1 text-[#FF8E4D] font-bold">
+                                <Paperclip className="w-3 h-3" />
+                                {serverResult.document.attachedDocuments.length} PDF / Dossier Attached
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-emerald-400 group-hover:translate-x-1.5 transition-all shrink-0" />
+                  </button>
+                )}
                 {/* Australia Posts */}
                 {matchedPosts.map((post) => (
                   <button

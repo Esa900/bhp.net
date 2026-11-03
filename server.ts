@@ -57,7 +57,46 @@ function writeJsonFile<T>(filePath: string, data: T): boolean {
 // =========================================================================
 // INITIAL SERVER SEEDS
 // =========================================================================
-const INITIAL_DEFAULT_POSTS: any[] = [];
+const INITIAL_DEFAULT_POSTS: any[] = [
+  {
+    id: 'post-doc-egp56',
+    title: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER',
+    refNumber: 'EGP56RU55H',
+    content: 'Application for a Work Permit (D Category). Verified and endorsed by BHP Canada & IRCC.',
+    category: 'Employment Application & Verification',
+    author: 'BHP Operations',
+    date: '2026-03-02',
+    status: 'Published',
+    imageUrl: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
+    galleryImages: [],
+    attachedDocuments: [
+      {
+        id: 'att-post-egp56-pdf',
+        name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
+        size: '737 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
+        isPrimary: true,
+        uploadDate: '2026-03-02',
+      },
+    ],
+    readTime: '4 min read',
+    badges: ['VERIFIED', 'WORK PERMIT', 'D CATEGORY'],
+    candidateName: 'MD IBRAHIM KHALIL MOZUMDER',
+    passportNumber: 'A99014322',
+    nationality: 'Bangladeshi',
+    dateOfBirth: '1990-06-15',
+    jobTitle: 'Commercial Transport & Heavy Mobile Equipment Operator',
+    employerName: 'BHP Canada Operations Ltd',
+    workLocation: 'Calgary, Alberta, Canada',
+    salaryPackage: '$38.50 CAD / hr',
+    visaSubclass: 'Work Permit (D Category)',
+    issueDate: '2026-03-02',
+    expiryDate: '2029-03-01',
+    verificationIdNo: 'VRF-CAN-56RU55',
+  },
+];
 
 const INITIAL_CANADA_DOCUMENTS = [
   {
@@ -389,10 +428,19 @@ function processBase64InDoc(doc: any) {
 
 // Auto-seed files on server boot
 function seedServerStorageIfEmpty() {
-  const existingPosts = readJsonFile<any[]>(POSTS_FILE, []);
+  let existingPosts = readJsonFile<any[]>(POSTS_FILE, []);
   if (!existingPosts || existingPosts.length === 0) {
     writeJsonFile(POSTS_FILE, INITIAL_DEFAULT_POSTS);
     console.log('[Server Storage] Seeded posts.json with initial records');
+  } else {
+    const hasEgp56 = existingPosts.some(
+      (p) => p.refNumber === 'EGP56RU55H' || p.id === 'post-doc-egp56'
+    );
+    if (!hasEgp56) {
+      existingPosts = [...INITIAL_DEFAULT_POSTS, ...existingPosts];
+      writeJsonFile(POSTS_FILE, existingPosts);
+      console.log('[Server Storage] Added EGP56RU55H record to posts.json');
+    }
   }
 
   let existingCaDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, []);

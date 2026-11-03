@@ -1,5 +1,5 @@
-import { getStoredAdminPosts, findAdminPostByQuery, syncAdminPostsFromServer } from './postsStorage';
-import { getStoredCanadaDocuments, syncCanadaDocumentsFromServer } from './canadaStorage';
+import { getStoredAdminPosts, findAdminPostByQuery, syncAdminPostsFromServer, POSTS_STORAGE_KEY } from './postsStorage';
+import { getStoredCanadaDocuments, syncCanadaDocumentsFromServer, CANADA_STORAGE_KEY } from './canadaStorage';
 import { SAMPLE_PROFILES } from '../data/portalData';
 import {
   UnifiedDocumentData,
@@ -258,7 +258,10 @@ export async function searchUniversalDocumentAsync(rawQuery: string): Promise<Un
             const updatedList = existsIdx !== -1
               ? currentPosts.map((p, i) => (i === existsIdx ? data.record : p))
               : [data.record, ...currentPosts];
-            localStorage.setItem('bhp_admin_posts', JSON.stringify(updatedList));
+            if (typeof window !== 'undefined') {
+              (window as any).__bhp_admin_posts_cache = updatedList;
+              localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(updatedList));
+            }
           } catch (_) {}
           return {
             document: postToUnifiedDoc(data.record, 'australia'),
@@ -272,7 +275,10 @@ export async function searchUniversalDocumentAsync(rawQuery: string): Promise<Un
             const updatedList = existsIdx !== -1
               ? currentDocs.map((c, i) => (i === existsIdx ? data.record : c))
               : [data.record, ...currentDocs];
-            localStorage.setItem('bhp_canada_documents', JSON.stringify(updatedList));
+            if (typeof window !== 'undefined') {
+              (window as any).__bhp_canada_documents_cache = updatedList;
+              localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(updatedList));
+            }
           } catch (_) {}
           return {
             document: canadaRecordToUnifiedDoc(data.record),

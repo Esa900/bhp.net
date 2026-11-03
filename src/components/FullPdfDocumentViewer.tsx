@@ -303,7 +303,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
     <div
       className={`w-full flex flex-col space-y-6 select-none ${
         isFullScreen
-          ? 'fixed inset-0 z-[100] bg-[#0A0C10]/98 backdrop-blur-md p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-150'
+          ? 'fixed inset-0 z-[100] bg-[#0A0C10]/98 backdrop-blur-md p-2 sm:p-6 overflow-y-auto min-h-screen h-[100dvh] overscroll-contain animate-in fade-in duration-150'
           : ''
       }`}
       onContextMenu={(e) => e.preventDefault()}
