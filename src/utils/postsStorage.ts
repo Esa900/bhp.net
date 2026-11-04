@@ -113,7 +113,20 @@ export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
         // 1. Add server posts (exclude demo posts)
         data.posts.forEach((p: AdminPost) => {
           if (p && p.id && !isDemoPost(p)) {
-            mergedMap.set(p.id, p);
+            const localPost = local.find((l) => l.id === p.id);
+            if (localPost && Array.isArray(localPost.attachedDocuments) && localPost.attachedDocuments.length > 0) {
+              const serverAtt = Array.isArray(p.attachedDocuments) ? p.attachedDocuments : [];
+              const seenUrls = new Set(serverAtt.map((d: any) => d.dataUrl || d.id));
+              const missingFromLocal = localPost.attachedDocuments.filter((d: any) => !seenUrls.has(d.dataUrl || d.id));
+              const combinedAttached = [...serverAtt, ...missingFromLocal];
+              if (missingFromLocal.length > 0) hasNewLocalPosts = true;
+              mergedMap.set(p.id, {
+                ...p,
+                attachedDocuments: combinedAttached,
+              });
+            } else {
+              mergedMap.set(p.id, p);
+            }
           }
         });
 

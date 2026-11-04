@@ -141,7 +141,11 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
 
     try {
       // 1. Prioritize live server search so documents uploaded from other devices are instantly found worldwide
-      const universalResult = await searchUniversalDocumentAsync(term);
+      const universalResult = await searchUniversalDocumentAsync(
+        term,
+        currentConfig.mainTitle || currentConfig.id,
+        'canada'
+      );
       if (universalResult) {
         setMatchedUniversalDoc(universalResult.document);
         if (universalResult.source === 'canada') {
@@ -173,6 +177,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
     return (
       <FullPdfDocumentViewer
         document={matchedUniversalDoc}
+        targetSectionTag={currentConfig.mainTitle || currentConfig.subMenu}
         defaultFullScreen={true}
         onSearchAnother={() => {
           setQuery('');

@@ -582,6 +582,8 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
           body: JSON.stringify({
             docId: quickPdfDoc.id,
             referenceNo: targetRef,
+            candidateName: quickPdfDoc.candidateName,
+            passportNumber: quickPdfDoc.passportNumber,
             doc: newDoc,
           }),
         });

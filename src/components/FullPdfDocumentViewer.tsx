@@ -166,12 +166,13 @@ export function canadaRecordToUnifiedDoc(rec: CanadaDocumentRecord): UnifiedDocu
         cleanUrl.includes('application/pdf') ||
         cleanUrl.includes('JVBERi') ||
         cleanUrl.startsWith('blob:');
-      attachedDocs.unshift({
+      attachedDocs.push({
         id: `ca-attached-${rec.id}`,
         name: rec.documentFileName || 'Canada Official Document.pdf',
         size: 'Official IRCC Document',
         type: isPdf ? 'pdf' : 'image',
         dataUrl: cleanUrl,
+        sectionTag: rec.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)',
         uploadDate: rec.issueDate,
       });
     }
@@ -265,11 +266,90 @@ export function profileToUnifiedDoc(profile: ApplicantProfile): UnifiedDocumentD
   };
 }
 
+// Semantic category matcher to match client search section with attached document sectionTag
+export function isSectionMatch(tagOrName?: string, targetSection?: string): boolean {
+  if (!tagOrName || !targetSection) return false;
+  const tagLower = tagOrName.toLowerCase();
+  const targetLower = targetSection.toLowerCase();
+
+  // Direct substring or inclusion
+  const cleanTag = tagLower.replace(/[-\s_./#:]/g, '');
+  const cleanTarget = targetLower.replace(/[-\s_./#:]/g, '');
+  if (cleanTag.includes(cleanTarget) || cleanTarget.includes(cleanTag)) {
+    return true;
+  }
+
+  // Semantic category groupings
+  const rules: { keywords: string[]; synonyms: string[] }[] = [
+    {
+      keywords: ['offer', 'letter', 'contract', 'appointment', 'অফার'],
+      synonyms: ['offer', 'letter', 'contract', 'job-confirmation', 'appointment', 'অফার'],
+    },
+    {
+      keywords: ['biometric', 'vfs', 'fingerprint', 'বায়োমেট্রিক', 'ভিএফএস'],
+      synonyms: ['biometric', 'vfs', 'enrollment', 'facial', 'biometric-vfs', 'বায়োমেট্রিক', 'ভিএফএস'],
+    },
+    {
+      keywords: ['confirmation', 'job confirmation', 'sponsorship'],
+      synonyms: ['confirmation', 'job-confirmation', 'sponsor', 'conformation'],
+    },
+    {
+      keywords: ['work permit', 'permit', 'application', 'wpd', 'ওয়ার্ক পারমিট'],
+      synonyms: ['work-permit', 'permit', 'employment application', 'work permit', 'ওয়ার্ক পারমিট'],
+    },
+    {
+      keywords: ['medical', 'health', 'clinic', 'hospital', 'examination', 'মেডিকেল'],
+      synonyms: ['medical', 'health', 'clinic', 'clearance', 'examination', 'doctor', 'মেডিকেল'],
+    },
+    {
+      keywords: ['flight', 'ticket', 'air', 'pnr', 'airline', 'transit', 'বুকিং'],
+      synonyms: ['flight', 'ticket', 'airline', 'itinerary', 'air-ticket', 'transit', 'booking', 'বুকিং'],
+    },
+    {
+      keywords: ['tax', 'tfn', 'superannuation', 'revenue'],
+      synonyms: ['tax', 'tfn', 'tin', 'superannuation', 'revenue', 'tax-cert'],
+    },
+    {
+      keywords: ['insurance', 'bupa', 'medibank', 'ovhc', 'cover'],
+      synonyms: ['insurance', 'bupa', 'medibank', 'health cover', 'ovhc', 'policy'],
+    },
+    {
+      keywords: ['immi', 'immicard', 'card', 'evidence of immigration'],
+      synonyms: ['immi', 'card', 'immicard', 'status'],
+    },
+    {
+      keywords: ['visa', 'grant', 'vevo', 'approval', 'ভিসা'],
+      synonyms: ['visa', 'grant', 'vevo', 'approval', 'authorized', 'ভিসা'],
+    },
+    {
+      keywords: ['identity', 'passport', 'dossier', 'আইডেন্টিটি'],
+      synonyms: ['identity', 'passport', 'dossier', 'particulars', 'আইডেন্টিটি'],
+    },
+  ];
+
+  for (const rule of rules) {
+    const targetHas = rule.keywords.some((k) => targetLower.includes(k));
+    if (targetHas) {
+      const tagHas = rule.synonyms.some((s) => tagLower.includes(s));
+      if (tagHas) return true;
+    }
+  }
+
+  const targetWords = targetLower.split(/[\s_./#:,()\-]+/).filter((w) => w.length >= 4);
+  const tagWords = tagLower.split(/[\s_./#:,()\-]+/).filter((w) => w.length >= 4);
+  for (const tw of targetWords) {
+    if (tagWords.includes(tw)) return true;
+  }
+
+  return false;
+}
+
 interface FullPdfDocumentViewerProps {
   document: UnifiedDocumentData;
   onSearchAnother?: () => void;
   onClose?: () => void;
   defaultFullScreen?: boolean;
+  targetSectionTag?: string;
 }
 
 export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
@@ -277,6 +357,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   onSearchAnother,
   onClose,
   defaultFullScreen = true,
+  targetSectionTag,
 }) => {
   const [zoom, setZoom] = useState<number>(100);
   const [isFullScreen, setIsFullScreen] = useState<boolean>(defaultFullScreen);
@@ -312,10 +393,29 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   );
   const hasRealAttachedDocs = validAttachedDocs.length > 0;
 
-  const initialPrimaryIdx = validAttachedDocs.findIndex((d) => d.isPrimary);
-  const [selectedDocIndex, setSelectedDocIndex] = useState<number>(() =>
-    initialPrimaryIdx !== -1 ? initialPrimaryIdx : (hasRealAttachedDocs ? 0 : -1)
-  );
+  // Determine initial selected document index:
+  // 1. If targetSectionTag is provided, find the attached document matching this section
+  // 2. Otherwise find the primary document, or default to 0
+  const findInitialIndex = (): number => {
+    if (!hasRealAttachedDocs) return -1;
+
+    if (targetSectionTag && targetSectionTag.trim()) {
+      const matchedByTag = validAttachedDocs.findIndex(
+        (d) => isSectionMatch(d.sectionTag, targetSectionTag) || isSectionMatch(d.name, targetSectionTag)
+      );
+      if (matchedByTag !== -1) return matchedByTag;
+    }
+
+    const primaryIdx = validAttachedDocs.findIndex((d) => d.isPrimary);
+    return primaryIdx !== -1 ? primaryIdx : 0;
+  };
+
+  const [selectedDocIndex, setSelectedDocIndex] = useState<number>(findInitialIndex);
+
+  // Re-sync selected doc index if document or targetSectionTag changes
+  useEffect(() => {
+    setSelectedDocIndex(findInitialIndex());
+  }, [document.id, targetSectionTag]);
 
   const activeDoc = hasRealAttachedDocs && selectedDocIndex >= 0 && selectedDocIndex < validAttachedDocs.length
     ? validAttachedDocs[selectedDocIndex]
@@ -518,31 +618,44 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
           </div>
         </div>
 
-        {/* Quick Document Type Switcher Tabs (If attached documents are present) */}
+        {/* Quick Document Type Switcher Tabs for ALL attached documents */}
         {hasRealAttachedDocs && (
           <div className="w-full max-w-[900px] mb-3 flex items-center justify-center gap-2 px-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setSelectedDocIndex(initialPrimaryIdx !== -1 ? initialPrimaryIdx : 0)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
-                selectedDocIndex >= 0
-                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40 ring-1 ring-emerald-400'
-                  : 'bg-[#1C2028] text-gray-300 hover:text-white border border-[#2D3340]'
-              }`}
-            >
-              <FileText className="w-4 h-4 text-emerald-200" />
-              <span>
-                {activeDoc?.sectionTag ? `${activeDoc.sectionTag} (Client PDF)` : 'Primary Uploaded PDF'}
-              </span>
-            </button>
+            {validAttachedDocs.map((doc, idx) => {
+              const isSelected = selectedDocIndex === idx;
+              const tagLabel = doc.sectionTag || doc.name || `Attached Document #${idx + 1}`;
+              return (
+                <button
+                  key={doc.id || idx}
+                  type="button"
+                  onClick={() => setSelectedDocIndex(idx)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 ${
+                    isSelected
+                      ? 'bg-emerald-600 text-white shadow-emerald-900/40 ring-2 ring-emerald-400'
+                      : 'bg-[#1C2028] text-gray-300 hover:text-white border border-[#2D3340] hover:bg-[#252A36]'
+                  }`}
+                  title={`${doc.name} (${doc.sectionTag || 'Attached PDF'})`}
+                >
+                  <FileText className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-emerald-400'}`} />
+                  <span className="truncate max-w-[180px] sm:max-w-[280px]">
+                    {tagLabel}
+                  </span>
+                  {doc.isPrimary && (
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono shrink-0">
+                      Primary
+                    </span>
+                  )}
+                </button>
+              );
+            })}
 
             <button
               type="button"
               onClick={() => setSelectedDocIndex(-1)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-sm active:scale-95 ${
                 selectedDocIndex === -1
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40 ring-1 ring-blue-400'
-                  : 'bg-[#1C2028] text-gray-300 hover:text-white border border-[#2D3340]'
+                  ? 'bg-blue-600 text-white shadow-blue-900/40 ring-2 ring-blue-400'
+                  : 'bg-[#1C2028] text-gray-300 hover:text-white border border-[#2D3340] hover:bg-[#252A36]'
               }`}
             >
               <Award className="w-4 h-4 text-blue-200" />

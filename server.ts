@@ -597,9 +597,105 @@ async function startServer() {
     res.json({ success: saved, count: docs.length });
   });
 
+  // Helper to sync an attached document to both Canada documents and Australia posts
+  function crossSyncAttachedDocToBoth(
+    refNumberOrTin: string,
+    attachedDoc: any,
+    clientName?: string,
+    passportNo?: string
+  ) {
+    if (!refNumberOrTin && !clientName && !passportNo) return;
+    const cleanRef = String(refNumberOrTin || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+    const cleanName = String(clientName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+    const cleanPass = String(passportNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+
+    // 1. Sync to Canada Documents
+    try {
+      const caDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
+      let caChanged = false;
+      const updatedCa = caDocs.map((c) => {
+        const cTin = (c.tinOrRef || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const cRef = (c.referenceNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const cId = (c.idNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const cName = (c.candidateName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const cPass = (c.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+
+        const isMatch =
+          (cleanRef && (cTin === cleanRef || cRef === cleanRef || cId === cleanRef)) ||
+          (cleanPass && cPass && cPass === cleanPass) ||
+          (cleanName && cName && cName.length > 5 && (cName.includes(cleanName) || cleanName.includes(cName)));
+
+        if (isMatch) {
+          const existingList = Array.isArray(c.attachedDocuments) ? [...c.attachedDocuments] : [];
+          const alreadyHas = existingList.some(
+            (d) => d.dataUrl === attachedDoc.dataUrl || (d.name === attachedDoc.name && d.sectionTag === attachedDoc.sectionTag)
+          );
+          if (!alreadyHas) {
+            caChanged = true;
+            if (attachedDoc.isPrimary) {
+              existingList.forEach((d) => (d.isPrimary = false));
+            }
+            return {
+              ...c,
+              attachedDocuments: [...existingList, attachedDoc],
+              documentFileUrl: attachedDoc.isPrimary ? attachedDoc.dataUrl : (c.documentFileUrl || attachedDoc.dataUrl),
+              documentFileName: attachedDoc.isPrimary ? attachedDoc.name : (c.documentFileName || attachedDoc.name),
+            };
+          }
+        }
+        return c;
+      });
+      if (caChanged) {
+        writeJsonFile(CANADA_DOCS_FILE, updatedCa);
+      }
+    } catch (e) {
+      console.warn('Cross sync to Canada error:', e);
+    }
+
+    // 2. Sync to Australia Posts
+    try {
+      const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
+      let pChanged = false;
+      const updatedPosts = posts.map((p) => {
+        const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const pId = (p.id || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const pName = (p.candidateName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+
+        const isMatch =
+          (cleanRef && (pRef === cleanRef || pId === cleanRef)) ||
+          (cleanPass && pPass && pPass === cleanPass) ||
+          (cleanName && pName && pName.length > 5 && (pName.includes(cleanName) || cleanName.includes(pName)));
+
+        if (isMatch) {
+          const existingList = Array.isArray(p.attachedDocuments) ? [...p.attachedDocuments] : [];
+          const alreadyHas = existingList.some(
+            (d) => d.dataUrl === attachedDoc.dataUrl || (d.name === attachedDoc.name && d.sectionTag === attachedDoc.sectionTag)
+          );
+          if (!alreadyHas) {
+            pChanged = true;
+            if (attachedDoc.isPrimary) {
+              existingList.forEach((d) => (d.isPrimary = false));
+            }
+            return {
+              ...p,
+              attachedDocuments: [...existingList, attachedDoc],
+            };
+          }
+        }
+        return p;
+      });
+      if (pChanged) {
+        writeJsonFile(POSTS_FILE, updatedPosts);
+      }
+    } catch (e) {
+      console.warn('Cross sync to Australia error:', e);
+    }
+  }
+
   // Direct endpoint to attach a new PDF to an existing Canada post with section tag
   app.post('/api/canada-documents/add-attached-doc', (req: Request, res: Response) => {
-    const { docId, referenceNo } = req.body || {};
+    const { docId, referenceNo, candidateName, passportNumber } = req.body || {};
     const attachedDocRaw = req.body?.attachedDoc || req.body?.doc;
     if (!attachedDocRaw || (!docId && !referenceNo)) {
       res.status(400).json({ error: 'Missing attachedDoc/doc or document identifier (docId/referenceNo)' });
@@ -612,14 +708,34 @@ async function startServer() {
     }
 
     const docs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
+    const cleanRef = String(referenceNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+
     const targetIdx = docs.findIndex((d) => {
       if (docId && d.id === docId) return true;
-      if (referenceNo) {
-        const cleanRef = String(referenceNo).toLowerCase().replace(/[-\s_./#:]/g, '');
+      if (cleanRef) {
         const dTin = (d.tinOrRef || '').toLowerCase().replace(/[-\s_./#:]/g, '');
         const dRef = (d.referenceNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
         const dId = (d.idNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-        return dTin === cleanRef || dRef === cleanRef || dId === cleanRef;
+        const dVrf = (d.verificationIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const dTrn = (d.transitionIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const dPass = (d.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const dOff = (d.officialDocNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        if (
+          dTin === cleanRef ||
+          dRef === cleanRef ||
+          dId === cleanRef ||
+          dVrf === cleanRef ||
+          dTrn === cleanRef ||
+          dPass === cleanRef ||
+          dOff === cleanRef
+        ) {
+          return true;
+        }
+      }
+      if (passportNumber) {
+        const pClean = passportNumber.toLowerCase().replace(/[-\s_./#:]/g, '');
+        const dPass = (d.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        if (pClean && dPass === pClean) return true;
       }
       return false;
     });
@@ -646,12 +762,22 @@ async function startServer() {
     };
 
     const saved = writeJsonFile(CANADA_DOCS_FILE, docs);
+
+    // Cross-sync to Australia posts so search in Australia also finds this new PDF
+    const targetRef = currentDoc.tinOrRef || currentDoc.referenceNo || currentDoc.idNumber || referenceNo;
+    crossSyncAttachedDocToBoth(
+      targetRef,
+      attachedDoc,
+      currentDoc.candidateName || candidateName,
+      currentDoc.passportNumber || passportNumber
+    );
+
     res.json({ success: saved, document: docs[targetIdx] });
   });
 
   // Direct endpoint to attach a new PDF to an Australia post with section tag
   app.post('/api/posts/add-attached-doc', (req: Request, res: Response) => {
-    const { postId, refNumber } = req.body || {};
+    const { postId, refNumber, candidateName, passportNumber } = req.body || {};
     const attachedDocRaw = req.body?.attachedDoc || req.body?.doc;
     if (!attachedDocRaw || (!postId && !refNumber)) {
       res.status(400).json({ error: 'Missing attachedDoc/doc or post identifier (postId/refNumber)' });
@@ -664,12 +790,23 @@ async function startServer() {
     }
 
     const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
+    const cleanRef = String(refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+
     const targetIdx = posts.findIndex((p) => {
       if (postId && p.id === postId) return true;
-      if (refNumber) {
-        const cleanRef = String(refNumber).toLowerCase().replace(/[-\s_./#:]/g, '');
+      if (cleanRef) {
         const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-        return pRef === cleanRef;
+        const pId = (p.id || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        if (pRef === cleanRef || pId === cleanRef || pVrf === cleanRef || pPass === cleanRef) {
+          return true;
+        }
+      }
+      if (passportNumber) {
+        const passClean = passportNumber.toLowerCase().replace(/[-\s_./#:]/g, '');
+        const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        if (passClean && pPass === passClean) return true;
       }
       return false;
     });
@@ -693,6 +830,16 @@ async function startServer() {
     };
 
     const saved = writeJsonFile(POSTS_FILE, posts);
+
+    // Cross-sync to Canada documents so search in Canada also finds this new PDF
+    const targetRef = currentPost.refNumber || refNumber;
+    crossSyncAttachedDocToBoth(
+      targetRef,
+      attachedDoc,
+      currentPost.candidateName || candidateName,
+      currentPost.passportNumber || passportNumber
+    );
+
     res.json({ success: saved, post: posts[targetIdx] });
   });
 
@@ -730,9 +877,88 @@ async function startServer() {
     });
   });
 
+  // Comprehensive semantic section matcher for cross-device searches
+  function isSectionMatch(tagOrName?: string, targetSection?: string): boolean {
+    if (!tagOrName || !targetSection) return false;
+    const tagLower = tagOrName.toLowerCase();
+    const targetLower = targetSection.toLowerCase();
+
+    // Direct substring or inclusion
+    const cleanTag = tagLower.replace(/[-\s_./#:]/g, '');
+    const cleanTarget = targetLower.replace(/[-\s_./#:]/g, '');
+    if (cleanTag.includes(cleanTarget) || cleanTarget.includes(cleanTag)) {
+      return true;
+    }
+
+    // Semantic category groupings
+    const rules: { keywords: string[]; synonyms: string[] }[] = [
+      {
+        keywords: ['offer', 'letter', 'contract', 'appointment', 'অফার'],
+        synonyms: ['offer', 'letter', 'contract', 'job-confirmation', 'appointment', 'অফার'],
+      },
+      {
+        keywords: ['biometric', 'vfs', 'fingerprint', 'বায়োমেট্রিক', 'ভিএফএস'],
+        synonyms: ['biometric', 'vfs', 'enrollment', 'facial', 'biometric-vfs', 'বায়োমেট্রিক', 'ভিএফএস'],
+      },
+      {
+        keywords: ['confirmation', 'job confirmation', 'sponsorship'],
+        synonyms: ['confirmation', 'job-confirmation', 'sponsor', 'conformation'],
+      },
+      {
+        keywords: ['work permit', 'permit', 'application', 'wpd', 'ওয়ার্ক পারমিট'],
+        synonyms: ['work-permit', 'permit', 'employment application', 'work permit', 'ওয়ার্ক পারমিট'],
+      },
+      {
+        keywords: ['medical', 'health', 'clinic', 'hospital', 'examination', 'মেডিকেল'],
+        synonyms: ['medical', 'health', 'clinic', 'clearance', 'examination', 'doctor', 'মেডিকেল'],
+      },
+      {
+        keywords: ['flight', 'ticket', 'air', 'pnr', 'airline', 'transit', 'বুকিং'],
+        synonyms: ['flight', 'ticket', 'airline', 'itinerary', 'air-ticket', 'transit', 'booking', 'বুকিং'],
+      },
+      {
+        keywords: ['tax', 'tfn', 'superannuation', 'revenue'],
+        synonyms: ['tax', 'tfn', 'tin', 'superannuation', 'revenue', 'tax-cert'],
+      },
+      {
+        keywords: ['insurance', 'bupa', 'medibank', 'ovhc', 'cover'],
+        synonyms: ['insurance', 'bupa', 'medibank', 'health cover', 'ovhc', 'policy'],
+      },
+      {
+        keywords: ['immi', 'immicard', 'card', 'evidence of immigration'],
+        synonyms: ['immi', 'card', 'immicard', 'status'],
+      },
+      {
+        keywords: ['visa', 'grant', 'vevo', 'approval', 'ভিসা'],
+        synonyms: ['visa', 'grant', 'vevo', 'approval', 'authorized', 'ভিসা'],
+      },
+      {
+        keywords: ['identity', 'passport', 'dossier', 'আইডেন্টিটি'],
+        synonyms: ['identity', 'passport', 'dossier', 'particulars', 'আইডেন্টিটি'],
+      },
+    ];
+
+    for (const rule of rules) {
+      const targetHas = rule.keywords.some((k) => targetLower.includes(k));
+      if (targetHas) {
+        const tagHas = rule.synonyms.some((s) => tagLower.includes(s));
+        if (tagHas) return true;
+      }
+    }
+
+    const targetWords = targetLower.split(/[\s_./#:,()\-]+/).filter((w) => w.length >= 4);
+    const tagWords = tagLower.split(/[\s_./#:,()\-]+/).filter((w) => w.length >= 4);
+    for (const tw of targetWords) {
+      if (tagWords.includes(tw)) return true;
+    }
+
+    return false;
+  }
+
   // =========================================================================
   // API: DIRECT SEARCH (Cross-device instant verification lookup)
-  // Guarantees that any query from phone 2, phone 3, PC, or tablet matches!
+  // Guarantees that any query from phone 2, phone 3, PC, or tablet matches,
+  // and aggregates ALL attached PDFs under that client across sections!
   // =========================================================================
   app.get('/api/search', (req: Request, res: Response) => {
     const rawQuery = String(req.query.q || '').trim();
@@ -740,6 +966,9 @@ async function startServer() {
       res.json({ found: false, result: null });
       return;
     }
+    const targetSection = String(req.query.section || '').trim().toLowerCase();
+    const preferredSource = String(req.query.source || '').trim().toLowerCase();
+
     const cleanQuery = rawQuery.toLowerCase().replace(/[-\s_./#:]/g, '');
     const queryLower = rawQuery.toLowerCase();
 
@@ -766,8 +995,8 @@ async function startServer() {
       return false;
     };
 
-    // 1. Search Australia posts (Exact & Partial across refNumber, id, verificationIdNo, passportNumber, candidateName)
-    const matchPost = posts.find((p) => {
+    // Helper to test if a post matches the query
+    const doesPostMatch = (p: any) => {
       const pCand = (p.candidateName || '').toLowerCase();
       const pTitle = (p.title || '').toLowerCase();
       return (
@@ -780,15 +1009,10 @@ async function startServer() {
         pTitle.includes(queryLower) ||
         matchesClean(pTitle)
       );
-    });
+    };
 
-    if (matchPost) {
-      res.json({ found: true, source: 'australia', record: matchPost });
-      return;
-    }
-
-    // 2. Search Canada docs
-    const matchCa = canadaDocs.find((c) => {
+    // Helper to test if a Canada doc matches the query
+    const doesCaMatch = (c: any) => {
       const cCand = (c.candidateName || '').toLowerCase();
       return (
         matchesClean(c.tinOrRef) ||
@@ -804,11 +1028,107 @@ async function startServer() {
         matchesClean(cCand) ||
         matchesClean(c.mainTitle)
       );
-    });
+    };
 
-    if (matchCa) {
-      res.json({ found: true, source: 'canada', record: matchCa });
-      return;
+    // Find all matching posts and canada documents
+    const matchedPosts = posts.filter(doesPostMatch);
+    const matchedCanada = canadaDocs.filter(doesCaMatch);
+
+    // If matches found in either Canada or Australia, merge attachments across ALL client records
+    if (matchedCanada.length > 0 || matchedPosts.length > 0) {
+      // 1. Gather all attached documents across all matched records
+      const allAttached: any[] = [];
+      const seenUrls = new Set<string>();
+
+      const addAttachedDoc = (doc: any) => {
+        if (!doc) return;
+        const key = `${doc.sectionTag || 'default'}_${doc.name || ''}_${doc.id || doc.dataUrl || ''}`.trim().toLowerCase();
+        if (!seenUrls.has(key)) {
+          seenUrls.add(key);
+          allAttached.push(doc);
+        }
+      };
+
+      matchedCanada.forEach((c) => {
+        if (Array.isArray(c.attachedDocuments)) {
+          c.attachedDocuments.forEach(addAttachedDoc);
+        }
+      });
+
+      matchedPosts.forEach((p) => {
+        if (Array.isArray(p.attachedDocuments)) {
+          p.attachedDocuments.forEach(addAttachedDoc);
+        }
+      });
+
+      // 2. Select primary record base
+      let chosenRecord: any = null;
+      let chosenSource: 'canada' | 'australia' = 'canada';
+
+      if (preferredSource === 'australia' && matchedPosts.length > 0) {
+        chosenRecord = matchedPosts[0];
+        chosenSource = 'australia';
+      } else if (preferredSource === 'canada' && matchedCanada.length > 0) {
+        chosenRecord = matchedCanada[0];
+        chosenSource = 'canada';
+      } else if (matchedCanada.length > 0) {
+        // If targetSection requested, see if any Canada doc matches category
+        if (targetSection) {
+          const catMatch = matchedCanada.find(
+            (c) =>
+              (c.categoryType && c.categoryType.toLowerCase().includes(targetSection)) ||
+              (c.mainTitle && c.mainTitle.toLowerCase().includes(targetSection))
+          );
+          chosenRecord = catMatch || matchedCanada[0];
+        } else {
+          chosenRecord = matchedCanada[0];
+        }
+        chosenSource = 'canada';
+      } else if (matchedPosts.length > 0) {
+        chosenRecord = matchedPosts[0];
+        chosenSource = 'australia';
+      }
+
+      if (chosenRecord) {
+        // 3. If a specific section was targeted, sort/flag the matching attached document as primary
+        if (targetSection && allAttached.length > 0) {
+          let matchedIdx = -1;
+
+          allAttached.forEach((att, idx) => {
+            if (isSectionMatch(att.sectionTag, targetSection) || isSectionMatch(att.name, targetSection)) {
+              if (matchedIdx === -1) matchedIdx = idx;
+            }
+          });
+
+          if (matchedIdx > 0) {
+            // Move matched document to the first position so it opens directly in the viewer
+            const [targetDoc] = allAttached.splice(matchedIdx, 1);
+            allAttached.unshift(targetDoc);
+          }
+        }
+
+        // Ensure the top document is marked primary
+        if (allAttached.length > 0) {
+          allAttached.forEach((att, idx) => {
+            att.isPrimary = idx === 0;
+          });
+        }
+
+        const consolidated = {
+          ...chosenRecord,
+          attachedDocuments: allAttached,
+          documentFileUrl: allAttached[0]?.dataUrl || chosenRecord.documentFileUrl,
+          documentFileName: allAttached[0]?.name || chosenRecord.documentFileName,
+        };
+
+        res.json({
+          found: true,
+          source: chosenSource,
+          record: consolidated,
+          totalAttachments: allAttached.length,
+        });
+        return;
+      }
     }
 
     // 3. Search Commonwealth sample records (fallback for REF-928410, ED-78412-WA, GBR5829104, etc.)

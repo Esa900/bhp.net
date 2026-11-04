@@ -176,20 +176,18 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
         data.documents.forEach((serverDoc: CanadaDocumentRecord) => {
           if (serverDoc && serverDoc.id && !isDemoCanadaDoc(serverDoc)) {
             const localDoc = local.find((l) => l.id === serverDoc.id);
-            // If local doc has more attached documents than server, merge them
-            if (
-              localDoc &&
-              Array.isArray(localDoc.attachedDocuments) &&
-              localDoc.attachedDocuments.length > 0 &&
-              (!serverDoc.attachedDocuments || serverDoc.attachedDocuments.length === 0)
-            ) {
+            if (localDoc && Array.isArray(localDoc.attachedDocuments) && localDoc.attachedDocuments.length > 0) {
+              const serverAtt = Array.isArray(serverDoc.attachedDocuments) ? serverDoc.attachedDocuments : [];
+              const seenUrls = new Set(serverAtt.map((d: any) => d.dataUrl || d.id));
+              const missingFromLocal = localDoc.attachedDocuments.filter((d: any) => !seenUrls.has(d.dataUrl || d.id));
+              const combinedAttached = [...serverAtt, ...missingFromLocal];
+              if (missingFromLocal.length > 0) hasNewLocal = true;
               mergedMap.set(serverDoc.id, {
                 ...serverDoc,
-                documentFileUrl: localDoc.documentFileUrl || serverDoc.documentFileUrl,
-                documentFileName: localDoc.documentFileName || serverDoc.documentFileName,
-                attachedDocuments: localDoc.attachedDocuments,
+                attachedDocuments: combinedAttached,
+                documentFileUrl: serverDoc.documentFileUrl || localDoc.documentFileUrl,
+                documentFileName: serverDoc.documentFileName || localDoc.documentFileName,
               });
-              hasNewLocal = true;
             } else {
               mergedMap.set(serverDoc.id, serverDoc);
             }

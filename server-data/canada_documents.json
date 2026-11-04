@@ -37,6 +37,16 @@
         "sectionTag": "Work Permit Documents (ওয়ার্ক পারমিট)",
         "isPrimary": true,
         "uploadDate": "2026-03-02"
+      },
+      {
+        "id": "att-test-offer-letter",
+        "name": "BHP_Official_Offer_Letter_and_Employment_Contract.pdf",
+        "size": "450 KB",
+        "type": "pdf",
+        "dataUrl": "/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf",
+        "sectionTag": "Job Confirmation & Offer Letter (অফার লেটার)",
+        "isPrimary": false,
+        "uploadDate": "2026-03-02"
       }
     ]
   },

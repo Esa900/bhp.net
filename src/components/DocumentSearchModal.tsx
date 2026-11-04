@@ -93,6 +93,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       const fresh = getStoredAdminPosts();
       setAdminPosts(fresh);
       syncAdminPostsFromServer().then((posts) => setAdminPosts(posts)).catch(() => {});
+      syncCanadaDocumentsFromServer().catch(() => {});
       setPreviewingDoc(null);
       setPreviewZoom(100);
       setPreviewMaximized(false);
@@ -198,7 +199,11 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
 
     try {
       // 1. Prioritize live server search so documents/posts uploaded from other devices are instantly found worldwide
-      const result = await searchUniversalDocumentAsync(searchTerm);
+      const result = await searchUniversalDocumentAsync(
+        searchTerm,
+        activeItem.mainTitle || activeItem.id,
+        'australia'
+      );
       if (result) {
         setMatchedUniversalDoc(result.document);
         if (result.source === 'australia') {
@@ -274,6 +279,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
     return (
       <FullPdfDocumentViewer
         document={matchedUniversalDoc}
+        targetSectionTag={activeItem.mainTitle || activeItem.subMenu}
         defaultFullScreen={true}
         onSearchAnother={handleReset}
         onClose={onClose}

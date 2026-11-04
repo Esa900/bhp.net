@@ -244,10 +244,18 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
  * Guarantees that documents newly added by admin on another phone/device
  * will be retrieved and displayed to the customer immediately.
  */
-export async function searchUniversalDocumentAsync(rawQuery: string): Promise<UniversalSearchResult | null> {
+export async function searchUniversalDocumentAsync(
+  rawQuery: string,
+  targetSection?: string,
+  preferredSource?: 'australia' | 'canada'
+): Promise<UniversalSearchResult | null> {
   // 1. Prioritize querying live central server database for real-time worldwide access
   try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(rawQuery)}`, { cache: 'no-store' });
+    const params = new URLSearchParams({ q: rawQuery });
+    if (targetSection) params.set('section', targetSection);
+    if (preferredSource) params.set('source', preferredSource);
+
+    const res = await fetch(`/api/search?${params.toString()}`, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (data && data.found && data.record) {
