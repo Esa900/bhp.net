@@ -393,50 +393,23 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   );
   const hasRealAttachedDocs = validAttachedDocs.length > 0;
 
-  // Determine initial selected document index:
-  // 1. If targetSectionTag is provided, find the attached document matching this section
-  // 2. Otherwise find the primary document, or default to 0
-  const findInitialIndex = (): number => {
-    if (!hasRealAttachedDocs) return -1;
-
-    if (targetSectionTag && targetSectionTag.trim()) {
-      const matchedByTag = validAttachedDocs.findIndex(
+  // Auto-scroll to matching section if targetSectionTag is provided
+  useEffect(() => {
+    if (targetSectionTag && validAttachedDocs.length > 0) {
+      const matchedIdx = validAttachedDocs.findIndex(
         (d) => isSectionMatch(d.sectionTag, targetSectionTag) || isSectionMatch(d.name, targetSectionTag)
       );
-      if (matchedByTag !== -1) return matchedByTag;
+      if (matchedIdx !== -1) {
+        const timer = setTimeout(() => {
+          const el = typeof window !== 'undefined' ? window.document.getElementById(`doc-serial-${matchedIdx}`) : null;
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 400);
+        return () => clearTimeout(timer);
+      }
     }
-
-    const primaryIdx = validAttachedDocs.findIndex((d) => d.isPrimary);
-    return primaryIdx !== -1 ? primaryIdx : 0;
-  };
-
-  const [selectedDocIndex, setSelectedDocIndex] = useState<number>(findInitialIndex);
-
-  // Re-sync selected doc index if document or targetSectionTag changes
-  useEffect(() => {
-    setSelectedDocIndex(findInitialIndex());
-  }, [document.id, targetSectionTag]);
-
-  const activeDoc = hasRealAttachedDocs && selectedDocIndex >= 0 && selectedDocIndex < validAttachedDocs.length
-    ? validAttachedDocs[selectedDocIndex]
-    : null;
-
-  const activeDocIsPdf = activeDoc
-    ? Boolean(activeDoc.dataUrl) &&
-      (activeDoc.type === 'pdf' ||
-        activeDoc.name.toLowerCase().endsWith('.pdf') ||
-        activeDoc.dataUrl.startsWith('data:application/pdf') ||
-        activeDoc.dataUrl.includes('application/pdf') ||
-        activeDoc.dataUrl.includes('JVBERi') ||
-        activeDoc.dataUrl.startsWith('blob:') ||
-        activeDoc.dataUrl.toLowerCase().includes('.pdf'))
-    : false;
-
-  const activeDocIsImage = activeDoc
-    ? activeDoc.type === 'image' ||
-      activeDoc.dataUrl.startsWith('data:image') ||
-      activeDoc.name.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif)$/)
-    : false;
+  }, [targetSectionTag, document.id, validAttachedDocs.length]);
 
   return (
     <div
@@ -593,110 +566,181 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
       </div>
 
       {/* =========================================================================
-          1. TOP / PRIMARY PDF DOCUMENT VIEW (DIRECTLY AT THE TOP AS REQUESTED)
+          CONTINUOUS SERIAL NAVIGATION BAR & DOCUMENT JUMP STRIP
          ========================================================================= */}
-      <div id="primary-pdf-viewer" className="w-full flex flex-col items-center relative">
-        {/* Info Strip */}
-        <div className="w-full max-w-[900px] mb-2 px-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2.5 py-0.5 rounded-md bg-[#F25C05] text-white font-black uppercase text-[11px] shadow-xs shrink-0">
-              PRIMARY OFFICIAL VERIFIED PDF
-            </span>
-            {activeDoc?.sectionTag && (
-              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 text-[11px]">
-                {activeDoc.sectionTag}
-              </span>
-            )}
-            <span className="text-white font-bold truncate max-w-xs sm:max-w-md">
-              {document.title}
-            </span>
+      {hasRealAttachedDocs && (
+        <div className="w-full max-w-[900px] mx-auto bg-[#13161C] border border-[#262A34] rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl no-print">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-[#F25C05]/15 text-[#F25C05] border border-[#F25C05]/30">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase text-white tracking-wider">
+                  Continuous Document Serial
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30">
+                  {validAttachedDocs.length} PDF{validAttachedDocs.length > 1 ? 's' : ''} Open
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                সবগুলো সংযুক্ত ডকুমেন্ট এক সিরিয়ালে নিচে সরাসরি ওপেন অবস্থায় দেখতে পারবেন
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3 text-[11px] text-gray-400 font-mono">
-            <span>Ref: <strong className="text-orange-400 font-bold">{document.referenceNumber}</strong></span>
-            <span>Zoom: <strong className="text-white">{zoom}%</strong></span>
-          </div>
-        </div>
-
-        {/* Quick Document Type Switcher Tabs for ALL attached documents */}
-        {hasRealAttachedDocs && (
-          <div className="w-full max-w-[900px] mb-3 flex items-center justify-center gap-2 px-2 flex-wrap">
-            {validAttachedDocs.map((doc, idx) => {
-              const isSelected = selectedDocIndex === idx;
-              const tagLabel = doc.sectionTag || doc.name || `Attached Document #${idx + 1}`;
-              return (
-                <button
-                  key={doc.id || idx}
-                  type="button"
-                  onClick={() => setSelectedDocIndex(idx)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 ${
-                    isSelected
-                      ? 'bg-emerald-600 text-white shadow-emerald-900/40 ring-2 ring-emerald-400'
-                      : 'bg-[#1C2028] text-gray-300 hover:text-white border border-[#2D3340] hover:bg-[#252A36]'
-                  }`}
-                  title={`${doc.name} (${doc.sectionTag || 'Attached PDF'})`}
-                >
-                  <FileText className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-emerald-400'}`} />
-                  <span className="truncate max-w-[180px] sm:max-w-[280px]">
-                    {tagLabel}
-                  </span>
-                  {doc.isPrimary && (
-                    <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono shrink-0">
-                      Primary
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          {/* Quick Jump Buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
+            {validAttachedDocs.map((doc, idx) => (
+              <button
+                key={doc.id || idx}
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.document.getElementById(`doc-serial-${idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }}
+                className="px-2.5 py-1 text-xs font-bold rounded-xl bg-[#1C2028] hover:bg-[#252A36] text-gray-200 hover:text-white border border-[#2D3340] transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-xs"
+                title={`${doc.name} (${doc.sectionTag || 'Attached PDF'})`}
+              >
+                <FileText className="w-3.5 h-3.5 text-[#FF5500] shrink-0" />
+                <span className="truncate max-w-[130px] sm:max-w-[160px]">
+                  {doc.sectionTag || `Doc ${idx + 1}`}
+                </span>
+              </button>
+            ))}
 
             <button
               type="button"
-              onClick={() => setSelectedDocIndex(-1)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-sm active:scale-95 ${
-                selectedDocIndex === -1
-                  ? 'bg-blue-600 text-white shadow-blue-900/40 ring-2 ring-blue-400'
-                  : 'bg-[#1C2028] text-gray-300 hover:text-white border border-[#2D3340] hover:bg-[#252A36]'
-              }`}
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.document.getElementById('doc-serial-certificate')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+              className="px-2.5 py-1 text-xs font-bold rounded-xl bg-[#1C2028] hover:bg-[#252A36] text-blue-300 hover:text-white border border-[#2D3340] transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-xs"
+              title="Official Certificate"
             >
-              <Award className="w-4 h-4 text-blue-200" />
-              <span>Official Registered Certificate</span>
+              <Award className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span>Certificate</span>
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Scrollable pan container so zooming on mobile allows smooth horizontal & vertical scrolling */}
+      {/* =========================================================================
+          ALL ATTACHED DOCUMENTS RENDERED DIRECTLY OPEN IN ONE CONTINUOUS SERIAL
+         ========================================================================= */}
+      {hasRealAttachedDocs && (
+        <div className="w-full flex flex-col items-center space-y-10">
+          {validAttachedDocs.map((doc, idx) => {
+            const isPdf = Boolean(doc.dataUrl) && (
+              doc.type === 'pdf' ||
+              doc.name.toLowerCase().endsWith('.pdf') ||
+              doc.dataUrl.startsWith('data:application/pdf') ||
+              doc.dataUrl.includes('application/pdf') ||
+              doc.dataUrl.includes('JVBERi') ||
+              doc.dataUrl.startsWith('blob:') ||
+              doc.dataUrl.toLowerCase().includes('.pdf')
+            );
+            const isImage = doc.type === 'image' ||
+              doc.dataUrl.startsWith('data:image') ||
+              Boolean(doc.name.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif)$/));
+
+            return (
+              <div
+                key={doc.id || idx}
+                id={`doc-serial-${idx}`}
+                className="w-full flex flex-col items-center scroll-mt-24"
+              >
+                {/* Document Serial Header Strip */}
+                <div className="w-full max-w-[900px] mb-2 px-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2.5 py-1 rounded-lg bg-[#F25C05] text-white font-black uppercase text-[11px] shadow-sm flex items-center gap-1.5 shrink-0">
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>DOCUMENT {String(idx + 1).padStart(2, '0')} OF {String(validAttachedDocs.length).padStart(2, '0')}</span>
+                    </span>
+                    {doc.sectionTag && (
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 text-xs">
+                        {doc.sectionTag}
+                      </span>
+                    )}
+                    <span className="text-white font-bold text-sm truncate max-w-xs sm:max-w-md">
+                      {doc.name || `Document ${idx + 1}`}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-[11px] text-gray-400 font-mono">
+                    <span className="px-2 py-0.5 rounded bg-[#1B1F27] border border-[#2B313E] text-gray-300">
+                      {doc.size || 'Verified Record'}
+                    </span>
+                    {doc.dataUrl && (
+                      <a
+                        href={doc.dataUrl}
+                        download={doc.name || `Document_${idx + 1}.pdf`}
+                        className="p-1.5 rounded-lg bg-[#222733] hover:bg-[#2C3344] text-gray-300 hover:text-white transition-colors cursor-pointer"
+                        title="Download PDF"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Render PDF Canvas or Image Directly OPEN */}
+                <div className="w-full overflow-x-auto overflow-y-visible flex flex-col items-center touch-pan-x touch-pan-y scrollbar-thin">
+                  {isPdf ? (
+                    <div className="w-full flex items-center justify-center min-h-[450px]">
+                      <PdfCanvasRenderer
+                        dataUrl={doc.dataUrl}
+                        docName={doc.name}
+                        zoom={zoom}
+                      />
+                    </div>
+                  ) : isImage ? (
+                    <div className="p-3 sm:p-6 flex items-center justify-center w-full max-w-[900px] bg-[#14161C] rounded-2xl border-2 border-[#2B2F38] shadow-2xl">
+                      <img
+                        src={doc.dataUrl}
+                        alt={doc.name}
+                        style={{
+                          transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
+                          transformOrigin: 'top center',
+                        }}
+                        className="max-w-full h-auto rounded-lg shadow-2xl transition-transform"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* =========================================================================
+          OFFICIAL STATUTORY CERTIFICATE & SEAL SHEET (ALWAYS VISIBLE IN SERIAL)
+         ========================================================================= */}
+      <div id="doc-serial-certificate" className="w-full flex flex-col items-center scroll-mt-24 pt-2">
+        <div className="w-full max-w-[900px] mb-2 px-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-black uppercase text-[11px] shadow-sm flex items-center gap-1.5">
+            <Award className="w-3.5 h-3.5" />
+            <span>OFFICIAL STATUTORY CERTIFICATE & SEAL</span>
+          </span>
+          <span className="text-gray-400 font-mono text-[11px]">
+            REF: <strong className="text-orange-400 font-bold">{document.referenceNumber}</strong>
+          </span>
+        </div>
+
         <div className="w-full overflow-x-auto overflow-y-visible pb-4 pt-1 flex flex-col items-center touch-pan-x touch-pan-y scrollbar-thin">
-          {activeDoc && activeDocIsPdf ? (
-            <div className="w-full flex items-center justify-center min-h-[500px]">
-              <PdfCanvasRenderer
-                dataUrl={activeDoc.dataUrl}
-                docName={activeDoc.name}
-                zoom={zoom}
-              />
-            </div>
-          ) : activeDoc && activeDocIsImage ? (
-            <div className="p-3 sm:p-6 flex items-center justify-center w-full max-w-[900px] bg-[#14161C] rounded-2xl border-2 border-[#2B2F38] shadow-2xl">
-              <img
-                src={activeDoc.dataUrl}
-                alt={activeDoc.name}
-                style={{
-                  transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
-                  transformOrigin: 'top center',
-                }}
-                className="max-w-full h-auto rounded-lg shadow-2xl transition-transform"
-              />
-            </div>
-          ) : (
-            <div
-              id="printable-pdf-document"
-              onContextMenu={(e) => e.preventDefault()}
-              style={{
-                transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
-                transformOrigin: 'top center',
-                marginBottom: zoom > 100 ? `${(zoom - 100) * 8}px` : undefined,
-              }}
-              className="w-full max-w-[850px] bg-white text-[#111] p-5 sm:p-10 rounded-2xl shadow-2xl border-4 border-[#202530] relative select-none transition-transform duration-150 shrink-0"
-            >
+          <div
+            id="printable-pdf-document"
+            onContextMenu={(e) => e.preventDefault()}
+            style={{
+              transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
+              transformOrigin: 'top center',
+              marginBottom: zoom > 100 ? `${(zoom - 100) * 8}px` : undefined,
+            }}
+            className="w-full max-w-[850px] bg-white text-[#111] p-5 sm:p-10 rounded-2xl shadow-2xl border-4 border-[#202530] relative select-none transition-transform duration-150 shrink-0"
+          >
             {/* Official Registry Watermark Grid */}
             <div className="absolute inset-0 pointer-events-none opacity-[0.04] flex flex-wrap items-center justify-around select-none overflow-hidden p-6 gap-8 z-20">
               {Array.from({ length: 24 }).map((_, i) => (
@@ -896,154 +940,8 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
               </div>
             </div>
           </div>
-          )}
         </div>
       </div>
-
-      {/* =========================================================================
-          2. UNDERNEATH PRIMARY VIEW: ATTACHED PDFS & DOCUMENTS GALLERY
-             (List of all additional PDFs previously uploaded under this client ID)
-         ========================================================================= */}
-      {hasRealAttachedDocs && (
-        <div className="w-full max-w-[900px] mx-auto bg-[#14161C] border border-[#2B2F38] rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#282C36] pb-3">
-            <div>
-              <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                <Paperclip className="w-4 h-4 text-[#F25C05]" />
-                <span>Client Attached PDFs & Document Archive (প্রার্থীর অতিরিক্ত পিডিএফ তালিকা)</span>
-              </h3>
-              <p className="text-xs text-gray-400 mt-0.5">
-                এই ক্লায়েন্ট আইডি/রেফারেন্স <strong className="text-amber-400">#{document.referenceNumber}</strong>-এর অধীনে মোট {validAttachedDocs.length}টি পিডিএফ আপলোড করা আছে। যেকোনোটিতে ক্লিক করে ওপরে সরাসরি দেখতে পারবেন।
-              </p>
-            </div>
-            <span className="text-xs font-mono font-bold bg-[#1E222A] text-emerald-400 px-3 py-1 rounded-lg border border-[#303542] self-start sm:self-auto shrink-0 flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{validAttachedDocs.length} Attached PDF(s)</span>
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            {validAttachedDocs.map((doc, idx) => {
-              const isCurrent = idx === selectedDocIndex;
-              return (
-                <div
-                  key={doc.id || idx}
-                  onClick={() => {
-                    setSelectedDocIndex(idx);
-                    document.getElementById('primary-pdf-viewer')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
-                    isCurrent
-                      ? 'bg-[#1C202A] border-emerald-500 shadow-md ring-1 ring-emerald-500/50'
-                      : 'bg-[#101216] border-[#262A34] hover:border-[#3E4554] hover:bg-[#161820]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5 overflow-hidden">
-                      <div
-                        className={`p-2 rounded-lg shrink-0 ${
-                          isCurrent ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/15 text-[#F25C05]'
-                        }`}
-                      >
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div className="overflow-hidden">
-                        <h4 className="text-xs sm:text-sm font-bold text-white truncate max-w-[220px]">
-                          {doc.name || `Document #${idx + 1}`}
-                        </h4>
-                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                          {doc.sectionTag ? (
-                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-[#262B37] text-amber-300 rounded border border-[#343A4A]">
-                              {doc.sectionTag}
-                            </span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-[#262B37] text-gray-300 rounded border border-[#343A4A]">
-                              Attached PDF
-                            </span>
-                          )}
-                          <span className="text-[10px] text-gray-400 font-mono">
-                            {doc.size || 'Verified Record'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {isCurrent && (
-                      <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded shrink-0">
-                        Viewing Now
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-[#222630] text-xs">
-                    <button
-                      type="button"
-                      className={`font-semibold flex items-center gap-1 cursor-pointer ${
-                        isCurrent ? 'text-emerald-400 font-bold' : 'text-[#FF8E4D] hover:text-white'
-                      }`}
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>{isCurrent ? 'Viewing in Top Viewer' : 'View in Top Viewer (ওপরে দেখুন)'}</span>
-                    </button>
-
-                    {doc.dataUrl && (
-                      <a
-                        href={doc.dataUrl}
-                        download={doc.name || `Document_${document.referenceNumber}.pdf`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-gray-400 hover:text-white p-1 rounded hover:bg-[#252832]"
-                        title="Download Document"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Quick Card to also view the Official Statutory Application Sheet */}
-            <div
-              onClick={() => {
-                setSelectedDocIndex(-1);
-                document.getElementById('primary-pdf-viewer')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
-                selectedDocIndex === -1
-                  ? 'bg-[#1C202A] border-emerald-500 shadow-md ring-1 ring-emerald-500/50'
-                  : 'bg-[#101216] border-[#262A34] hover:border-[#3E4554] hover:bg-[#161820]'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-lg bg-blue-500/15 text-blue-400 shrink-0">
-                    <Award className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-white">
-                      Official Work Permit Application (D Category) Sheet
-                    </h4>
-                    <span className="text-[10px] text-gray-400">
-                      IRCC Statutory Application & Biometric Registration
-                    </span>
-                  </div>
-                </div>
-                {selectedDocIndex === -1 && (
-                  <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded shrink-0">
-                    Viewing Now
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center justify-between pt-2 border-t border-[#222630] text-xs">
-                <span className="text-blue-400 font-semibold flex items-center gap-1">
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>View Statutory Sheet (ওপরে দেখুন)</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* =========================================================================
           TERTIARY VIEW: PRISTINE EXECUTIVE DOSSIER CARD (COMPLETE METADATA OVERVIEW)

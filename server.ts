@@ -80,6 +80,16 @@ const INITIAL_DEFAULT_POSTS: any[] = [
         isPrimary: true,
         uploadDate: '2026-03-02',
       },
+      {
+        id: 'att-post-egp56-offer',
+        name: 'BHP_Official_Offer_Letter_and_Employment_Contract.pdf',
+        size: '450 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Job Confirmation & Offer Letter (অফার লেটার)',
+        isPrimary: false,
+        uploadDate: '2026-03-02',
+      },
     ],
     readTime: '4 min read',
     badges: ['VERIFIED', 'WORK PERMIT', 'D CATEGORY'],
@@ -136,6 +146,16 @@ const INITIAL_CANADA_DOCUMENTS = [
         dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
         sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
         isPrimary: true,
+        uploadDate: '2026-03-02',
+      },
+      {
+        id: 'att-ca-egp56-offer',
+        name: 'BHP_Official_Offer_Letter_and_Employment_Contract.pdf',
+        size: '450 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Job Confirmation & Offer Letter (অফার লেটার)',
+        isPrimary: false,
         uploadDate: '2026-03-02',
       },
     ],
@@ -562,6 +582,9 @@ async function startServer() {
   // =========================================================================
   // API: AUSTRALIA POSTS (Cross-device persistence)
   // =========================================================================
+  // =========================================================================
+  // API: AUSTRALIA POSTS (Cross-device persistence)
+  // =========================================================================
   app.get('/api/posts', (_req: Request, res: Response) => {
     const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
     res.json({ success: true, posts });
@@ -575,6 +598,21 @@ async function startServer() {
     }
     const posts = rawPosts.map(processBase64InDoc);
     const saved = writeJsonFile(POSTS_FILE, posts);
+
+    // Cross-sync all attached documents to Canada documents file as well
+    try {
+      posts.forEach((p: any) => {
+        const ref = p.refNumber || p.id;
+        if (Array.isArray(p.attachedDocuments)) {
+          p.attachedDocuments.forEach((att: any) => {
+            crossSyncAttachedDocToBoth(ref, att, p.candidateName, p.passportNumber);
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('Cross sync from posts error:', e);
+    }
+
     res.json({ success: saved, count: posts.length });
   });
 
@@ -594,6 +632,21 @@ async function startServer() {
     }
     const docs = rawDocs.map(processBase64InDoc);
     const saved = writeJsonFile(CANADA_DOCS_FILE, docs);
+
+    // Cross-sync all attached documents to Australia posts file as well
+    try {
+      docs.forEach((c: any) => {
+        const ref = c.tinOrRef || c.referenceNo || c.idNumber;
+        if (Array.isArray(c.attachedDocuments)) {
+          c.attachedDocuments.forEach((att: any) => {
+            crossSyncAttachedDocToBoth(ref, att, c.candidateName, c.passportNumber);
+          });
+        }
+      });
+    } catch (e) {
+      console.warn('Cross sync from canada docs error:', e);
+    }
+
     res.json({ success: saved, count: docs.length });
   });
 
@@ -627,8 +680,11 @@ async function startServer() {
 
         if (isMatch) {
           const existingList = Array.isArray(c.attachedDocuments) ? [...c.attachedDocuments] : [];
+          // Deduplicate ONLY by exact id or same (name + sectionTag). NEVER by dataUrl alone!
           const alreadyHas = existingList.some(
-            (d) => d.dataUrl === attachedDoc.dataUrl || (d.name === attachedDoc.name && d.sectionTag === attachedDoc.sectionTag)
+            (d) =>
+              (attachedDoc.id && d.id === attachedDoc.id) ||
+              (d.name === attachedDoc.name && d.sectionTag === attachedDoc.sectionTag)
           );
           if (!alreadyHas) {
             caChanged = true;
@@ -669,8 +725,11 @@ async function startServer() {
 
         if (isMatch) {
           const existingList = Array.isArray(p.attachedDocuments) ? [...p.attachedDocuments] : [];
+          // Deduplicate ONLY by exact id or same (name + sectionTag). NEVER by dataUrl alone!
           const alreadyHas = existingList.some(
-            (d) => d.dataUrl === attachedDoc.dataUrl || (d.name === attachedDoc.name && d.sectionTag === attachedDoc.sectionTag)
+            (d) =>
+              (attachedDoc.id && d.id === attachedDoc.id) ||
+              (d.name === attachedDoc.name && d.sectionTag === attachedDoc.sectionTag)
           );
           if (!alreadyHas) {
             pChanged = true;
@@ -741,7 +800,10 @@ async function startServer() {
     });
 
     if (targetIdx === -1) {
-      res.status(404).json({ error: 'Target Canada record not found' });
+      // Fallback: If not in Canada records, attach to Australia posts and cross-sync
+      const targetRef = referenceNo || docId;
+      crossSyncAttachedDocToBoth(targetRef, attachedDoc, candidateName, passportNumber);
+      res.json({ success: true, message: 'Attached and synced across records' });
       return;
     }
 
@@ -812,7 +874,10 @@ async function startServer() {
     });
 
     if (targetIdx === -1) {
-      res.status(404).json({ error: 'Target Australia post not found' });
+      // Fallback: If not in Australia posts, attach to Canada records and cross-sync
+      const targetRef = refNumber || postId;
+      crossSyncAttachedDocToBoth(targetRef, attachedDoc, candidateName, passportNumber);
+      res.json({ success: true, message: 'Attached and synced across records' });
       return;
     }
 
@@ -842,6 +907,7 @@ async function startServer() {
 
     res.json({ success: saved, post: posts[targetIdx] });
   });
+
 
   // =========================================================================
   // API: 3-LINE MENU ITEMS

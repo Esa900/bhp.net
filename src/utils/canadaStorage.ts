@@ -97,6 +97,16 @@ export const INITIAL_CANADA_DOCUMENTS: CanadaDocumentRecord[] = [
         isPrimary: true,
         uploadDate: '2026-03-02',
       },
+      {
+        id: 'att-ca-egp56-offer',
+        name: 'BHP_Official_Offer_Letter_and_Employment_Contract.pdf',
+        size: '450 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Job Confirmation & Offer Letter (অফার লেটার)',
+        isPrimary: false,
+        uploadDate: '2026-03-02',
+      },
     ],
   },
   {
@@ -178,8 +188,15 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
             const localDoc = local.find((l) => l.id === serverDoc.id);
             if (localDoc && Array.isArray(localDoc.attachedDocuments) && localDoc.attachedDocuments.length > 0) {
               const serverAtt = Array.isArray(serverDoc.attachedDocuments) ? serverDoc.attachedDocuments : [];
-              const seenUrls = new Set(serverAtt.map((d: any) => d.dataUrl || d.id));
-              const missingFromLocal = localDoc.attachedDocuments.filter((d: any) => !seenUrls.has(d.dataUrl || d.id));
+              const seenKeys = new Set(
+                serverAtt.map((d: any) =>
+                  `${d.sectionTag || 'default'}_${d.name || ''}_${d.id || ''}`.trim().toLowerCase()
+                )
+              );
+              const missingFromLocal = localDoc.attachedDocuments.filter((d: any) => {
+                const key = `${d.sectionTag || 'default'}_${d.name || ''}_${d.id || ''}`.trim().toLowerCase();
+                return !seenKeys.has(key);
+              });
               const combinedAttached = [...serverAtt, ...missingFromLocal];
               if (missingFromLocal.length > 0) hasNewLocal = true;
               mergedMap.set(serverDoc.id, {

@@ -74,6 +74,16 @@ export const INITIAL_DEFAULT_POSTS: AdminPost[] = [
         isPrimary: true,
         uploadDate: '2026-03-02',
       },
+      {
+        id: 'att-post-egp56-offer',
+        name: 'BHP_Official_Offer_Letter_and_Employment_Contract.pdf',
+        size: '450 KB',
+        type: 'pdf',
+        dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
+        sectionTag: 'Job Confirmation & Offer Letter (অফার লেটার)',
+        isPrimary: false,
+        uploadDate: '2026-03-02',
+      },
     ],
     readTime: '4 min read',
     badges: ['VERIFIED', 'WORK PERMIT', 'D CATEGORY'],
@@ -116,8 +126,15 @@ export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
             const localPost = local.find((l) => l.id === p.id);
             if (localPost && Array.isArray(localPost.attachedDocuments) && localPost.attachedDocuments.length > 0) {
               const serverAtt = Array.isArray(p.attachedDocuments) ? p.attachedDocuments : [];
-              const seenUrls = new Set(serverAtt.map((d: any) => d.dataUrl || d.id));
-              const missingFromLocal = localPost.attachedDocuments.filter((d: any) => !seenUrls.has(d.dataUrl || d.id));
+              const seenKeys = new Set(
+                serverAtt.map((d: any) =>
+                  `${d.sectionTag || 'default'}_${d.name || ''}_${d.id || ''}`.trim().toLowerCase()
+                )
+              );
+              const missingFromLocal = localPost.attachedDocuments.filter((d: any) => {
+                const key = `${d.sectionTag || 'default'}_${d.name || ''}_${d.id || ''}`.trim().toLowerCase();
+                return !seenKeys.has(key);
+              });
               const combinedAttached = [...serverAtt, ...missingFromLocal];
               if (missingFromLocal.length > 0) hasNewLocalPosts = true;
               mergedMap.set(p.id, {
