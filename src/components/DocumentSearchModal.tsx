@@ -395,6 +395,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
               <div className="pt-2 animate-in fade-in duration-200">
                 <FullPdfDocumentViewer
                   document={matchedUniversalDoc}
+                  targetSectionTag={activeItem.mainTitle || activeItem.subMenu}
                   onSearchAnother={handleReset}
                   onClose={onClose}
                 />

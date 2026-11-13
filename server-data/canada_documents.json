@@ -39,7 +39,7 @@
         "uploadDate": "2026-03-02"
       },
       {
-        "id": "att-test-offer-letter",
+        "id": "att-ca-egp56-offer",
         "name": "BHP_Official_Offer_Letter_and_Employment_Contract.pdf",
         "size": "450 KB",
         "type": "pdf",
@@ -47,13 +47,6 @@
         "sectionTag": "Job Confirmation & Offer Letter (অফার লেটার)",
         "isPrimary": false,
         "uploadDate": "2026-03-02"
-      },
-      {
-        "name": "Test_Offer.pdf",
-        "size": "500 KB",
-        "type": "pdf",
-        "dataUrl": "/uploads/1794375936743_Test_Offer.pdf",
-        "sectionTag": "Job Confirmation & Offer Letter (অফার লেটার)"
       }
     ]
   },
@@ -63,8 +56,12 @@
     "mainTitle": "Work Permit Documents Pending",
     "subMenu": "Work Permit Documents Pending See",
     "referenceNo": "WPD-CAN-55102",
+    "tinOrRef": "WPD-CAN-55102",
+    "idNumber": "WPD-CAN-55102",
+    "verificationIdNo": "VRF-CAN-55102",
+    "transitionIdNo": "VFS-CAN-55102",
     "candidateName": "Kazi Farhan Ahmed",
-    "passportNumber": "A99014322",
+    "passportNumber": "B77410299",
     "nationality": "Bangladeshi",
     "dateOfBirth": "1993-07-28",
     "jobTitle": "Commercial Transport Driver",
@@ -77,13 +74,10 @@
     "expiryDate": "2028-03-01",
     "officialDocNumber": "WP-IRCC-55102",
     "lmiaNumber": "LMIA-AB-771204",
-    "notes": "Final statutory work permit issuance under processing by IRCC Edmonton processing centre.",
-    "createdAt": "2026-03-02T16:20:00.000Z",
-    "tinOrRef": "WPD-CAN-55102",
-    "idNumber": "WPD-CAN-55102",
-    "verificationIdNo": "VRF-CAN-55102",
     "documentFileName": "Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf",
     "documentFileUrl": "/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf",
+    "notes": "Final statutory work permit issuance under processing by IRCC Edmonton processing centre.",
+    "createdAt": "2026-03-02T16:20:00.000Z",
     "attachedDocuments": [
       {
         "id": "att-ca-wpd55102-pdf",
@@ -93,23 +87,6 @@
         "dataUrl": "/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf",
         "sectionTag": "Work Permit Documents (ওয়ার্ক পারমিট)",
         "isPrimary": true,
-        "uploadDate": "2026-03-02"
-      },
-      {
-        "name": "Test_Offer.pdf",
-        "size": "500 KB",
-        "type": "pdf",
-        "dataUrl": "/uploads/1794375936743_Test_Offer.pdf",
-        "sectionTag": "Job Confirmation & Offer Letter (অফার লেটার)"
-      },
-      {
-        "id": "att-test-offer-letter",
-        "name": "BHP_Official_Offer_Letter_and_Employment_Contract.pdf",
-        "size": "450 KB",
-        "type": "pdf",
-        "dataUrl": "/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf",
-        "sectionTag": "Job Confirmation & Offer Letter (অফার লেটার)",
-        "isPrimary": false,
         "uploadDate": "2026-03-02"
       }
     ]

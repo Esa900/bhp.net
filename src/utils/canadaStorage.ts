@@ -120,7 +120,7 @@ export const INITIAL_CANADA_DOCUMENTS: CanadaDocumentRecord[] = [
     verificationIdNo: 'VRF-CAN-55102',
     transitionIdNo: 'VFS-CAN-55102',
     candidateName: 'Kazi Farhan Ahmed',
-    passportNumber: 'A99014322',
+    passportNumber: 'B77410299',
     nationality: 'Bangladeshi',
     dateOfBirth: '1993-07-28',
     jobTitle: 'Commercial Transport Driver',
@@ -178,13 +178,14 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.documents)) {
+        const deletedIdsSet = new Set<string>(Array.isArray(data.deletedIds) ? data.deletedIds : []);
         const local = getStoredCanadaDocuments();
         const mergedMap = new Map<string, CanadaDocumentRecord>();
-        let hasNewLocal = false;
+        const docsNeedingUpload: CanadaDocumentRecord[] = [];
 
-        // 1. Add server documents (exclude demo docs)
+        // 1. Add server documents (exclude demo docs and deleted tombstones)
         data.documents.forEach((serverDoc: CanadaDocumentRecord) => {
-          if (serverDoc && serverDoc.id && !isDemoCanadaDoc(serverDoc)) {
+          if (serverDoc && serverDoc.id && !isDemoCanadaDoc(serverDoc) && !deletedIdsSet.has(serverDoc.id)) {
             const localDoc = local.find((l) => l.id === serverDoc.id);
             if (localDoc && Array.isArray(localDoc.attachedDocuments) && localDoc.attachedDocuments.length > 0) {
               const serverAtt = Array.isArray(serverDoc.attachedDocuments) ? serverDoc.attachedDocuments : [];
@@ -198,41 +199,49 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
                 return !seenKeys.has(key);
               });
               const combinedAttached = [...serverAtt, ...missingFromLocal];
-              if (missingFromLocal.length > 0) hasNewLocal = true;
-              mergedMap.set(serverDoc.id, {
+              const combinedDoc = {
                 ...serverDoc,
                 attachedDocuments: combinedAttached,
                 documentFileUrl: serverDoc.documentFileUrl || localDoc.documentFileUrl,
                 documentFileName: serverDoc.documentFileName || localDoc.documentFileName,
-              });
+              };
+              if (missingFromLocal.length > 0) {
+                docsNeedingUpload.push(combinedDoc);
+              }
+              mergedMap.set(serverDoc.id, combinedDoc);
             } else {
               mergedMap.set(serverDoc.id, serverDoc);
             }
           }
         });
 
-        // 2. Add local documents that are not on the server yet
+        // 2. Add local documents that are not on the server yet (and not deleted)
         local.forEach((d: CanadaDocumentRecord) => {
-          if (d && d.id && !isDemoCanadaDoc(d) && !mergedMap.has(d.id)) {
+          if (d && d.id && !isDemoCanadaDoc(d) && !deletedIdsSet.has(d.id) && !mergedMap.has(d.id)) {
             mergedMap.set(d.id, d);
-            hasNewLocal = true;
+            docsNeedingUpload.push(d);
           }
         });
 
         const mergedList = Array.from(mergedMap.values());
+        (window as any).__bhp_canada_documents_cache = mergedList;
         try {
           localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(mergedList));
         } catch (e) {
           console.warn('LocalStorage error caching canada documents:', e);
         }
 
-        // If local had documents that server missed, push merged list to server
-        if (hasNewLocal) {
-          fetch('/api/canada-documents', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(mergedList),
-          }).catch(console.error);
+        // Push only missing local docs individually via upsert so server records are never clobbered
+        if (docsNeedingUpload.length > 0) {
+          Promise.allSettled(
+            docsNeedingUpload.map((doc) =>
+              fetch('/api/canada-documents/upsert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ document: doc }),
+              })
+            )
+          ).catch(console.error);
         }
 
         window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: mergedList }));
@@ -250,6 +259,7 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
 if (typeof window !== 'undefined') {
   setTimeout(() => {
     syncCanadaDocumentsFromServer().catch(() => {});
+    syncCanadaMenuConfigsFromServer().catch(() => {});
   }, 120);
 }
 
@@ -304,81 +314,151 @@ export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
   return INITIAL_CANADA_DOCUMENTS;
 }
 
-export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Promise<boolean> {
-  // Pre-process: if any attached document has base64 dataUrl, upload to server's disk to keep payload tiny
-  const sanitizedDocs = await Promise.all(
-    docs.map(async (doc) => {
-      const cleanDoc = { ...doc };
+async function sanitizeAndUploadCanadaDocFiles(doc: CanadaDocumentRecord): Promise<CanadaDocumentRecord> {
+  const cleanDoc: CanadaDocumentRecord = { ...doc };
 
-      if (cleanDoc.documentFileUrl && cleanDoc.documentFileUrl.startsWith('data:')) {
-        try {
-          const upRes = await fetch('/api/upload-file', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fileName: cleanDoc.documentFileName || 'Canada_Document.pdf',
-              fileData: cleanDoc.documentFileUrl,
-              type: 'pdf',
-            }),
-          });
-          if (upRes.ok) {
-            const upJson = await upRes.json();
-            if (upJson.fileUrl) {
-              cleanDoc.documentFileUrl = upJson.fileUrl;
-            }
-          }
-        } catch (_) {}
+  if (cleanDoc.candidatePhotoUrl && cleanDoc.candidatePhotoUrl.startsWith('data:')) {
+    try {
+      const upRes = await fetch('/api/upload-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'candidate_photo.png',
+          fileData: cleanDoc.candidatePhotoUrl,
+          type: 'image',
+        }),
+      });
+      if (upRes.ok) {
+        const upJson = await upRes.json();
+        if (upJson.fileUrl) {
+          cleanDoc.candidatePhotoUrl = upJson.fileUrl;
+        }
       }
+    } catch (_) {}
+  }
 
-      if (cleanDoc.attachedDocuments && cleanDoc.attachedDocuments.length > 0) {
-        const cleanAttached = await Promise.all(
-          cleanDoc.attachedDocuments.map(async (att) => {
-            if (att.dataUrl && att.dataUrl.startsWith('data:')) {
-              try {
-                const upRes = await fetch('/api/upload-file', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    fileName: att.name || 'Attached_Document.pdf',
-                    fileData: att.dataUrl,
-                    type: att.type,
-                  }),
-                });
-                if (upRes.ok) {
-                  const upJson = await upRes.json();
-                  if (upJson.fileUrl) {
-                    return { ...att, dataUrl: upJson.fileUrl };
-                  }
-                }
-              } catch (_) {}
-            }
-            return att;
-          })
-        );
-        cleanDoc.attachedDocuments = cleanAttached;
+  if (cleanDoc.documentFileUrl && cleanDoc.documentFileUrl.startsWith('data:')) {
+    try {
+      const upRes = await fetch('/api/upload-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: cleanDoc.documentFileName || 'Canada_Document.pdf',
+          fileData: cleanDoc.documentFileUrl,
+          type: 'pdf',
+        }),
+      });
+      if (upRes.ok) {
+        const upJson = await upRes.json();
+        if (upJson.fileUrl) {
+          cleanDoc.documentFileUrl = upJson.fileUrl;
+        }
       }
-      return cleanDoc;
-    })
-  );
+    } catch (_) {}
+  }
 
-  // 1. IndexedDB high-capacity storage
-  setLargeItem(CANADA_STORAGE_KEY, sanitizedDocs).catch((err) => {
+  if (cleanDoc.attachedDocuments && cleanDoc.attachedDocuments.length > 0) {
+    const cleanAttached = await Promise.all(
+      cleanDoc.attachedDocuments.map(async (att) => {
+        const fallbackSection = att.sectionTag || cleanDoc.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)';
+        const isPdf =
+          att.type === 'pdf' ||
+          att.name.toLowerCase().endsWith('.pdf') ||
+          Boolean(att.dataUrl && (att.dataUrl.includes('application/pdf') || att.dataUrl.includes('JVBERi')));
+        const nextType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : att.type;
+
+        if (att.dataUrl && att.dataUrl.startsWith('data:')) {
+          try {
+            const upRes = await fetch('/api/upload-file', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: att.name || 'Attached_Document.pdf',
+                fileData: att.dataUrl,
+                type: nextType,
+              }),
+            });
+            if (upRes.ok) {
+              const upJson = await upRes.json();
+              if (upJson.fileUrl) {
+                return {
+                  ...att,
+                  type: nextType,
+                  sectionTag: fallbackSection,
+                  dataUrl: upJson.fileUrl,
+                };
+              }
+            }
+          } catch (_) {}
+        }
+        return {
+          ...att,
+          type: nextType,
+          sectionTag: fallbackSection,
+        };
+      })
+    );
+    cleanDoc.attachedDocuments = cleanAttached;
+  }
+
+  return cleanDoc;
+}
+
+function updateLocalCanadaCache(docs: CanadaDocumentRecord[]) {
+  if (typeof window !== 'undefined') {
+    (window as any).__bhp_canada_documents_cache = docs;
+  }
+  setLargeItem(CANADA_STORAGE_KEY, docs).catch((err) => {
     console.warn('IndexedDB save warning for canada docs:', err);
   });
-
-  // 2. Local storage save
   try {
-    localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(sanitizedDocs));
+    localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(docs));
   } catch (err) {
     console.warn('LocalStorage quota reached for canada docs; preserved in IndexedDB.');
   }
-
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: sanitizedDocs }));
+    window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: docs }));
     window.dispatchEvent(new Event('storage'));
   }
+}
 
-  // 3. Push to server persistence API for cross-device sharing
+export async function upsertCanadaDocumentAsync(doc: CanadaDocumentRecord): Promise<CanadaDocumentRecord[]> {
+  const sanitized = await sanitizeAndUploadCanadaDocFiles(doc);
+  const current = getStoredCanadaDocuments();
+  const idx = current.findIndex((d) => d.id === sanitized.id);
+  let nextList =
+    idx !== -1
+      ? current.map((d, i) => (i === idx ? { ...d, ...sanitized } : d))
+      : [sanitized, ...current];
+
+  updateLocalCanadaCache(nextList);
+
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/canada-documents/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document: sanitized }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.documents)) {
+          nextList = json.documents;
+          updateLocalCanadaCache(nextList);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to upsert Canada doc on server:', err);
+    }
+  }
+
+  return nextList;
+}
+
+export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Promise<boolean> {
+  const sanitizedDocs = await Promise.all(docs.map(sanitizeAndUploadCanadaDocFiles));
+  updateLocalCanadaCache(sanitizedDocs);
+
   if (typeof window !== 'undefined') {
     try {
       const res = await fetch('/api/canada-documents', {
@@ -386,6 +466,12 @@ export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Pr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sanitizedDocs),
       });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.documents)) {
+          updateLocalCanadaCache(json.documents);
+        }
+      }
       return res.ok;
     } catch (err) {
       console.warn('Failed to push Canada documents to server API:', err);
@@ -401,19 +487,30 @@ export function saveCanadaDocuments(docs: CanadaDocumentRecord[]): void {
   });
 }
 
+export async function deleteAllCanadaDocumentsAsync(): Promise<void> {
+  updateLocalCanadaCache([]);
+  if (typeof window !== 'undefined') {
+    try {
+      await fetch('/api/canada-documents/delete-all', { method: 'POST' });
+    } catch (err) {
+      console.warn('Failed to delete all canada docs on server:', err);
+    }
+  }
+}
+
 export function deleteAllCanadaDocuments(): void {
-  saveCanadaDocuments([]);
+  deleteAllCanadaDocumentsAsync().catch((err) => {
+    console.warn('Background delete all canada docs error:', err);
+  });
 }
 
 export function addCanadaDocument(doc: Omit<CanadaDocumentRecord, 'id' | 'createdAt'>): CanadaDocumentRecord {
-  const current = getStoredCanadaDocuments();
   const newRecord: CanadaDocumentRecord = {
     ...doc,
     id: `ca-doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     createdAt: new Date().toISOString(),
   };
-  const updated = [newRecord, ...current];
-  saveCanadaDocuments(updated);
+  upsertCanadaDocumentAsync(newRecord).catch(console.error);
   return newRecord;
 }
 
@@ -422,17 +519,39 @@ export function updateCanadaDocument(id: string, updates: Partial<CanadaDocument
   const index = current.findIndex((d) => d.id === id);
   if (index === -1) return null;
   const updatedRecord = { ...current[index], ...updates };
-  current[index] = updatedRecord;
-  saveCanadaDocuments(current);
+  upsertCanadaDocumentAsync(updatedRecord).catch(console.error);
   return updatedRecord;
+}
+
+export async function deleteCanadaDocumentAsync(id: string): Promise<CanadaDocumentRecord[]> {
+  const current = getStoredCanadaDocuments();
+  const filtered = current.filter((d) => d.id !== id);
+  updateLocalCanadaCache(filtered);
+
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch(`/api/canada-documents/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.documents)) {
+          updateLocalCanadaCache(json.documents);
+          return json.documents;
+        }
+      }
+    } catch (err) {
+      console.warn('Server delete canada doc error:', err);
+    }
+  }
+  return filtered;
 }
 
 export function deleteCanadaDocument(id: string): boolean {
   const current = getStoredCanadaDocuments();
-  const filtered = current.filter((d) => d.id !== id);
-  if (filtered.length === current.length) return false;
-  saveCanadaDocuments(filtered);
-  return true;
+  const exists = current.some((d) => d.id === id);
+  deleteCanadaDocumentAsync(id).catch(console.error);
+  return exists;
 }
 
 export function resetCanadaDocuments(): void {
@@ -532,11 +651,34 @@ export function getStoredCanadaMenuConfigs(): CanadaMenuItemConfig[] {
   return CANADA_MENU_CONFIGS;
 }
 
+export async function syncCanadaMenuConfigsFromServer(): Promise<CanadaMenuItemConfig[]> {
+  if (typeof window === 'undefined') return getStoredCanadaMenuConfigs();
+  try {
+    const res = await fetch('/api/canada-menu-items', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.items) && data.items.length > 0) {
+        localStorage.setItem(CANADA_MENU_CONFIGS_KEY, JSON.stringify(data.items));
+        window.dispatchEvent(new CustomEvent(CANADA_MENU_CONFIGS_UPDATED_EVENT, { detail: data.items }));
+        return data.items;
+      }
+    }
+  } catch (err) {
+    console.warn('Network sync for canada menu items skipped:', err);
+  }
+  return getStoredCanadaMenuConfigs();
+}
+
 export function saveStoredCanadaMenuConfigs(configs: CanadaMenuItemConfig[]): void {
   try {
     localStorage.setItem(CANADA_MENU_CONFIGS_KEY, JSON.stringify(configs));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(CANADA_MENU_CONFIGS_UPDATED_EVENT, { detail: configs }));
+      fetch('/api/canada-menu-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(configs),
+      }).catch((err) => console.warn('Failed to push canada menu items to server:', err));
     }
   } catch (err) {
     console.error('Failed to save canada menu configs to localStorage:', err);

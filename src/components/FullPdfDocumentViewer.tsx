@@ -24,6 +24,7 @@ import {
   Printer,
   Eye,
   Download,
+  ExternalLink,
 } from 'lucide-react';
 import { AdminPost, AttachedDoc } from '../types';
 import { CanadaDocumentRecord } from '../types/canada';
@@ -633,18 +634,22 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
       {hasRealAttachedDocs && (
         <div className="w-full flex flex-col items-center space-y-10">
           {validAttachedDocs.map((doc, idx) => {
-            const isPdf = Boolean(doc.dataUrl) && (
+            const isImage = Boolean(doc.dataUrl) && (
+              doc.type === 'image' ||
+              doc.dataUrl.startsWith('data:image') ||
+              Boolean(doc.name.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif)$/)) ||
+              Boolean(doc.dataUrl.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/))
+            );
+            const isPdf = Boolean(doc.dataUrl) && !isImage && (
               doc.type === 'pdf' ||
               doc.name.toLowerCase().endsWith('.pdf') ||
               doc.dataUrl.startsWith('data:application/pdf') ||
               doc.dataUrl.includes('application/pdf') ||
               doc.dataUrl.includes('JVBERi') ||
               doc.dataUrl.startsWith('blob:') ||
-              doc.dataUrl.toLowerCase().includes('.pdf')
+              doc.dataUrl.toLowerCase().includes('.pdf') ||
+              doc.dataUrl.includes('/uploads/')
             );
-            const isImage = doc.type === 'image' ||
-              doc.dataUrl.startsWith('data:image') ||
-              Boolean(doc.name.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif)$/));
 
             return (
               <div
@@ -707,6 +712,36 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                         }}
                         className="max-w-full h-auto rounded-lg shadow-2xl transition-transform"
                       />
+                    </div>
+                  ) : doc.dataUrl ? (
+                    <div className="w-full max-w-[900px] bg-[#14161C] rounded-2xl border-2 border-[#2B2F38] shadow-2xl p-4 sm:p-6 space-y-4">
+                      <iframe
+                        src={doc.dataUrl}
+                        title={doc.name || `Document ${idx + 1}`}
+                        className="w-full h-[550px] sm:h-[750px] rounded-xl bg-white border border-[#2B2F38]"
+                      />
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-300">
+                        <span className="truncate font-semibold">{doc.name}</span>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={doc.dataUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 rounded-lg bg-[#FF5500] hover:bg-[#E04B00] text-white font-bold flex items-center gap-1.5"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Open Full File</span>
+                          </a>
+                          <a
+                            href={doc.dataUrl}
+                            download={doc.name || `Document_${idx + 1}`}
+                            className="px-3 py-1.5 rounded-lg bg-[#222733] hover:bg-[#2C3344] text-gray-200 font-bold flex items-center gap-1.5"
+                          >
+                            <Download className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Download</span>
+                          </a>
+                        </div>
+                      </div>
                     </div>
                   ) : null}
                 </div>

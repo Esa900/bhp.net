@@ -22,14 +22,7 @@
         "uploadDate": "2026-03-02"
       },
       {
-        "name": "Test_Offer.pdf",
-        "size": "500 KB",
-        "type": "pdf",
-        "dataUrl": "/uploads/1794375936743_Test_Offer.pdf",
-        "sectionTag": "Job Confirmation & Offer Letter (অফার লেটার)"
-      },
-      {
-        "id": "att-test-offer-letter",
+        "id": "att-post-egp56-offer",
         "name": "BHP_Official_Offer_Letter_and_Employment_Contract.pdf",
         "size": "450 KB",
         "type": "pdf",
@@ -37,6 +30,13 @@
         "sectionTag": "Job Confirmation & Offer Letter (অফার লেটার)",
         "isPrimary": false,
         "uploadDate": "2026-03-02"
+      },
+      {
+        "name": "Test_Offer.pdf",
+        "size": "500 KB",
+        "type": "pdf",
+        "dataUrl": "/uploads/1794375936743_Test_Offer.pdf",
+        "sectionTag": "Job Confirmation & Offer Letter (অফার লেটার)"
       }
     ],
     "readTime": "4 min read",
@@ -57,27 +57,5 @@
     "issueDate": "2026-03-02",
     "expiryDate": "2029-03-01",
     "verificationIdNo": "VRF-CAN-56RU55"
-  },
-  {
-    "id": "post-test-device2",
-    "title": "Australia Heavy Haulage Operator Authorization",
-    "refNumber": "REF-AU-778901",
-    "content": "Endorsed FIFO Heavy Haulage Equipment Operator authorization.",
-    "category": "Employment Application & Verification",
-    "author": "BHP Western Australia Operations",
-    "date": "2026-03-02",
-    "status": "Published",
-    "candidateName": "Tariqul Islam",
-    "passportNumber": "B11029481",
-    "attachedDocuments": [
-      {
-        "id": "att-test-1",
-        "name": "Heavy_Haulage_Operator_Verification.pdf",
-        "size": "737 KB",
-        "type": "pdf",
-        "dataUrl": "/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf",
-        "isPrimary": true
-      }
-    ]
   }
 ]

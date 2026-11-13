@@ -40,17 +40,15 @@ import {
   deleteStoredMenuItem,
   moveStoredMenuItem,
   resetStoredMenuItems,
+  syncMenuItemsFromServer,
   MENU_ITEMS_UPDATED_EVENT,
 } from '../../utils/menuItemsStorage';
 import { AdminPost, AttachedDoc } from '../../types';
 import {
   getStoredAdminPosts,
-  saveStoredAdminPosts,
-  saveStoredAdminPostsAsync,
-  addStoredAdminPost,
-  updateStoredAdminPost,
-  deleteStoredAdminPost,
-  POSTS_STORAGE_KEY,
+  syncAdminPostsFromServer,
+  upsertStoredAdminPostAsync,
+  deleteStoredAdminPostAsync,
 } from '../../utils/postsStorage';
 import {
   FullPdfDocumentViewer,
@@ -256,21 +254,41 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     const targetRef = quickPdfPost.refNumber || quickPdfPost.id;
 
     try {
-      let latestUpdatedPost: AdminPost | null = null;
       for (let i = 0; i < quickSelectedFiles.length; i++) {
         const f = quickSelectedFiles[i];
+        let uploadedUrl = f.dataUrl;
+        if (uploadedUrl && uploadedUrl.startsWith('data:')) {
+          try {
+            const upRes = await fetch('/api/upload-file', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: f.name,
+                fileData: uploadedUrl,
+                type: f.type,
+              }),
+            });
+            if (upRes.ok) {
+              const upJson = await upRes.json();
+              if (upJson.fileUrl) {
+                uploadedUrl = upJson.fileUrl;
+              }
+            }
+          } catch (_) {}
+        }
+
         const newDoc: AttachedDoc = {
           id: `att-au-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           name: f.name,
           size: f.size,
           type: f.type,
-          dataUrl: f.dataUrl,
+          dataUrl: uploadedUrl,
           sectionTag: finalSection,
           isPrimary: i === 0 ? quickIsPrimary : false,
           uploadDate: new Date().toISOString().split('T')[0],
         };
 
-        const res = await fetch('/api/posts/add-attached-doc', {
+        await fetch('/api/posts/add-attached-doc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -281,43 +299,11 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
             doc: newDoc,
           }),
         });
-
-        if (res.ok) {
-          const json = await res.json();
-          if (json.post) {
-            latestUpdatedPost = json.post;
-          }
-        }
       }
 
-      // Update state & local storage
-      const currentPosts = getStoredAdminPosts();
-      const updated = currentPosts.map((p) => {
-        if (p.id === quickPdfPost.id) {
-          return (
-            latestUpdatedPost || {
-              ...p,
-              attachedDocuments: [
-                ...(p.attachedDocuments || []),
-                ...quickSelectedFiles.map((f, i) => ({
-                  id: `att-au-${Date.now()}-${i}`,
-                  name: f.name,
-                  size: f.size,
-                  type: f.type,
-                  dataUrl: f.dataUrl,
-                  sectionTag: finalSection,
-                  isPrimary: i === 0 ? quickIsPrimary : false,
-                  uploadDate: new Date().toISOString().split('T')[0],
-                })),
-              ],
-            }
-          );
-        }
-        return p;
-      });
-
-      await saveStoredAdminPostsAsync(updated);
-      setPosts(updated);
+      // Refresh merged posts from server so posts added on other devices are preserved
+      const synced = await syncAdminPostsFromServer();
+      setPosts(synced);
       showToast(
         `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved to central database.`
       );
@@ -331,8 +317,11 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     }
   };
 
-  // Sync Categories & Posts with storage events
+  // Sync Categories & Posts from server on mount and subscribe to updates
   useEffect(() => {
+    syncAdminPostsFromServer().then(setPosts).catch(() => {});
+    syncMenuItemsFromServer().then(setCategories).catch(() => {});
+
     const handleCatUpdate = () => {
       setCategories(getStoredMenuItems());
     };
@@ -483,11 +472,17 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       .map((b) => b.trim())
       .filter(Boolean);
 
+    const resolvedCategory = postForm.category || categories[0]?.mainTitle || 'Australia Work Permit';
+    const normalizedAttached = postForm.attachedDocuments.map((att) => ({
+      ...att,
+      sectionTag: att.sectionTag || resolvedCategory,
+    }));
+
     const postData: AdminPost = {
-      id: editingPostId || `post-au-${Date.now()}`,
+      id: editingPostId || `post-au-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       title: postForm.title.trim(),
       refNumber: postForm.refNumber.trim(),
-      category: postForm.category || categories[0]?.mainTitle || 'Australia Work Permit',
+      category: resolvedCategory,
       author: postForm.author.trim() || 'BHP Australia Operations',
       date: new Date().toISOString().split('T')[0],
       status: postForm.status,
@@ -495,7 +490,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       imageUrl: postForm.candidatePhotoUrl || postForm.imageUrl || 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80',
       candidatePhotoUrl: postForm.candidatePhotoUrl || postForm.imageUrl,
       galleryImages: postForm.galleryImages,
-      attachedDocuments: postForm.attachedDocuments,
+      attachedDocuments: normalizedAttached,
       readTime: postForm.readTime || '3 min read',
       badges: badgesList.length > 0 ? badgesList : ['AUSTRALIA', 'VERIFIED'],
       candidateName: postForm.candidateName.trim(),
@@ -512,25 +507,21 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       verificationIdNo: `VRF-AU-${postForm.refNumber.replace(/[^0-9]/g, '') || '99420'}`,
     };
 
-    const currentPosts = getStoredAdminPosts();
-    let updatedPosts: AdminPost[];
+    const syncedPosts = await upsertStoredAdminPostAsync(postData);
     if (editingPostId) {
-      updatedPosts = currentPosts.map((p) => (p.id === editingPostId ? { ...p, ...postData } : p));
-      await saveStoredAdminPostsAsync(updatedPosts);
       showToast(`Post "${postData.title}" updated and synchronized!`);
     } else {
-      updatedPosts = [postData, ...currentPosts];
-      await saveStoredAdminPostsAsync(updatedPosts);
       showToast(`New post "${postData.title}" published! Searchable Ref: "${postData.refNumber}"`);
     }
 
-    setPosts(updatedPosts);
+    setPosts(syncedPosts);
+    setEditingPostId(null);
     setActiveTab('all-posts');
   };
 
-  const handleDeletePost = (id: string, title: string) => {
-    deleteStoredAdminPost(id);
-    setPosts(getStoredAdminPosts());
+  const handleDeletePost = async (id: string, title: string) => {
+    const synced = await deleteStoredAdminPostAsync(id);
+    setPosts(synced);
     showToast(`Post "${title}" deleted successfully.`);
   };
 
@@ -542,20 +533,32 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     (Array.from(files) as File[]).forEach((file: File) => {
       const reader = new FileReader();
       reader.onload = () => {
-        const isPdf = file.type.includes('pdf');
-        const isImg = file.type.includes('image');
-        const newDoc: AttachedDoc = {
-          id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          name: file.name,
-          size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-          type: isPdf ? 'pdf' : isImg ? 'image' : 'other',
-          dataUrl: reader.result as string,
-          uploadDate: new Date().toISOString().split('T')[0],
-        };
-        setPostForm((prev) => ({
-          ...prev,
-          attachedDocuments: [...prev.attachedDocuments, newDoc],
-        }));
+        const result = (reader.result as string) || '';
+        const isPdf =
+          file.name.toLowerCase().endsWith('.pdf') ||
+          file.type.includes('pdf') ||
+          result.includes('application/pdf') ||
+          result.includes('JVBERi');
+        const isImg = !isPdf && file.type.includes('image');
+        const sizeStr =
+          file.size > 1024 * 1024
+            ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+            : `${(file.size / 1024).toFixed(1)} KB`;
+        setPostForm((prev) => {
+          const newDoc: AttachedDoc = {
+            id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            name: file.name,
+            size: sizeStr,
+            type: isPdf ? 'pdf' : isImg ? 'image' : 'other',
+            dataUrl: result,
+            sectionTag: prev.category || categories[0]?.mainTitle || 'Australia Work Permit Documents',
+            uploadDate: new Date().toISOString().split('T')[0],
+          };
+          return {
+            ...prev,
+            attachedDocuments: [...prev.attachedDocuments, newDoc],
+          };
+        });
       };
       reader.readAsDataURL(file);
     });
@@ -1272,20 +1275,47 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                 {postForm.attachedDocuments.map((doc) => (
                   <div
                     key={doc.id}
-                    className="flex items-center justify-between bg-[#1E2026] px-3 py-2 rounded-lg text-xs border border-[#2B2F38]"
+                    className="flex flex-wrap items-center justify-between gap-2 bg-[#1E2026] px-3 py-2 rounded-lg text-xs border border-[#2B2F38]"
                   >
-                    <div className="flex items-center gap-2 text-gray-200 truncate">
+                    <div className="flex items-center gap-2 text-gray-200 truncate min-w-0 flex-1">
                       <File className="w-3.5 h-3.5 text-blue-400 shrink-0" />
                       <span className="font-semibold truncate">{doc.name}</span>
-                      <span className="text-[10px] text-gray-400">({doc.size})</span>
+                      <span className="text-[10px] text-gray-400 shrink-0">({doc.size})</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveDoc(doc.id)}
-                      className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <select
+                        value={doc.sectionTag || postForm.category || categories[0]?.mainTitle || 'Australia Work Permit Documents'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPostForm((prev) => ({
+                            ...prev,
+                            attachedDocuments: prev.attachedDocuments.map((d) =>
+                              d.id === doc.id ? { ...d, sectionTag: val } : d
+                            ),
+                          }));
+                        }}
+                        className="bg-[#121317] border border-[#2D313A] rounded px-2 py-1 text-[10px] text-amber-300 focus:outline-none max-w-[200px]"
+                      >
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.mainTitle}>
+                            {cat.mainTitle}
+                          </option>
+                        ))}
+                        <option value="Work Permit Documents (ওয়ার্ক পারমিট)">Work Permit</option>
+                        <option value="Job Confirmation & Offer Letter (অফার লেটার)">Offer Letter</option>
+                        <option value="Biometrics & VFS Global (বায়োমেট্রিক ও ভিএফএস)">Biometrics VFS</option>
+                        <option value="Medical Examination (মেডিকেল রিপোর্ট)">Medical Report</option>
+                        <option value="Visa Grant / Statutory Approval">Visa Grant</option>
+                        <option value="Other Official Document (অন্যান্য নথি)">Other Document</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDoc(doc.id)}
+                        className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

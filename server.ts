@@ -19,6 +19,38 @@ if (!fs.existsSync(DATA_DIR)) {
 const POSTS_FILE = path.join(DATA_DIR, 'posts.json');
 const CANADA_DOCS_FILE = path.join(DATA_DIR, 'canada_documents.json');
 const MENU_ITEMS_FILE = path.join(DATA_DIR, 'menu_items.json');
+const CANADA_MENU_ITEMS_FILE = path.join(DATA_DIR, 'canada_menu_items.json');
+const DELETED_IDS_FILE = path.join(DATA_DIR, 'deleted_ids.json');
+
+interface DeletedIdsStore {
+  posts: string[];
+  canada: string[];
+}
+
+function getDeletedIds(): DeletedIdsStore {
+  const data = readJsonFile<DeletedIdsStore>(DELETED_IDS_FILE, { posts: [], canada: [] });
+  return {
+    posts: Array.isArray(data?.posts) ? data.posts : [],
+    canada: Array.isArray(data?.canada) ? data.canada : [],
+  };
+}
+
+function recordDeletedIds(type: 'posts' | 'canada', ids: string[]) {
+  if (!ids || ids.length === 0) return;
+  const current = getDeletedIds();
+  const nextSet = new Set([...current[type], ...ids.filter(Boolean)]);
+  current[type] = Array.from(nextSet).slice(-500);
+  writeJsonFile(DELETED_IDS_FILE, current);
+}
+
+function clearDeletedId(type: 'posts' | 'canada', id?: string) {
+  if (!id) return;
+  const current = getDeletedIds();
+  if (current[type].includes(id)) {
+    current[type] = current[type].filter((item) => item !== id);
+    writeJsonFile(DELETED_IDS_FILE, current);
+  }
+}
 
 // Helper to safely read JSON
 function readJsonFile<T>(filePath: string, fallback: T): T {
@@ -167,7 +199,7 @@ const INITIAL_CANADA_DOCUMENTS = [
     subMenu: 'Work Permit Documents Pending See',
     referenceNo: 'WPD-CAN-55102',
     candidateName: 'Kazi Farhan Ahmed',
-    passportNumber: 'A99014322',
+    passportNumber: 'B77410299',
     nationality: 'Bangladeshi',
     dateOfBirth: '1993-07-28',
     jobTitle: 'Commercial Transport Driver',
@@ -199,6 +231,59 @@ const INITIAL_CANADA_DOCUMENTS = [
         uploadDate: '2026-03-02',
       },
     ],
+  },
+];
+
+const INITIAL_CANADA_MENU_ITEMS = [
+  {
+    id: 'work-permit-docs',
+    mainTitle: 'Canada Work Permit Documents',
+    subMenu: 'Employment Application Document See',
+    fieldLabel: 'TIN / Reference Number',
+    searchFieldKey: 'tinOrRef',
+    placeholder: 'Enter TIN (e.g. TIN-CA-782190) or Reference Number (e.g. REF-CA-928410)...',
+    samplePlaceholder: 'REF-CA-928410',
+    description: 'Verify official Canada Employment Application and Tax File Identification authorization.',
+  },
+  {
+    id: 'offer-letter',
+    mainTitle: 'Offer Letter of Employment Pending',
+    subMenu: 'Offer Letter of Employment See',
+    fieldLabel: 'ID Number',
+    searchFieldKey: 'idNumber',
+    placeholder: 'Enter ID Number (e.g. CA-ED-88412)...',
+    samplePlaceholder: 'CA-ED-88412',
+    description: 'Search official Canadian employer offer letter, compensation schedule, and LMIA approval details.',
+  },
+  {
+    id: 'job-confirmation',
+    mainTitle: 'Job Confirmation Pending',
+    subMenu: 'Job Confirmation Pending See',
+    fieldLabel: 'Verification ID No',
+    searchFieldKey: 'verificationIdNo',
+    placeholder: 'Enter Verification ID No (e.g. VRF-CAN-99420)...',
+    samplePlaceholder: 'VRF-CAN-99420',
+    description: 'Verify statutory Job Confirmation and Canadian employer sponsorship confirmation certificate.',
+  },
+  {
+    id: 'biometric-vfs',
+    mainTitle: 'Biometric Received Paper of VFS Global Document Pending',
+    subMenu: 'Biometric Received Paper of VFS Global Document Pending See',
+    fieldLabel: 'Transition ID No',
+    searchFieldKey: 'transitionIdNo',
+    placeholder: 'Enter Transition ID No (e.g. VFS-CAN-882190)...',
+    samplePlaceholder: 'VFS-CAN-882190',
+    description: 'Confirm VFS Global biometric enrollment collection, facial capture and transition tracking dispatch.',
+  },
+  {
+    id: 'work-permit-pending',
+    mainTitle: 'Work Permit Documents Pending',
+    subMenu: 'Work Permit Documents Pending See',
+    fieldLabel: 'Reference No',
+    searchFieldKey: 'referenceNo',
+    placeholder: 'Enter Reference No (e.g. WPD-CAN-55102)...',
+    samplePlaceholder: 'WPD-CAN-55102',
+    description: 'Immigration, Refugees and Citizenship Canada (IRCC) work permit status and temporary resident visa verification.',
   },
 ];
 
@@ -417,12 +502,25 @@ function saveBase64ToFile(dataUrl: string, nameHint: string): string {
   if (!dataUrl || !dataUrl.startsWith('data:') || dataUrl.length < 50) return dataUrl;
   try {
     const commaIdx = dataUrl.indexOf(',');
+    const metaHeader = commaIdx !== -1 ? dataUrl.substring(0, commaIdx).toLowerCase() : '';
     const base64Str = commaIdx !== -1 ? dataUrl.substring(commaIdx + 1) : dataUrl;
     const buffer = Buffer.from(base64Str, 'base64');
-    const isPdf = dataUrl.includes('application/pdf') || nameHint.toLowerCase().endsWith('.pdf');
-    const ext = isPdf ? '.pdf' : '.png';
-    const safeBase = nameHint.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.[^/.]+$/, '');
-    const finalFileName = `${Date.now()}_${safeBase}${ext}`;
+    const isPdf =
+      metaHeader.includes('application/pdf') ||
+      base64Str.trimStart().startsWith('JVBERi') ||
+      nameHint.toLowerCase().endsWith('.pdf');
+    let ext = '.png';
+    if (isPdf) {
+      ext = '.pdf';
+    } else if (metaHeader.includes('image/jpeg') || metaHeader.includes('image/jpg') || nameHint.toLowerCase().match(/\.(jpg|jpeg)$/)) {
+      ext = '.jpg';
+    } else if (metaHeader.includes('image/webp') || nameHint.toLowerCase().endsWith('.webp')) {
+      ext = '.webp';
+    } else if (metaHeader.includes('image/gif') || nameHint.toLowerCase().endsWith('.gif')) {
+      ext = '.gif';
+    }
+    const safeBase = (nameHint || 'document').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.[^/.]+$/, '');
+    const finalFileName = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${safeBase}${ext}`;
     fs.writeFileSync(path.join(UPLOADS_DIR, finalFileName), buffer);
     try {
       fs.writeFileSync(path.join(PUBLIC_UPLOADS, finalFileName), buffer);
@@ -434,29 +532,65 @@ function saveBase64ToFile(dataUrl: string, nameHint: string): string {
   }
 }
 
+function normalizeAttachedType(att: any, url: string): 'pdf' | 'image' | 'other' {
+  const lowerUrl = (url || '').toLowerCase();
+  const lowerName = (att?.name || '').toLowerCase();
+  if (
+    att?.type === 'pdf' ||
+    lowerName.endsWith('.pdf') ||
+    lowerUrl.endsWith('.pdf') ||
+    lowerUrl.includes('application/pdf') ||
+    (url || '').includes('JVBERi')
+  ) {
+    return 'pdf';
+  }
+  if (
+    att?.type === 'image' ||
+    lowerUrl.startsWith('data:image') ||
+    Boolean(lowerName.match(/\.(jpg|jpeg|png|webp|gif)$/)) ||
+    Boolean(lowerUrl.match(/\.(jpg|jpeg|png|webp|gif)$/))
+  ) {
+    return 'image';
+  }
+  return att?.type || 'other';
+}
+
 function processBase64InDoc(doc: any) {
   if (!doc) return doc;
-  if (doc.documentFileUrl && doc.documentFileUrl.startsWith('data:')) {
-    doc.documentFileUrl = saveBase64ToFile(doc.documentFileUrl, doc.documentFileName || 'document.pdf');
+  const copy = { ...doc };
+  if (copy.documentFileUrl && copy.documentFileUrl.startsWith('data:')) {
+    copy.documentFileUrl = saveBase64ToFile(copy.documentFileUrl, copy.documentFileName || 'document.pdf');
   }
-  if (doc.candidatePhotoUrl && doc.candidatePhotoUrl.startsWith('data:')) {
-    doc.candidatePhotoUrl = saveBase64ToFile(doc.candidatePhotoUrl, 'candidate_photo.png');
+  if (copy.candidatePhotoUrl && copy.candidatePhotoUrl.startsWith('data:')) {
+    copy.candidatePhotoUrl = saveBase64ToFile(copy.candidatePhotoUrl, 'candidate_photo.png');
   }
-  if (doc.imageUrl && doc.imageUrl.startsWith('data:')) {
-    doc.imageUrl = saveBase64ToFile(doc.imageUrl, 'primary_image.png');
+  if (copy.imageUrl && copy.imageUrl.startsWith('data:')) {
+    copy.imageUrl = saveBase64ToFile(copy.imageUrl, 'primary_image.png');
   }
-  if (Array.isArray(doc.attachedDocuments)) {
-    doc.attachedDocuments = doc.attachedDocuments.map((att: any) => {
-      if (att && att.dataUrl && att.dataUrl.startsWith('data:')) {
-        return {
-          ...att,
-          dataUrl: saveBase64ToFile(att.dataUrl, att.name || 'attached_doc.pdf'),
-        };
+  if (Array.isArray(copy.galleryImages)) {
+    copy.galleryImages = copy.galleryImages.map((img: string, idx: number) =>
+      img && img.startsWith('data:') ? saveBase64ToFile(img, `gallery_${idx + 1}.png`) : img
+    );
+  }
+  const fallbackSectionTag = copy.category || copy.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)';
+  if (Array.isArray(copy.attachedDocuments)) {
+    copy.attachedDocuments = copy.attachedDocuments.map((att: any, idx: number) => {
+      if (!att) return att;
+      let nextUrl = att.dataUrl || '';
+      if (nextUrl.startsWith('data:')) {
+        nextUrl = saveBase64ToFile(nextUrl, att.name || 'attached_doc.pdf');
       }
-      return att;
+      const normalizedType = normalizeAttachedType(att, nextUrl);
+      return {
+        ...att,
+        id: att.id || `att-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+        type: normalizedType,
+        sectionTag: att.sectionTag || fallbackSectionTag,
+        dataUrl: nextUrl,
+      };
     });
   }
-  return doc;
+  return copy;
 }
 
 // Auto-seed files on server boot
@@ -527,9 +661,32 @@ function seedServerStorageIfEmpty() {
     writeJsonFile(MENU_ITEMS_FILE, INITIAL_MENU_ITEMS);
     console.log('[Server Storage] Seeded menu_items.json with initial items');
   }
+
+  const existingCaMenuItems = readJsonFile<any[]>(CANADA_MENU_ITEMS_FILE, []);
+  if (!existingCaMenuItems || existingCaMenuItems.length === 0) {
+    writeJsonFile(CANADA_MENU_ITEMS_FILE, INITIAL_CANADA_MENU_ITEMS);
+    console.log('[Server Storage] Seeded canada_menu_items.json with initial items');
+  }
 }
 
 seedServerStorageIfEmpty();
+
+function mergeAttachedDocsLists(serverAtt: any[] = [], incomingAtt: any[] = [], preferIncoming = false): any[] {
+  if (preferIncoming) {
+    return Array.isArray(incomingAtt) ? incomingAtt : [];
+  }
+  const map = new Map<string, any>();
+  const addItem = (d: any) => {
+    if (!d) return;
+    const key = d.id || `${d.sectionTag || 'default'}_${d.name || ''}_${d.dataUrl || ''}`.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, d);
+    }
+  };
+  (Array.isArray(serverAtt) ? serverAtt : []).forEach(addItem);
+  (Array.isArray(incomingAtt) ? incomingAtt : []).forEach(addItem);
+  return Array.from(map.values());
+}
 
 async function startServer() {
   const app = express();
@@ -538,20 +695,29 @@ async function startServer() {
   app.use(express.json({ limit: '60mb' }));
   app.use(express.urlencoded({ extended: true, limit: '60mb' }));
 
-  // Static uploads serving for attached PDFs and scanned documents
-  app.use('/uploads', express.static(UPLOADS_DIR));
-  app.use('/uploads', express.static(PUBLIC_UPLOADS));
-
-  // CORS headers for multi-device cross-origin support
-  app.use((_req, res, next) => {
+  // CORS headers & no-cache for APIs for multi-device cross-origin support
+  app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    if (_req.method === 'OPTIONS') {
+    if (req.path.startsWith('/api/')) {
+      res.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.header('Pragma', 'no-cache');
+      res.header('Expires', '0');
+    }
+    if (req.method === 'OPTIONS') {
       res.sendStatus(200);
       return;
     }
     next();
+  });
+
+  // Static uploads serving for attached PDFs and scanned documents
+  app.use('/uploads', express.static(UPLOADS_DIR));
+  app.use('/uploads', express.static(PUBLIC_UPLOADS));
+  // Explicit 404 for missing /uploads/* so SPA catch-all never returns index.html as PDF bytes
+  app.use('/uploads', (_req: Request, res: Response) => {
+    res.status(404).json({ error: 'Uploaded document file not found' });
   });
 
   // =========================================================================
@@ -580,28 +746,116 @@ async function startServer() {
   });
 
   // =========================================================================
-  // API: AUSTRALIA POSTS (Cross-device persistence)
-  // =========================================================================
-  // =========================================================================
-  // API: AUSTRALIA POSTS (Cross-device persistence)
+  // API: AUSTRALIA POSTS (Atomic upsert + Merge-safe multi-device persistence)
   // =========================================================================
   app.get('/api/posts', (_req: Request, res: Response) => {
     const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
-    res.json({ success: true, posts });
+    const deleted = getDeletedIds();
+    res.json({ success: true, posts, deletedIds: deleted.posts });
   });
 
+  // Atomic single-post create/update endpoint — NEVER overwrites other devices' posts!
+  app.post('/api/posts/upsert', (req: Request, res: Response) => {
+    const rawPost = req.body?.post || req.body;
+    if (!rawPost || !rawPost.id) {
+      res.status(400).json({ error: 'Expected post object with id' });
+      return;
+    }
+    const processed = processBase64InDoc(rawPost);
+    clearDeletedId('posts', processed.id);
+
+    const existingPosts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
+    const idx = existingPosts.findIndex((p) => p.id === processed.id);
+    let updatedPosts: any[];
+    if (idx !== -1) {
+      updatedPosts = existingPosts.map((p, i) => (i === idx ? { ...p, ...processed } : p));
+    } else {
+      updatedPosts = [processed, ...existingPosts];
+    }
+
+    const saved = writeJsonFile(POSTS_FILE, updatedPosts);
+
+    try {
+      const ref = processed.refNumber || processed.id;
+      if (Array.isArray(processed.attachedDocuments)) {
+        processed.attachedDocuments.forEach((att: any) => {
+          crossSyncAttachedDocToBoth(ref, att, processed.candidateName, processed.passportNumber);
+        });
+      }
+    } catch (e) {
+      console.warn('Cross sync from post upsert error:', e);
+    }
+
+    const latestPosts = readJsonFile<any[]>(POSTS_FILE, updatedPosts);
+    res.json({ success: saved, post: processed, posts: latestPosts });
+  });
+
+  // Delete a single Australia post safely across all devices
+  app.delete('/api/posts/:id', (req: Request, res: Response) => {
+    const targetId = req.params.id;
+    const existingPosts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
+    const filtered = existingPosts.filter((p) => p.id !== targetId);
+    recordDeletedIds('posts', [targetId]);
+    const saved = writeJsonFile(POSTS_FILE, filtered);
+    res.json({ success: saved, posts: filtered, deletedIds: getDeletedIds().posts });
+  });
+
+  // Delete all Australia posts explicitly
+  app.post('/api/posts/delete-all', (_req: Request, res: Response) => {
+    const existingPosts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
+    recordDeletedIds('posts', existingPosts.map((p) => p.id).filter(Boolean));
+    const saved = writeJsonFile(POSTS_FILE, []);
+    res.json({ success: saved, posts: [], deletedIds: getDeletedIds().posts });
+  });
+
+  // Bulk sync / save Australia posts (SMART MERGE by id — preserves other devices' posts unless ?replace=true)
   app.post('/api/posts', (req: Request, res: Response) => {
     const rawPosts = Array.isArray(req.body) ? req.body : req.body?.posts;
     if (!Array.isArray(rawPosts)) {
       res.status(400).json({ error: 'Expected an array of posts' });
       return;
     }
-    const posts = rawPosts.map(processBase64InDoc);
-    const saved = writeJsonFile(POSTS_FILE, posts);
+    const incoming = rawPosts.map(processBase64InDoc);
+    const forceReplace = req.query.replace === 'true';
 
-    // Cross-sync all attached documents to Canada documents file as well
+    let finalPosts: any[];
+    if (forceReplace) {
+      finalPosts = incoming;
+    } else {
+      const existing = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
+      const deletedSet = new Set(getDeletedIds().posts);
+      const mergedMap = new Map<string, any>();
+
+      // Keep existing server records first (preserving other devices' posts!)
+      existing.forEach((p) => {
+        if (p && p.id && !deletedSet.has(p.id)) {
+          mergedMap.set(p.id, p);
+        }
+      });
+
+      // Merge incoming posts into map without erasing existing ones
+      incoming.forEach((p) => {
+        if (!p || !p.id) return;
+        if (deletedSet.has(p.id)) return; // Skip already-deleted posts from stale device caches
+        const prev = mergedMap.get(p.id);
+        if (prev) {
+          mergedMap.set(p.id, {
+            ...prev,
+            ...p,
+            attachedDocuments: mergeAttachedDocsLists(prev.attachedDocuments, p.attachedDocuments, false),
+          });
+        } else {
+          mergedMap.set(p.id, p);
+        }
+      });
+
+      finalPosts = Array.from(mergedMap.values());
+    }
+
+    const saved = writeJsonFile(POSTS_FILE, finalPosts);
+
     try {
-      posts.forEach((p: any) => {
+      finalPosts.forEach((p: any) => {
         const ref = p.refNumber || p.id;
         if (Array.isArray(p.attachedDocuments)) {
           p.attachedDocuments.forEach((att: any) => {
@@ -613,29 +867,118 @@ async function startServer() {
       console.warn('Cross sync from posts error:', e);
     }
 
-    res.json({ success: saved, count: posts.length });
+    res.json({ success: saved, count: finalPosts.length, posts: readJsonFile<any[]>(POSTS_FILE, finalPosts) });
   });
 
   // =========================================================================
-  // API: CANADA DOCUMENTS (Cross-device persistence)
+  // API: CANADA DOCUMENTS (Atomic upsert + Merge-safe multi-device persistence)
   // =========================================================================
   app.get('/api/canada-documents', (_req: Request, res: Response) => {
     const docs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
-    res.json({ success: true, documents: docs });
+    const deleted = getDeletedIds();
+    res.json({ success: true, documents: docs, deletedIds: deleted.canada });
   });
 
+  // Atomic single-document create/update endpoint — NEVER overwrites other devices' docs!
+  app.post('/api/canada-documents/upsert', (req: Request, res: Response) => {
+    const rawDoc = req.body?.document || req.body;
+    if (!rawDoc || !rawDoc.id) {
+      res.status(400).json({ error: 'Expected document object with id' });
+      return;
+    }
+    const processed = processBase64InDoc(rawDoc);
+    clearDeletedId('canada', processed.id);
+
+    const existingDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
+    const idx = existingDocs.findIndex((d) => d.id === processed.id);
+    let updatedDocs: any[];
+    if (idx !== -1) {
+      updatedDocs = existingDocs.map((d, i) => (i === idx ? { ...d, ...processed } : d));
+    } else {
+      updatedDocs = [processed, ...existingDocs];
+    }
+
+    const saved = writeJsonFile(CANADA_DOCS_FILE, updatedDocs);
+
+    try {
+      const ref = processed.tinOrRef || processed.referenceNo || processed.idNumber || processed.id;
+      if (Array.isArray(processed.attachedDocuments)) {
+        processed.attachedDocuments.forEach((att: any) => {
+          crossSyncAttachedDocToBoth(ref, att, processed.candidateName, processed.passportNumber);
+        });
+      }
+    } catch (e) {
+      console.warn('Cross sync from canada upsert error:', e);
+    }
+
+    const latestDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, updatedDocs);
+    res.json({ success: saved, document: processed, documents: latestDocs });
+  });
+
+  // Delete a single Canada document safely across all devices
+  app.delete('/api/canada-documents/:id', (req: Request, res: Response) => {
+    const targetId = req.params.id;
+    const existingDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
+    const filtered = existingDocs.filter((d) => d.id !== targetId);
+    recordDeletedIds('canada', [targetId]);
+    const saved = writeJsonFile(CANADA_DOCS_FILE, filtered);
+    res.json({ success: saved, documents: filtered, deletedIds: getDeletedIds().canada });
+  });
+
+  // Delete all Canada documents explicitly
+  app.post('/api/canada-documents/delete-all', (_req: Request, res: Response) => {
+    const existingDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
+    recordDeletedIds('canada', existingDocs.map((d) => d.id).filter(Boolean));
+    const saved = writeJsonFile(CANADA_DOCS_FILE, []);
+    res.json({ success: saved, documents: [], deletedIds: getDeletedIds().canada });
+  });
+
+  // Bulk sync / save Canada documents (SMART MERGE by id — preserves other devices' docs unless ?replace=true)
   app.post('/api/canada-documents', (req: Request, res: Response) => {
     const rawDocs = Array.isArray(req.body) ? req.body : req.body?.documents;
     if (!Array.isArray(rawDocs)) {
       res.status(400).json({ error: 'Expected an array of canada documents' });
       return;
     }
-    const docs = rawDocs.map(processBase64InDoc);
-    const saved = writeJsonFile(CANADA_DOCS_FILE, docs);
+    const incoming = rawDocs.map(processBase64InDoc);
+    const forceReplace = req.query.replace === 'true';
 
-    // Cross-sync all attached documents to Australia posts file as well
+    let finalDocs: any[];
+    if (forceReplace) {
+      finalDocs = incoming;
+    } else {
+      const existing = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
+      const deletedSet = new Set(getDeletedIds().canada);
+      const mergedMap = new Map<string, any>();
+
+      existing.forEach((d) => {
+        if (d && d.id && !deletedSet.has(d.id)) {
+          mergedMap.set(d.id, d);
+        }
+      });
+
+      incoming.forEach((d) => {
+        if (!d || !d.id) return;
+        if (deletedSet.has(d.id)) return;
+        const prev = mergedMap.get(d.id);
+        if (prev) {
+          mergedMap.set(d.id, {
+            ...prev,
+            ...d,
+            attachedDocuments: mergeAttachedDocsLists(prev.attachedDocuments, d.attachedDocuments, false),
+          });
+        } else {
+          mergedMap.set(d.id, d);
+        }
+      });
+
+      finalDocs = Array.from(mergedMap.values());
+    }
+
+    const saved = writeJsonFile(CANADA_DOCS_FILE, finalDocs);
+
     try {
-      docs.forEach((c: any) => {
+      finalDocs.forEach((c: any) => {
         const ref = c.tinOrRef || c.referenceNo || c.idNumber;
         if (Array.isArray(c.attachedDocuments)) {
           c.attachedDocuments.forEach((att: any) => {
@@ -647,7 +990,7 @@ async function startServer() {
       console.warn('Cross sync from canada docs error:', e);
     }
 
-    res.json({ success: saved, count: docs.length });
+    res.json({ success: saved, count: finalDocs.length, documents: readJsonFile<any[]>(CANADA_DOCS_FILE, finalDocs) });
   });
 
   // Helper to sync an attached document to both Canada documents and Australia posts
@@ -765,6 +1108,10 @@ async function startServer() {
     if (attachedDoc.dataUrl && attachedDoc.dataUrl.startsWith('data:')) {
       attachedDoc.dataUrl = saveBase64ToFile(attachedDoc.dataUrl, attachedDoc.name || 'document.pdf');
     }
+    attachedDoc.type = normalizeAttachedType(attachedDoc, attachedDoc.dataUrl);
+    if (!attachedDoc.id) {
+      attachedDoc.id = `att-ca-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    }
 
     const docs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
     const cleanRef = String(referenceNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
@@ -800,7 +1147,6 @@ async function startServer() {
     });
 
     if (targetIdx === -1) {
-      // Fallback: If not in Canada records, attach to Australia posts and cross-sync
       const targetRef = referenceNo || docId;
       crossSyncAttachedDocToBoth(targetRef, attachedDoc, candidateName, passportNumber);
       res.json({ success: true, message: 'Attached and synced across records' });
@@ -810,7 +1156,10 @@ async function startServer() {
     const currentDoc = docs[targetIdx];
     const currentAttached = Array.isArray(currentDoc.attachedDocuments) ? [...currentDoc.attachedDocuments] : [];
 
-    // If marked primary, unset other primary flags
+    if (!attachedDoc.sectionTag) {
+      attachedDoc.sectionTag = currentDoc.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)';
+    }
+
     if (attachedDoc.isPrimary) {
       currentAttached.forEach((d) => (d.isPrimary = false));
     }
@@ -825,7 +1174,6 @@ async function startServer() {
 
     const saved = writeJsonFile(CANADA_DOCS_FILE, docs);
 
-    // Cross-sync to Australia posts so search in Australia also finds this new PDF
     const targetRef = currentDoc.tinOrRef || currentDoc.referenceNo || currentDoc.idNumber || referenceNo;
     crossSyncAttachedDocToBoth(
       targetRef,
@@ -849,6 +1197,10 @@ async function startServer() {
     let attachedDoc = { ...attachedDocRaw };
     if (attachedDoc.dataUrl && attachedDoc.dataUrl.startsWith('data:')) {
       attachedDoc.dataUrl = saveBase64ToFile(attachedDoc.dataUrl, attachedDoc.name || 'document.pdf');
+    }
+    attachedDoc.type = normalizeAttachedType(attachedDoc, attachedDoc.dataUrl);
+    if (!attachedDoc.id) {
+      attachedDoc.id = `att-au-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     }
 
     const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
@@ -874,7 +1226,6 @@ async function startServer() {
     });
 
     if (targetIdx === -1) {
-      // Fallback: If not in Australia posts, attach to Canada records and cross-sync
       const targetRef = refNumber || postId;
       crossSyncAttachedDocToBoth(targetRef, attachedDoc, candidateName, passportNumber);
       res.json({ success: true, message: 'Attached and synced across records' });
@@ -883,6 +1234,10 @@ async function startServer() {
 
     const currentPost = posts[targetIdx];
     const currentAttached = Array.isArray(currentPost.attachedDocuments) ? [...currentPost.attachedDocuments] : [];
+
+    if (!attachedDoc.sectionTag) {
+      attachedDoc.sectionTag = currentPost.category || 'Australia Work Permit Documents';
+    }
 
     if (attachedDoc.isPrimary) {
       currentAttached.forEach((d) => (d.isPrimary = false));
@@ -896,7 +1251,6 @@ async function startServer() {
 
     const saved = writeJsonFile(POSTS_FILE, posts);
 
-    // Cross-sync to Canada documents so search in Canada also finds this new PDF
     const targetRef = currentPost.refNumber || refNumber;
     crossSyncAttachedDocToBoth(
       targetRef,
@@ -908,9 +1262,8 @@ async function startServer() {
     res.json({ success: saved, post: posts[targetIdx] });
   });
 
-
   // =========================================================================
-  // API: 3-LINE MENU ITEMS
+  // API: 3-LINE MENU ITEMS (Australia + Canada)
   // =========================================================================
   app.get('/api/menu-items', (_req: Request, res: Response) => {
     const items = readJsonFile<any[]>(MENU_ITEMS_FILE, INITIAL_MENU_ITEMS);
@@ -927,6 +1280,21 @@ async function startServer() {
     res.json({ success: saved, count: items.length });
   });
 
+  app.get('/api/canada-menu-items', (_req: Request, res: Response) => {
+    const items = readJsonFile<any[]>(CANADA_MENU_ITEMS_FILE, INITIAL_CANADA_MENU_ITEMS);
+    res.json({ success: true, items });
+  });
+
+  app.post('/api/canada-menu-items', (req: Request, res: Response) => {
+    const items = Array.isArray(req.body) ? req.body : req.body?.items;
+    if (!Array.isArray(items)) {
+      res.status(400).json({ error: 'Expected an array of canada menu items' });
+      return;
+    }
+    const saved = writeJsonFile(CANADA_MENU_ITEMS_FILE, items);
+    res.json({ success: saved, count: items.length });
+  });
+
   // =========================================================================
   // API: SYNC ALL DATA IN ONE CALL (Used by mobile clients on boot & search)
   // =========================================================================
@@ -934,12 +1302,16 @@ async function startServer() {
     const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
     const canadaDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
     const menuItems = readJsonFile<any[]>(MENU_ITEMS_FILE, INITIAL_MENU_ITEMS);
+    const canadaMenuItems = readJsonFile<any[]>(CANADA_MENU_ITEMS_FILE, INITIAL_CANADA_MENU_ITEMS);
+    const deletedIds = getDeletedIds();
     res.json({
       success: true,
       timestamp: Date.now(),
       posts,
       canadaDocs,
       menuItems,
+      canadaMenuItems,
+      deletedIds,
     });
   });
 
@@ -1096,49 +1468,160 @@ async function startServer() {
       );
     };
 
-    // Find all matching posts and canada documents
-    const matchedPosts = posts.filter(doesPostMatch);
-    const matchedCanada = canadaDocs.filter(doesCaMatch);
+    // Pass 1: Find all direct query matches in Australia posts and Canada documents
+    const matchedPostsDirect = posts.filter(doesPostMatch);
+    const matchedCanadaDirect = canadaDocs.filter(doesCaMatch);
+
+    // Pass 2: Expand to ALL records belonging to the same matched client (across sections & countries)
+    const matchedPassports = new Set<string>();
+    const matchedNames = new Set<string>();
+    const matchedRefKeys = new Set<string>();
+
+    const collectIdentityKeys = (rec: any) => {
+      if (!rec) return;
+      const pass = (rec.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      if (pass.length >= 5) matchedPassports.add(pass);
+      const name = (rec.candidateName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      if (name.length >= 5) matchedNames.add(name);
+      [rec.refNumber, rec.tinOrRef, rec.referenceNo, rec.idNumber].forEach((val) => {
+        const cleanVal = (val || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        if (cleanVal.length >= 4) matchedRefKeys.add(cleanVal);
+      });
+    };
+
+    matchedPostsDirect.forEach(collectIdentityKeys);
+    matchedCanadaDirect.forEach(collectIdentityKeys);
+
+    const isSameClientRecord = (rec: any) => {
+      if (!rec) return false;
+      const recPass = (rec.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      const recName = (rec.candidateName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+      // Check ref key overlap
+      const recRefs = [rec.refNumber, rec.tinOrRef, rec.referenceNo, rec.idNumber]
+        .map((v) => (v || '').toLowerCase().replace(/[-\s_./#:]/g, ''))
+        .filter((v) => v.length >= 4);
+      if (recRefs.some((r) => matchedRefKeys.has(r))) return true;
+      // Check passport overlap (only if names don't conflict)
+      if (recPass && matchedPassports.has(recPass)) {
+        if (!recName || matchedNames.size === 0 || matchedNames.has(recName)) {
+          return true;
+        }
+      }
+      // Check candidate name overlap
+      if (recName && matchedNames.has(recName)) return true;
+      return false;
+    };
+
+    const matchedPosts = [...matchedPostsDirect];
+    const seenPostIds = new Set(matchedPosts.map((p) => p.id));
+    posts.forEach((p) => {
+      if (p && !seenPostIds.has(p.id) && isSameClientRecord(p)) {
+        seenPostIds.add(p.id);
+        matchedPosts.push(p);
+      }
+    });
+
+    const matchedCanada = [...matchedCanadaDirect];
+    const seenCaIds = new Set(matchedCanada.map((c) => c.id));
+    canadaDocs.forEach((c) => {
+      if (c && !seenCaIds.has(c.id) && isSameClientRecord(c)) {
+        seenCaIds.add(c.id);
+        matchedCanada.push(c);
+      }
+    });
 
     // If matches found in either Canada or Australia, merge attachments across ALL client records
     if (matchedCanada.length > 0 || matchedPosts.length > 0) {
       // 1. Gather all attached documents across all matched records
       const allAttached: any[] = [];
-      const seenUrls = new Set<string>();
+      const seenKeys = new Set<string>();
+      const seenIds = new Set<string>();
 
-      const addAttachedDoc = (doc: any) => {
-        if (!doc) return;
-        const key = `${doc.sectionTag || 'default'}_${doc.name || ''}_${doc.id || doc.dataUrl || ''}`.trim().toLowerCase();
-        if (!seenUrls.has(key)) {
-          seenUrls.add(key);
-          allAttached.push(doc);
-        }
+      const addAttachedDoc = (doc: any, parentSection?: string) => {
+        if (!doc || !doc.dataUrl || doc.dataUrl === '#') return;
+        const normalizedType = normalizeAttachedType(doc, doc.dataUrl);
+        const normalizedSection = doc.sectionTag || parentSection || 'Work Permit Documents (ওয়ার্ক পারমিট)';
+        const dedupKey = `${normalizedSection}_${doc.name || ''}_${doc.dataUrl || ''}`.trim().toLowerCase();
+        if (doc.id && seenIds.has(doc.id)) return;
+        if (seenKeys.has(dedupKey)) return;
+        if (doc.id) seenIds.add(doc.id);
+        seenKeys.add(dedupKey);
+        allAttached.push({
+          ...doc,
+          type: normalizedType,
+          sectionTag: normalizedSection,
+        });
       };
 
       matchedCanada.forEach((c) => {
+        const parentSec = c.mainTitle || c.subMenu || 'Work Permit Documents (ওয়ার্ক পারমিট)';
         if (Array.isArray(c.attachedDocuments)) {
-          c.attachedDocuments.forEach(addAttachedDoc);
+          c.attachedDocuments.forEach((att: any) => addAttachedDoc(att, parentSec));
+        }
+        if (c.documentFileUrl && c.documentFileUrl !== '#') {
+          const alreadyUrl = allAttached.some((d) => d.dataUrl === c.documentFileUrl);
+          if (!alreadyUrl) {
+            addAttachedDoc(
+              {
+                id: `ca-file-${c.id}`,
+                name: c.documentFileName || `${c.mainTitle || 'Canada Document'}.pdf`,
+                size: 'Official IRCC Document',
+                type: normalizeAttachedType({ name: c.documentFileName }, c.documentFileUrl),
+                dataUrl: c.documentFileUrl,
+                sectionTag: parentSec,
+                uploadDate: c.issueDate,
+              },
+              parentSec
+            );
+          }
         }
       });
 
       matchedPosts.forEach((p) => {
+        const parentSec = p.category || p.title || 'Australia Work Permit Documents';
         if (Array.isArray(p.attachedDocuments)) {
-          p.attachedDocuments.forEach(addAttachedDoc);
+          p.attachedDocuments.forEach((att: any) => addAttachedDoc(att, parentSec));
+        }
+        if (Array.isArray(p.galleryImages)) {
+          p.galleryImages.forEach((imgUrl: string, idx: number) => {
+            if (imgUrl && !imgUrl.includes('unsplash') && !allAttached.some((d) => d.dataUrl === imgUrl)) {
+              addAttachedDoc(
+                {
+                  id: `gallery-doc-${p.id}-${idx}`,
+                  name: `${p.title || 'Document'} - Scan ${idx + 1}`,
+                  size: 'Official Image Record',
+                  type: 'image',
+                  dataUrl: imgUrl,
+                  sectionTag: parentSec,
+                  uploadDate: p.date,
+                },
+                parentSec
+              );
+            }
+          });
         }
       });
 
-      // 2. Select primary record base
+      // 2. Select primary record base (preferring direct match first)
       let chosenRecord: any = null;
       let chosenSource: 'canada' | 'australia' = 'canada';
 
-      if (preferredSource === 'australia' && matchedPosts.length > 0) {
-        chosenRecord = matchedPosts[0];
+      if (preferredSource === 'australia' && matchedPostsDirect.length > 0) {
+        chosenRecord = matchedPostsDirect[0];
         chosenSource = 'australia';
-      } else if (preferredSource === 'canada' && matchedCanada.length > 0) {
-        chosenRecord = matchedCanada[0];
+      } else if (preferredSource === 'canada' && matchedCanadaDirect.length > 0) {
+        if (targetSection) {
+          const catMatch = matchedCanadaDirect.find(
+            (c) =>
+              (c.categoryType && c.categoryType.toLowerCase().includes(targetSection)) ||
+              (c.mainTitle && c.mainTitle.toLowerCase().includes(targetSection))
+          );
+          chosenRecord = catMatch || matchedCanadaDirect[0];
+        } else {
+          chosenRecord = matchedCanadaDirect[0];
+        }
         chosenSource = 'canada';
       } else if (matchedCanada.length > 0) {
-        // If targetSection requested, see if any Canada doc matches category
         if (targetSection) {
           const catMatch = matchedCanada.find(
             (c) =>
@@ -1156,10 +1639,9 @@ async function startServer() {
       }
 
       if (chosenRecord) {
-        // 3. If a specific section was targeted, sort/flag the matching attached document as primary
+        // 3. If a specific section was targeted, move matching attached document to top while keeping ALL others in serial!
         if (targetSection && allAttached.length > 0) {
           let matchedIdx = -1;
-
           allAttached.forEach((att, idx) => {
             if (isSectionMatch(att.sectionTag, targetSection) || isSectionMatch(att.name, targetSection)) {
               if (matchedIdx === -1) matchedIdx = idx;
@@ -1167,13 +1649,11 @@ async function startServer() {
           });
 
           if (matchedIdx > 0) {
-            // Move matched document to the first position so it opens directly in the viewer
             const [targetDoc] = allAttached.splice(matchedIdx, 1);
             allAttached.unshift(targetDoc);
           }
         }
 
-        // Ensure the top document is marked primary
         if (allAttached.length > 0) {
           allAttached.forEach((att, idx) => {
             att.isPrimary = idx === 0;

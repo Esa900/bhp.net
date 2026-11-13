@@ -51,7 +51,14 @@ async function extractPdfBytes(dataUrl: string): Promise<Uint8Array | null> {
     normalized.startsWith('/')
   ) {
     try {
-      const res = await fetch(normalized);
+      const res = await fetch(normalized, { cache: 'no-store' });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} loading PDF`);
+      }
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (ct.includes('text/html')) {
+        throw new Error('Server returned HTML instead of PDF file');
+      }
       const buffer = await res.arrayBuffer();
       return new Uint8Array(buffer);
     } catch (err) {
@@ -79,6 +86,9 @@ async function extractPdfBytes(dataUrl: string): Promise<Uint8Array | null> {
   try {
     if (normalized.startsWith('data:')) {
       const res = await fetch(normalized);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} decoding data URI`);
+      }
       const buffer = await res.arrayBuffer();
       return new Uint8Array(buffer);
     }

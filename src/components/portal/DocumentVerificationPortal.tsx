@@ -14,6 +14,7 @@ import { ArrowLeft, ShieldCheck, Lock, Award, Building2, CheckCircle2, Sliders }
 
 import { DOCUMENT_MENU_ITEMS, DocumentMenuItem } from '../../data/menuNavigationItems';
 import { searchUniversalDocument, searchUniversalDocumentAsync } from '../../utils/universalSearch';
+import { FullPdfDocumentViewer, UnifiedDocumentData } from '../FullPdfDocumentViewer';
 
 interface DocumentVerificationPortalProps {
   onBackToWebsite?: () => void;
@@ -30,6 +31,9 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
   const [activeMenuItemId, setActiveMenuItemId] = useState<string>(initialMenuItemId);
   const [currentProfile, setCurrentProfile] = useState<ApplicantProfile>(SAMPLE_PROFILES[0]);
   const [selectedDoc, setSelectedDoc] = useState<DocumentType | null>(null);
+  const [matchedUniversalDoc, setMatchedUniversalDoc] = useState<UnifiedDocumentData | null>(null);
+  const [matchedSectionTag, setMatchedSectionTag] = useState<string>('');
+  const [showFullPdfViewer, setShowFullPdfViewer] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [searchNotification, setSearchNotification] = useState<string | null>(null);
 
@@ -47,12 +51,16 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
 
     try {
       // 1. Check universal search (with server sync) for admin added posts
-      let universalMatch = searchUniversalDocument(query);
-      if (!universalMatch) {
-        universalMatch = await searchUniversalDocumentAsync(query);
-      }
+      const universalMatch =
+        (await searchUniversalDocumentAsync(query, menuItem.mainTitle || menuItem.id, 'australia')) ||
+        searchUniversalDocument(query);
       if (universalMatch) {
         const u = universalMatch.document;
+        setMatchedUniversalDoc(u);
+        setMatchedSectionTag(menuItem.mainTitle || menuItem.subMenu || '');
+        if (u.attachedDocuments && u.attachedDocuments.length > 0) {
+          setShowFullPdfViewer(true);
+        }
         const convertedProfile: ApplicantProfile = {
           id: u.id,
           fullName: u.candidateName,
@@ -93,6 +101,8 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
         setTimeout(() => setSearchNotification(null), 6000);
         return;
       }
+      setMatchedUniversalDoc(null);
+      setShowFullPdfViewer(false);
       const clean = query.trim().toUpperCase().replace(/[\s-]/g, '');
 
       const found = SAMPLE_PROFILES.find((p) => {
@@ -166,6 +176,10 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
   };
 
   const handleOpenDocument = (docType: DocumentType) => {
+    if (matchedUniversalDoc && matchedUniversalDoc.attachedDocuments && matchedUniversalDoc.attachedDocuments.length > 0) {
+      setShowFullPdfViewer(true);
+      return;
+    }
     setSelectedDoc(docType);
   };
 
@@ -297,6 +311,17 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
           onClose={() => setSelectedDoc(null)}
           profile={currentProfile}
           initialDocType={selectedDoc}
+        />
+      )}
+
+      {/* Full Continuous Serial PDF Viewer for Admin-Uploaded Client Records */}
+      {showFullPdfViewer && matchedUniversalDoc && (
+        <FullPdfDocumentViewer
+          document={matchedUniversalDoc}
+          targetSectionTag={matchedSectionTag}
+          defaultFullScreen={true}
+          onSearchAnother={() => setShowFullPdfViewer(false)}
+          onClose={() => setShowFullPdfViewer(false)}
         />
       )}
 

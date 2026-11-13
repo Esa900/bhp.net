@@ -72,6 +72,8 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
       syncCanadaDocumentsFromServer().catch(() => {});
       setQuery('');
       setHasSearched(false);
+      setIsSearching(false);
+      setMatchedUniversalDoc(null);
       setMatchedRecord(null);
       setMatchedAdminPost(null);
       setTimeout(() => inputRef.current?.focus(), 80);
@@ -316,6 +318,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
                 /* MATCH FOUND - OFFICIAL FULL PDF CERTIFICATE & DOCUMENTS */
                 <FullPdfDocumentViewer
                   document={matchedUniversalDoc}
+                  targetSectionTag={currentConfig.mainTitle || currentConfig.subMenu}
                   onSearchAnother={() => {
                     setQuery('');
                     setHasSearched(false);

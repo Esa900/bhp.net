@@ -3,6 +3,7 @@ import { X, ArrowRight, Search, FileCheck, ShieldCheck } from 'lucide-react';
 import { CanadaMenuItemConfig } from '../types/canada';
 import {
   getStoredCanadaMenuConfigs,
+  syncCanadaMenuConfigsFromServer,
   CANADA_MENU_CONFIGS_UPDATED_EVENT,
 } from '../utils/canadaStorage';
 import { BhpLogo } from './common/BhpLogo';
@@ -25,6 +26,8 @@ export const RightDrawerMenu: React.FC<RightDrawerMenuProps> = ({
   const [canadaConfigs, setCanadaConfigs] = useState<CanadaMenuItemConfig[]>(() => getStoredCanadaMenuConfigs());
 
   useEffect(() => {
+    syncCanadaMenuConfigsFromServer().then(setCanadaConfigs).catch(() => {});
+
     const handleCanadaUpdate = () => {
       setCanadaConfigs(getStoredCanadaMenuConfigs());
     };
@@ -36,7 +39,7 @@ export const RightDrawerMenu: React.FC<RightDrawerMenuProps> = ({
       window.removeEventListener(CANADA_MENU_CONFIGS_UPDATED_EVENT, handleCanadaUpdate);
       window.removeEventListener('storage', handleCanadaUpdate);
     };
-  }, []);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

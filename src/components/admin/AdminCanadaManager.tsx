@@ -32,18 +32,17 @@ import { AttachedDoc } from '../../types';
 import { CanadaDocumentRecord, CanadaMenuItemConfig, CanadaCategoryType } from '../../types/canada';
 import {
   getStoredCanadaDocuments,
-  addCanadaDocument,
-  updateCanadaDocument,
-  deleteCanadaDocument,
-  deleteAllCanadaDocuments,
-  resetCanadaDocuments,
-  saveCanadaDocumentsAsync,
+  upsertCanadaDocumentAsync,
+  deleteCanadaDocumentAsync,
+  deleteAllCanadaDocumentsAsync,
+  syncCanadaDocumentsFromServer,
   CANADA_DOCUMENTS_UPDATED_EVENT,
   getStoredCanadaMenuConfigs,
   addStoredCanadaMenuConfig,
   updateStoredCanadaMenuConfig,
   deleteStoredCanadaMenuConfig,
   resetStoredCanadaMenuConfigs,
+  syncCanadaMenuConfigsFromServer,
   CANADA_MENU_CONFIGS_UPDATED_EVENT,
 } from '../../utils/canadaStorage';
 import {
@@ -177,8 +176,11 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     reader.readAsDataURL(file);
   };
 
-  // Sync event listeners
+  // Sync event listeners & initial server fetch
   useEffect(() => {
+    syncCanadaDocumentsFromServer().then(setDocuments).catch(() => {});
+    syncCanadaMenuConfigsFromServer().then(setMenuConfigs).catch(() => {});
+
     const handleDocsUpdate = () => {
       setDocuments(getStoredCanadaDocuments());
     };
@@ -368,7 +370,11 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       docForm.verificationIdNo?.trim() ||
       `REF-CA-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    const primaryPdf = docForm.attachedDocuments[0];
+    const normalizedAttached = docForm.attachedDocuments.map((att) => ({
+      ...att,
+      sectionTag: att.sectionTag || docForm.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)',
+    }));
+    const primaryPdf = normalizedAttached[0];
 
     const postPayload = {
       ...docForm,
@@ -381,44 +387,44 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       transitionIdNo: docForm.transitionIdNo?.trim() || baseRef,
       documentFileName: primaryPdf?.name || docForm.documentFileName || '',
       documentFileUrl: primaryPdf?.dataUrl || docForm.documentFileUrl || '',
-      attachedDocuments: docForm.attachedDocuments,
+      attachedDocuments: normalizedAttached,
     };
 
-    const currentDocs = getStoredCanadaDocuments();
-    let updatedDocs: CanadaDocumentRecord[];
+    const existingDoc = editingDocId ? documents.find((d) => d.id === editingDocId) : null;
+    const recordToSave: CanadaDocumentRecord = editingDocId
+      ? {
+          ...(existingDoc || {}),
+          ...postPayload,
+          id: editingDocId,
+          createdAt: existingDoc?.createdAt || new Date().toISOString(),
+        }
+      : {
+          ...postPayload,
+          id: `ca-doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          createdAt: new Date().toISOString(),
+        };
 
+    const syncedDocs = await upsertCanadaDocumentAsync(recordToSave);
     if (editingDocId) {
-      const idx = currentDocs.findIndex((d) => d.id === editingDocId);
-      if (idx !== -1) {
-        currentDocs[idx] = { ...currentDocs[idx], ...postPayload };
-      }
-      updatedDocs = [...currentDocs];
-      await saveCanadaDocumentsAsync(updatedDocs);
-      showToast(`Canada post for "${candidateName}" updated with ${docForm.attachedDocuments.length} PDF(s).`);
+      showToast(`Canada post for "${candidateName}" updated with ${normalizedAttached.length} PDF(s).`);
     } else {
-      const newRec: CanadaDocumentRecord = {
-        ...postPayload,
-        id: `ca-doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        createdAt: new Date().toISOString(),
-      };
-      updatedDocs = [newRec, ...currentDocs];
-      await saveCanadaDocumentsAsync(updatedDocs);
-      showToast(`Canada post published with ${docForm.attachedDocuments.length} PDF(s)! Searchable Ref: "${postPayload.tinOrRef}"`);
+      showToast(`Canada post published with ${normalizedAttached.length} PDF(s)! Searchable Ref: "${postPayload.tinOrRef}"`);
     }
 
-    setDocuments(updatedDocs);
+    setDocuments(syncedDocs);
+    setEditingDocId(null);
     setActiveTab('all-posts');
   };
 
-  const handleDeletePost = (id: string, name: string) => {
-    deleteCanadaDocument(id);
-    setDocuments(getStoredCanadaDocuments());
+  const handleDeletePost = async (id: string, name: string) => {
+    const synced = await deleteCanadaDocumentAsync(id);
+    setDocuments(synced);
     showToast(`Canada post for "${name}" deleted.`);
   };
 
-  const handleDeleteAllCanadaPosts = () => {
+  const handleDeleteAllCanadaPosts = async () => {
     if (window.confirm('Are you sure you want to delete all Canada posts? All items will be permanently removed.')) {
-      deleteAllCanadaDocuments();
+      await deleteAllCanadaDocumentsAsync();
       setDocuments([]);
       showToast('All Canada posts removed successfully.');
     }
@@ -430,15 +436,10 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     if (!files || files.length === 0) return;
 
     let loaded = 0;
-    const newDocs: AttachedDoc[] = [];
+    const newDocs: Omit<AttachedDoc, 'sectionTag'>[] = [];
     const filesList = Array.from(files) as File[];
 
     filesList.forEach((file) => {
-      const isPdf =
-        file.name.toLowerCase().endsWith('.pdf') ||
-        file.type.includes('pdf') ||
-        file.type.includes('application/pdf');
-      const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : file.type.includes('image') ? 'image' : 'other';
       const sizeStr =
         file.size > 1024 * 1024
           ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
@@ -446,7 +447,15 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
 
       const reader = new FileReader();
       reader.onload = () => {
-        const result = reader.result as string;
+        const result = (reader.result as string) || '';
+        const isPdf =
+          file.name.toLowerCase().endsWith('.pdf') ||
+          file.type.includes('pdf') ||
+          file.type.includes('application/pdf') ||
+          result.includes('application/pdf') ||
+          result.includes('JVBERi');
+        const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : file.type.includes('image') ? 'image' : 'other';
+
         if (result) {
           newDocs.push({
             id: `ca-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -460,7 +469,13 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
         loaded++;
         if (loaded === filesList.length) {
           setDocForm((prev) => {
-            const updated = [...prev.attachedDocuments, ...newDocs];
+            const defaultTag = prev.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)';
+            const taggedDocs: AttachedDoc[] = newDocs.map((d) => ({
+              ...d,
+              sectionTag: defaultTag,
+            }));
+            const updated = [...prev.attachedDocuments, ...taggedDocs];
+            showToast(`Successfully added ${newDocs.length} PDF(s)! Total: ${updated.length} PDFs`);
             return {
               ...prev,
               attachedDocuments: updated,
@@ -468,7 +483,6 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
               documentFileUrl: updated[0]?.dataUrl || prev.documentFileUrl,
             };
           });
-          showToast(`Successfully added ${newDocs.length} PDF(s)! Total: ${docForm.attachedDocuments.length + newDocs.length} PDFs`);
         }
       };
       reader.readAsDataURL(file);
@@ -562,21 +576,41 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       quickPdfDoc.id;
 
     try {
-      let latestUpdatedDoc: CanadaDocumentRecord | null = null;
       for (let i = 0; i < quickSelectedFiles.length; i++) {
         const f = quickSelectedFiles[i];
+        let uploadedUrl = f.dataUrl;
+        if (uploadedUrl && uploadedUrl.startsWith('data:')) {
+          try {
+            const upRes = await fetch('/api/upload-file', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: f.name,
+                fileData: uploadedUrl,
+                type: f.type,
+              }),
+            });
+            if (upRes.ok) {
+              const upJson = await upRes.json();
+              if (upJson.fileUrl) {
+                uploadedUrl = upJson.fileUrl;
+              }
+            }
+          } catch (_) {}
+        }
+
         const newDoc: AttachedDoc = {
           id: `att-ca-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           name: f.name,
           size: f.size,
           type: f.type,
-          dataUrl: f.dataUrl,
+          dataUrl: uploadedUrl,
           sectionTag: finalSection,
           isPrimary: i === 0 ? quickIsPrimary : false,
           uploadDate: new Date().toISOString().split('T')[0],
         };
 
-        const res = await fetch('/api/canada-documents/add-attached-doc', {
+        await fetch('/api/canada-documents/add-attached-doc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -587,43 +621,11 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
             doc: newDoc,
           }),
         });
-
-        if (res.ok) {
-          const json = await res.json();
-          if (json.document) {
-            latestUpdatedDoc = json.document;
-          }
-        }
       }
 
-      // Update state & local storage
-      const currentDocs = getStoredCanadaDocuments();
-      const updated = currentDocs.map((d) => {
-        if (d.id === quickPdfDoc.id) {
-          return (
-            latestUpdatedDoc || {
-              ...d,
-              attachedDocuments: [
-                ...(d.attachedDocuments || []),
-                ...quickSelectedFiles.map((f, i) => ({
-                  id: `att-ca-${Date.now()}-${i}`,
-                  name: f.name,
-                  size: f.size,
-                  type: f.type,
-                  dataUrl: f.dataUrl,
-                  sectionTag: finalSection,
-                  isPrimary: i === 0 ? quickIsPrimary : false,
-                  uploadDate: new Date().toISOString().split('T')[0],
-                })),
-              ],
-            }
-          );
-        }
-        return d;
-      });
-
-      await saveCanadaDocumentsAsync(updated);
-      setDocuments(updated);
+      // Refresh merged docs from server so records created on other devices are preserved
+      const syncedDocs = await syncCanadaDocumentsFromServer();
+      setDocuments(syncedDocs);
       showToast(
         `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved to central database.`
       );

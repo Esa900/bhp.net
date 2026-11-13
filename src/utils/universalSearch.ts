@@ -28,183 +28,142 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
   const cleanQuery = queryTrimmed.replace(/[-\s_./#:]/g, '');
   if (!cleanQuery) return null;
 
-  // 1. SEARCH AUSTRALIA ADMIN POSTS
-  try {
-    const adminPosts = getStoredAdminPosts();
-    // 1a. Exact ID, Ref, Verification, Passport match
-    const exactPost = adminPosts.find((p) => {
-      const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-      const pId = (p.id || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-      const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-      const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-      return (
-        pRef === cleanQuery ||
-        pId === cleanQuery ||
-        pVrf === cleanQuery ||
-        pPass === cleanQuery
-      );
-    });
-    if (exactPost) {
-      return {
-        document: postToUnifiedDoc(exactPost, 'australia'),
-        source: 'australia',
-        rawRecord: exactPost,
-      };
-    }
-
-    // 1b. Partial Ref, ID, Passport, or pure digits match
-    const digitsQuery = cleanQuery.replace(/\D/g, '');
-    const partialPost = adminPosts.find((p) => {
-      const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-      const pId = (p.id || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-      const pVrf = (p.verificationIdNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-      const pPass = (p.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-
-      if (
-        (pRef && (pRef.includes(cleanQuery) || cleanQuery.includes(pRef))) ||
-        (pId && (pId.includes(cleanQuery) || cleanQuery.includes(pId))) ||
-        (pVrf && (pVrf.includes(cleanQuery) || cleanQuery.includes(pVrf))) ||
-        (pPass && (pPass.includes(cleanQuery) || cleanQuery.includes(pPass)))
-      ) {
+  const digitsQuery = cleanQuery.replace(/\D/g, '');
+  const matchesVal = (val?: string) => {
+    if (!val) return false;
+    const clean = val.toLowerCase().replace(/[-\s_./#:]/g, '');
+    if (clean === cleanQuery || clean.includes(cleanQuery)) return true;
+    if (clean.length >= 6 && cleanQuery.includes(clean)) return true;
+    if (digitsQuery && digitsQuery.length >= 4) {
+      const valDigits = clean.replace(/\D/g, '');
+      if (valDigits && (valDigits === digitsQuery || valDigits.includes(digitsQuery))) {
         return true;
       }
-
-      if (digitsQuery && digitsQuery.length >= 3) {
-        const refDigits = pRef.replace(/\D/g, '');
-        const vrfDigits = pVrf.replace(/\D/g, '');
-        const passDigits = pPass.replace(/\D/g, '');
-        const idDigits = pId.replace(/\D/g, '');
-        if (
-          (refDigits && (refDigits === digitsQuery || refDigits.includes(digitsQuery) || digitsQuery.includes(refDigits))) ||
-          (vrfDigits && (vrfDigits === digitsQuery || vrfDigits.includes(digitsQuery) || digitsQuery.includes(vrfDigits))) ||
-          (passDigits && (passDigits === digitsQuery || passDigits.includes(digitsQuery))) ||
-          (idDigits && (idDigits === digitsQuery || idDigits.includes(digitsQuery)))
-        ) {
-          return true;
-        }
-      }
-
-      return false;
-    });
-    if (partialPost) {
-      return {
-        document: postToUnifiedDoc(partialPost, 'australia'),
-        source: 'australia',
-        rawRecord: partialPost,
-      };
     }
+    return false;
+  };
 
-    // 1c. Candidate Name match
-    const candPost = adminPosts.find((p) => {
-      if (!p.candidateName) return false;
-      const cleanCand = p.candidateName.toLowerCase().replace(/[-\s_./#:]/g, '');
-      return (
-        p.candidateName.toLowerCase().includes(queryTrimmed) ||
-        cleanCand.includes(cleanQuery)
-      );
-    });
-    if (candPost) {
-      return {
-        document: postToUnifiedDoc(candPost, 'australia'),
-        source: 'australia',
-        rawRecord: candPost,
-      };
-    }
-
-    // 1d. Title or Attached Document name match
-    const titlePost = adminPosts.find((p) => {
-      const cleanTitle = (p.title || '').toLowerCase().replace(/[-\s_./#:]/g, '');
-      const hasDoc = p.attachedDocuments?.some((doc) =>
-        (doc.name || '').toLowerCase().replace(/[-\s_./#:]/g, '').includes(cleanQuery)
-      );
-      return cleanTitle.includes(cleanQuery) || hasDoc;
-    });
-    if (titlePost) {
-      return {
-        document: postToUnifiedDoc(titlePost, 'australia'),
-        source: 'australia',
-        rawRecord: titlePost,
-      };
-    }
-  } catch (err) {
-    console.warn('Error querying Australia posts:', err);
-  }
-
-  // 2. SEARCH CANADA ADMIN DOCUMENTS
   try {
+    const adminPosts = getStoredAdminPosts();
     const canadaDocs = getStoredCanadaDocuments();
-    // 2a. Exact match
-    const exactCa = canadaDocs.find((c) => {
-      const match = (val?: string) => {
-        if (!val) return false;
-        return val.toLowerCase().replace(/[-\s_./#:]/g, '') === cleanQuery;
-      };
-      return (
-        match(c.tinOrRef) ||
-        match(c.idNumber) ||
-        match(c.verificationIdNo) ||
-        match(c.transitionIdNo) ||
-        match(c.referenceNo) ||
-        match(c.officialDocNumber) ||
-        match(c.lmiaNumber) ||
-        match(c.passportNumber) ||
-        match(c.id)
-      );
-    });
-    if (exactCa) {
-      return {
-        document: canadaRecordToUnifiedDoc(exactCa),
-        source: 'canada',
-        rawRecord: exactCa,
-      };
-    }
 
-    // 2b. Partial match
-    const partialCa = canadaDocs.find((c) => {
-      const match = (val?: string) => {
-        if (!val) return false;
-        const cleanVal = val.toLowerCase().replace(/[-\s_./#:]/g, '');
-        return cleanVal.includes(cleanQuery) || cleanQuery.includes(cleanVal);
-      };
+    const matchedPostsDirect = adminPosts.filter((p) => {
+      const cand = (p.candidateName || '').toLowerCase();
+      const title = (p.title || '').toLowerCase();
       return (
-        match(c.tinOrRef) ||
-        match(c.idNumber) ||
-        match(c.verificationIdNo) ||
-        match(c.transitionIdNo) ||
-        match(c.referenceNo) ||
-        match(c.officialDocNumber) ||
-        match(c.lmiaNumber) ||
-        match(c.passportNumber) ||
-        match(c.id) ||
-        match(c.mainTitle)
+        matchesVal(p.refNumber) ||
+        matchesVal(p.verificationIdNo) ||
+        matchesVal(p.passportNumber) ||
+        matchesVal(p.id) ||
+        cand.includes(queryTrimmed) ||
+        matchesVal(cand) ||
+        title.includes(queryTrimmed) ||
+        matchesVal(title) ||
+        Boolean(p.attachedDocuments?.some((d) => matchesVal(d.name)))
       );
     });
-    if (partialCa) {
-      return {
-        document: canadaRecordToUnifiedDoc(partialCa),
-        source: 'canada',
-        rawRecord: partialCa,
-      };
-    }
 
-    // 2c. Candidate Name match
-    const candCa = canadaDocs.find((c) => {
-      if (!c.candidateName) return false;
-      const cleanCand = c.candidateName.toLowerCase().replace(/[-\s_./#:]/g, '');
+    const matchedCanadaDirect = canadaDocs.filter((c) => {
+      const cand = (c.candidateName || '').toLowerCase();
       return (
-        c.candidateName.toLowerCase().includes(queryTrimmed) ||
-        cleanCand.includes(cleanQuery)
+        matchesVal(c.tinOrRef) ||
+        matchesVal(c.idNumber) ||
+        matchesVal(c.verificationIdNo) ||
+        matchesVal(c.transitionIdNo) ||
+        matchesVal(c.referenceNo) ||
+        matchesVal(c.officialDocNumber) ||
+        matchesVal(c.lmiaNumber) ||
+        matchesVal(c.passportNumber) ||
+        matchesVal(c.id) ||
+        cand.includes(queryTrimmed) ||
+        matchesVal(cand) ||
+        matchesVal(c.mainTitle)
       );
     });
-    if (candCa) {
+
+    if (matchedPostsDirect.length > 0 || matchedCanadaDirect.length > 0) {
+      const passports = new Set<string>();
+      const names = new Set<string>();
+      const refs = new Set<string>();
+
+      const collectKeys = (r: any) => {
+        const pass = (r.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        if (pass.length >= 5) passports.add(pass);
+        const name = (r.candidateName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        if (name.length >= 5) names.add(name);
+        [r.refNumber, r.tinOrRef, r.referenceNo, r.idNumber].forEach((v) => {
+          const cv = (v || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+          if (cv.length >= 4) refs.add(cv);
+        });
+      };
+
+      matchedPostsDirect.forEach(collectKeys);
+      matchedCanadaDirect.forEach(collectKeys);
+
+      const belongsToSameClient = (r: any) => {
+        const rPass = (r.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const rName = (r.candidateName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+        const rRefs = [r.refNumber, r.tinOrRef, r.referenceNo, r.idNumber]
+          .map((v) => (v || '').toLowerCase().replace(/[-\s_./#:]/g, ''))
+          .filter((v) => v.length >= 4);
+        if (rRefs.some((k) => refs.has(k))) return true;
+        if (rPass && passports.has(rPass) && (!rName || names.size === 0 || names.has(rName))) return true;
+        if (rName && names.has(rName)) return true;
+        return false;
+      };
+
+      const allPosts = [...matchedPostsDirect];
+      adminPosts.forEach((p) => {
+        if (!allPosts.some((m) => m.id === p.id) && belongsToSameClient(p)) allPosts.push(p);
+      });
+
+      const allCanada = [...matchedCanadaDirect];
+      canadaDocs.forEach((c) => {
+        if (!allCanada.some((m) => m.id === c.id) && belongsToSameClient(c)) allCanada.push(c);
+      });
+
+      const baseUnified =
+        matchedCanadaDirect.length > 0
+          ? canadaRecordToUnifiedDoc(matchedCanadaDirect[0])
+          : matchedPostsDirect.length > 0
+          ? postToUnifiedDoc(matchedPostsDirect[0], 'australia')
+          : allCanada.length > 0
+          ? canadaRecordToUnifiedDoc(allCanada[0])
+          : postToUnifiedDoc(allPosts[0], 'australia');
+
+      const seenIds = new Set<string>();
+      const seenKeys = new Set<string>();
+      const combinedAttached: any[] = [];
+
+      const pushDoc = (att: any) => {
+        if (!att || !att.dataUrl || att.dataUrl === '#') return;
+        const key = `${att.sectionTag || 'default'}_${att.name || ''}_${att.dataUrl || ''}`.toLowerCase();
+        if (att.id && seenIds.has(att.id)) return;
+        if (seenKeys.has(key)) return;
+        if (att.id) seenIds.add(att.id);
+        seenKeys.add(key);
+        combinedAttached.push(att);
+      };
+
+      allCanada.forEach((c) => {
+        const u = canadaRecordToUnifiedDoc(c);
+        (u.attachedDocuments || []).forEach(pushDoc);
+      });
+      allPosts.forEach((p) => {
+        const u = postToUnifiedDoc(p, 'australia');
+        (u.attachedDocuments || []).forEach(pushDoc);
+      });
+
+      baseUnified.attachedDocuments = combinedAttached.length > 0 ? combinedAttached : baseUnified.attachedDocuments;
+
       return {
-        document: canadaRecordToUnifiedDoc(candCa),
-        source: 'canada',
-        rawRecord: candCa,
+        document: baseUnified,
+        source: matchedCanadaDirect.length > 0 || (matchedPostsDirect.length === 0 && allCanada.length > 0) ? 'canada' : 'australia',
+        rawRecord: matchedCanadaDirect[0] || matchedPostsDirect[0] || allCanada[0] || allPosts[0],
       };
     }
   } catch (err) {
-    console.warn('Error querying Canada docs:', err);
+    console.warn('Error querying local posts/docs:', err);
   }
 
   // 3. SEARCH SAMPLE PROFILES

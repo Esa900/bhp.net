@@ -117,12 +117,14 @@ export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.posts)) {
+        const deletedIdsSet = new Set<string>(Array.isArray(data.deletedIds) ? data.deletedIds : []);
         const local = getStoredAdminPosts();
         const mergedMap = new Map<string, AdminPost>();
+        const postsNeedingUpload: AdminPost[] = [];
 
         // 1. Add server posts (exclude demo posts)
         data.posts.forEach((p: AdminPost) => {
-          if (p && p.id && !isDemoPost(p)) {
+          if (p && p.id && !isDemoPost(p) && !deletedIdsSet.has(p.id)) {
             const localPost = local.find((l) => l.id === p.id);
             if (localPost && Array.isArray(localPost.attachedDocuments) && localPost.attachedDocuments.length > 0) {
               const serverAtt = Array.isArray(p.attachedDocuments) ? p.attachedDocuments : [];
@@ -136,23 +138,25 @@ export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
                 return !seenKeys.has(key);
               });
               const combinedAttached = [...serverAtt, ...missingFromLocal];
-              if (missingFromLocal.length > 0) hasNewLocalPosts = true;
-              mergedMap.set(p.id, {
+              const combinedPost = {
                 ...p,
                 attachedDocuments: combinedAttached,
-              });
+              };
+              if (missingFromLocal.length > 0) {
+                postsNeedingUpload.push(combinedPost);
+              }
+              mergedMap.set(p.id, combinedPost);
             } else {
               mergedMap.set(p.id, p);
             }
           }
         });
 
-        // 2. Add local posts (exclude demo posts)
-        let hasNewLocalPosts = false;
+        // 2. Add genuinely new local-only posts (exclude demo posts and server-deleted tombstones)
         local.forEach((p: AdminPost) => {
-          if (p && p.id && !isDemoPost(p) && !mergedMap.has(p.id)) {
+          if (p && p.id && !isDemoPost(p) && !deletedIdsSet.has(p.id) && !mergedMap.has(p.id)) {
             mergedMap.set(p.id, p);
-            hasNewLocalPosts = true;
+            postsNeedingUpload.push(p);
           }
         });
 
@@ -165,13 +169,17 @@ export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
           console.warn('Local storage cache update error:', e);
         }
 
-        // If local had posts that server was missing, push complete merged set to server
-        if (hasNewLocalPosts) {
-          fetch('/api/posts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(mergedList),
-          }).catch(console.error);
+        // Push only missing local posts individually via upsert so server records are never clobbered
+        if (postsNeedingUpload.length > 0) {
+          Promise.allSettled(
+            postsNeedingUpload.map((post) =>
+              fetch('/api/posts/upsert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ post }),
+              })
+            )
+          ).catch(console.error);
         }
 
         window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: mergedList }));
@@ -229,89 +237,182 @@ export const getStoredAdminPosts = (): AdminPost[] => {
   return INITIAL_DEFAULT_POSTS;
 };
 
-/**
- * Save Admin Posts to Memory, IndexedDB, LocalStorage and push to Server with async confirmation
- */
-export const saveStoredAdminPostsAsync = async (posts: AdminPost[]): Promise<boolean> => {
-  // Pre-process: if any attached document or image has base64 dataUrl, upload to server disk
-  const sanitizedPosts = await Promise.all(
-    posts.map(async (p) => {
-      const cleanPost = { ...p };
+async function sanitizeAndUploadPostFiles(post: AdminPost): Promise<AdminPost> {
+  const cleanPost: AdminPost = { ...post };
 
-      if (cleanPost.imageUrl && cleanPost.imageUrl.startsWith('data:')) {
-        try {
-          const upRes = await fetch('/api/upload-file', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fileName: 'post_cover.png',
-              fileData: cleanPost.imageUrl,
-              type: 'image',
-            }),
-          });
-          if (upRes.ok) {
-            const upJson = await upRes.json();
-            if (upJson.fileUrl) {
-              cleanPost.imageUrl = upJson.fileUrl;
-            }
-          }
-        } catch (_) {}
+  if (cleanPost.candidatePhotoUrl && cleanPost.candidatePhotoUrl.startsWith('data:')) {
+    try {
+      const upRes = await fetch('/api/upload-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'candidate_photo.png',
+          fileData: cleanPost.candidatePhotoUrl,
+          type: 'image',
+        }),
+      });
+      if (upRes.ok) {
+        const upJson = await upRes.json();
+        if (upJson.fileUrl) {
+          cleanPost.candidatePhotoUrl = upJson.fileUrl;
+        }
       }
-
-      if (cleanPost.attachedDocuments && cleanPost.attachedDocuments.length > 0) {
-        const cleanAttached = await Promise.all(
-          cleanPost.attachedDocuments.map(async (att) => {
-            if (att.dataUrl && att.dataUrl.startsWith('data:')) {
-              try {
-                const upRes = await fetch('/api/upload-file', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    fileName: att.name || 'document.pdf',
-                    fileData: att.dataUrl,
-                    type: att.type,
-                  }),
-                });
-                if (upRes.ok) {
-                  const upJson = await upRes.json();
-                  if (upJson.fileUrl) {
-                    return { ...att, dataUrl: upJson.fileUrl };
-                  }
-                }
-              } catch (_) {}
-            }
-            return att;
-          })
-        );
-        cleanPost.attachedDocuments = cleanAttached;
-      }
-      return cleanPost;
-    })
-  );
-
-  if (typeof window !== 'undefined') {
-    (window as any).__bhp_admin_posts_cache = sanitizedPosts;
+    } catch (_) {}
   }
 
-  // 1. Save full documents to high-capacity IndexedDB (No 5MB limit!)
-  setLargeItem(POSTS_STORAGE_KEY, sanitizedPosts).catch((err) => {
+  if (cleanPost.imageUrl && cleanPost.imageUrl.startsWith('data:')) {
+    try {
+      const upRes = await fetch('/api/upload-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'post_cover.png',
+          fileData: cleanPost.imageUrl,
+          type: 'image',
+        }),
+      });
+      if (upRes.ok) {
+        const upJson = await upRes.json();
+        if (upJson.fileUrl) {
+          cleanPost.imageUrl = upJson.fileUrl;
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (Array.isArray(cleanPost.galleryImages) && cleanPost.galleryImages.length > 0) {
+    cleanPost.galleryImages = await Promise.all(
+      cleanPost.galleryImages.map(async (img, idx) => {
+        if (img && img.startsWith('data:')) {
+          try {
+            const upRes = await fetch('/api/upload-file', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: `gallery_${idx + 1}.png`,
+                fileData: img,
+                type: 'image',
+              }),
+            });
+            if (upRes.ok) {
+              const upJson = await upRes.json();
+              if (upJson.fileUrl) return upJson.fileUrl;
+            }
+          } catch (_) {}
+        }
+        return img;
+      })
+    );
+  }
+
+  if (cleanPost.attachedDocuments && cleanPost.attachedDocuments.length > 0) {
+    const cleanAttached = await Promise.all(
+      cleanPost.attachedDocuments.map(async (att) => {
+        const fallbackSection = att.sectionTag || cleanPost.category || 'Australia Work Permit Documents';
+        const isPdf =
+          att.type === 'pdf' ||
+          att.name.toLowerCase().endsWith('.pdf') ||
+          Boolean(att.dataUrl && (att.dataUrl.includes('application/pdf') || att.dataUrl.includes('JVBERi')));
+        const nextType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : att.type;
+
+        if (att.dataUrl && att.dataUrl.startsWith('data:')) {
+          try {
+            const upRes = await fetch('/api/upload-file', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: att.name || 'document.pdf',
+                fileData: att.dataUrl,
+                type: nextType,
+              }),
+            });
+            if (upRes.ok) {
+              const upJson = await upRes.json();
+              if (upJson.fileUrl) {
+                return {
+                  ...att,
+                  type: nextType,
+                  sectionTag: fallbackSection,
+                  dataUrl: upJson.fileUrl,
+                };
+              }
+            }
+          } catch (_) {}
+        }
+        return {
+          ...att,
+          type: nextType,
+          sectionTag: fallbackSection,
+        };
+      })
+    );
+    cleanPost.attachedDocuments = cleanAttached;
+  }
+
+  return cleanPost;
+}
+
+function updateLocalPostsCache(posts: AdminPost[]) {
+  if (typeof window !== 'undefined') {
+    (window as any).__bhp_admin_posts_cache = posts;
+  }
+  setLargeItem(POSTS_STORAGE_KEY, posts).catch((err) => {
     console.warn('IndexedDB save warning:', err);
   });
-
-  // 2. Safe local storage save without ever destroying dataUrl
   try {
-    localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(sanitizedPosts));
+    localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
   } catch (err) {
     console.warn('LocalStorage quota reached; full data preserved safely in IndexedDB and memory cache.');
   }
-
-  // 3. Broadcast local update event
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: sanitizedPosts }));
+    window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: posts }));
     window.dispatchEvent(new Event('storage'));
   }
+}
 
-  // 4. PERSIST TO SERVER
+/**
+ * Atomic single-post create/update across devices (never overwrites posts added on another admin device)
+ */
+export const upsertStoredAdminPostAsync = async (post: AdminPost): Promise<AdminPost[]> => {
+  const sanitized = await sanitizeAndUploadPostFiles(post);
+  const current = getStoredAdminPosts();
+  const idx = current.findIndex((p) => p.id === sanitized.id);
+  let nextList =
+    idx !== -1
+      ? current.map((p, i) => (i === idx ? { ...p, ...sanitized } : p))
+      : [sanitized, ...current];
+
+  updateLocalPostsCache(nextList);
+
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/posts/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post: sanitized }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.posts)) {
+          nextList = json.posts;
+          updateLocalPostsCache(nextList);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to upsert post on server:', err);
+    }
+  }
+
+  return nextList;
+};
+
+/**
+ * Save Admin Posts to Memory, IndexedDB, LocalStorage and merge-sync to Server
+ */
+export const saveStoredAdminPostsAsync = async (posts: AdminPost[]): Promise<boolean> => {
+  const sanitizedPosts = await Promise.all(posts.map(sanitizeAndUploadPostFiles));
+  updateLocalPostsCache(sanitizedPosts);
+
   if (typeof window !== 'undefined') {
     try {
       const res = await fetch('/api/posts', {
@@ -319,6 +420,12 @@ export const saveStoredAdminPostsAsync = async (posts: AdminPost[]): Promise<boo
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sanitizedPosts),
       });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.posts)) {
+          updateLocalPostsCache(json.posts);
+        }
+      }
       return res.ok;
     } catch (err) {
       console.warn('Failed to push admin posts to server persistence API:', err);
@@ -338,10 +445,50 @@ export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
 };
 
 /**
+ * Delete a single Admin Post on both local device and server safely
+ */
+export const deleteStoredAdminPostAsync = async (id: string): Promise<AdminPost[]> => {
+  const current = getStoredAdminPosts();
+  const filtered = current.filter((p) => p.id !== id);
+  updateLocalPostsCache(filtered);
+
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch(`/api/posts/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.posts)) {
+          updateLocalPostsCache(json.posts);
+          return json.posts;
+        }
+      }
+    } catch (err) {
+      console.warn('Server delete post error:', err);
+    }
+  }
+  return filtered;
+};
+
+/**
  * Delete all stored Admin Posts completely (both locally and on server)
  */
+export const deleteAllStoredAdminPostsAsync = async (): Promise<void> => {
+  updateLocalPostsCache([]);
+  if (typeof window !== 'undefined') {
+    try {
+      await fetch('/api/posts/delete-all', { method: 'POST' });
+    } catch (err) {
+      console.warn('Server delete all posts error:', err);
+    }
+  }
+};
+
 export const deleteAllStoredAdminPosts = (): void => {
-  saveStoredAdminPosts([]);
+  deleteAllStoredAdminPostsAsync().catch((err) => {
+    console.warn('Background delete all posts error:', err);
+  });
 };
 
 /**
@@ -440,8 +587,7 @@ export const findAdminPostByQuery = (
  * Add a new Admin Post
  */
 export const addStoredAdminPost = (post: AdminPost): void => {
-  const current = getStoredAdminPosts();
-  saveStoredAdminPosts([post, ...current]);
+  upsertStoredAdminPostAsync(post).catch(console.error);
 };
 
 /**
@@ -452,8 +598,8 @@ export const updateStoredAdminPost = (id: string, updates: Partial<AdminPost>): 
   const index = current.findIndex((p) => p.id === id);
   if (index === -1) return false;
 
-  current[index] = { ...current[index], ...updates };
-  saveStoredAdminPosts(current);
+  const updated = { ...current[index], ...updates };
+  upsertStoredAdminPostAsync(updated).catch(console.error);
   return true;
 };
 
@@ -462,10 +608,8 @@ export const updateStoredAdminPost = (id: string, updates: Partial<AdminPost>): 
  */
 export const deleteStoredAdminPost = (id: string): boolean => {
   const current = getStoredAdminPosts();
-  const filtered = current.filter((p) => p.id !== id);
-  if (filtered.length === current.length) return false;
-
-  saveStoredAdminPosts(filtered);
-  return true;
+  const exists = current.some((p) => p.id === id);
+  deleteStoredAdminPostAsync(id).catch(console.error);
+  return exists;
 };
 

@@ -37,9 +37,10 @@ import { NewsItem, AdminPost, AttachedDoc, PostCategory } from '../../types';
 import { FullPdfDocumentViewer, postToUnifiedDoc } from '../FullPdfDocumentViewer';
 import {
   getStoredAdminPosts,
-  saveStoredAdminPosts,
-  saveStoredAdminPostsAsync,
-  deleteAllStoredAdminPosts,
+  syncAdminPostsFromServer,
+  upsertStoredAdminPostAsync,
+  deleteStoredAdminPostAsync,
+  deleteAllStoredAdminPostsAsync,
 } from '../../utils/postsStorage';
 
 interface AdminPostsManagerProps {
@@ -113,8 +114,9 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   // Initialize Posts from centralized storage
   const [posts, setPosts] = useState<AdminPost[]>(() => getStoredAdminPosts());
 
-  // Subscribe to real-time posts changes
+  // Subscribe to server sync & real-time posts changes
   useEffect(() => {
+    syncAdminPostsFromServer().then(setPosts).catch(() => {});
     const handleSync = () => {
       setPosts(getStoredAdminPosts());
     };
@@ -324,66 +326,55 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     const targetRef = quickPostDoc.refNumber || quickPostDoc.id;
 
     try {
-      let latestUpdatedPost: AdminPost | null = null;
       for (let i = 0; i < quickSelectedFiles.length; i++) {
         const f = quickSelectedFiles[i];
+        let uploadedUrl = f.dataUrl;
+        if (uploadedUrl && uploadedUrl.startsWith('data:')) {
+          try {
+            const upRes = await fetch('/api/upload-file', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: f.name,
+                fileData: uploadedUrl,
+                type: f.type,
+              }),
+            });
+            if (upRes.ok) {
+              const upJson = await upRes.json();
+              if (upJson.fileUrl) {
+                uploadedUrl = upJson.fileUrl;
+              }
+            }
+          } catch (_) {}
+        }
+
         const newDoc: AttachedDoc = {
           id: `att-au-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           name: f.name,
           size: f.size,
           type: f.type,
-          dataUrl: f.dataUrl,
+          dataUrl: uploadedUrl,
           sectionTag: finalSection,
           isPrimary: i === 0 ? quickIsPrimary : false,
           uploadDate: new Date().toISOString().split('T')[0],
         };
 
-        const res = await fetch('/api/posts/add-attached-doc', {
+        await fetch('/api/posts/add-attached-doc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             postId: quickPostDoc.id,
             refNumber: targetRef,
+            candidateName: quickPostDoc.candidateName,
+            passportNumber: quickPostDoc.passportNumber,
             doc: newDoc,
           }),
         });
-
-        if (res.ok) {
-          const json = await res.json();
-          if (json.post) {
-            latestUpdatedPost = json.post;
-          }
-        }
       }
 
-      // Update state & local storage
-      const currentPosts = getStoredAdminPosts();
-      const updated = currentPosts.map((p) => {
-        if (p.id === quickPostDoc.id) {
-          return (
-            latestUpdatedPost || {
-              ...p,
-              attachedDocuments: [
-                ...(p.attachedDocuments || []),
-                ...quickSelectedFiles.map((f, i) => ({
-                  id: `att-au-${Date.now()}-${i}`,
-                  name: f.name,
-                  size: f.size,
-                  type: f.type,
-                  dataUrl: f.dataUrl,
-                  sectionTag: finalSection,
-                  isPrimary: i === 0 ? quickIsPrimary : false,
-                  uploadDate: new Date().toISOString().split('T')[0],
-                })),
-              ],
-            }
-          );
-        }
-        return p;
-      });
-
-      saveStoredAdminPosts(updated);
-      setPosts(updated);
+      const synced = await syncAdminPostsFromServer();
+      setPosts(synced);
       showToast(
         `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved to central database.`
       );
@@ -485,16 +476,9 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     if (!files || files.length === 0) return;
 
     let loadedCount = 0;
-    const newDocs: AttachedDoc[] = [];
+    const newDocs: Omit<AttachedDoc, 'sectionTag'>[] = [];
 
     (Array.from(files) as File[]).forEach((file: File) => {
-      const isPdf =
-        file.name.toLowerCase().endsWith('.pdf') ||
-        file.type.includes('pdf') ||
-        file.type.includes('application/pdf');
-      const isImg = file.type.includes('image');
-      const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : isImg ? 'image' : 'other';
-
       const sizeStr =
         file.size > 1024 * 1024
           ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
@@ -502,7 +486,16 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
 
       const reader = new FileReader();
       reader.onload = (event) => {
-        const result = event.target?.result as string;
+        const result = (event.target?.result as string) || '';
+        const isPdf =
+          file.name.toLowerCase().endsWith('.pdf') ||
+          file.type.includes('pdf') ||
+          file.type.includes('application/pdf') ||
+          result.includes('application/pdf') ||
+          result.includes('JVBERi');
+        const isImg = !isPdf && file.type.includes('image');
+        const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : isImg ? 'image' : 'other';
+
         if (result) {
           newDocs.push({
             id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -515,10 +508,16 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
         }
         loadedCount++;
         if (loadedCount === files.length) {
-          setFormData((prev) => ({
-            ...prev,
-            attachedDocuments: [...prev.attachedDocuments, ...newDocs],
-          }));
+          setFormData((prev) => {
+            const tagged: AttachedDoc[] = newDocs.map((d) => ({
+              ...d,
+              sectionTag: prev.category || 'Employment Application & Verification',
+            }));
+            return {
+              ...prev,
+              attachedDocuments: [...prev.attachedDocuments, ...tagged],
+            };
+          });
           showToast(`Attached ${newDocs.length} PDF / document file(s)!`);
         }
       };
@@ -581,8 +580,13 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       formData.galleryImages[0] ||
       'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?auto=format&fit=crop&w=1200&q=80';
 
+    const normalizedAttached = formData.attachedDocuments.map((att) => ({
+      ...att,
+      sectionTag: att.sectionTag || formData.category || 'Employment Application & Verification',
+    }));
+
     const postToSave: AdminPost = {
-      id: editingPostId || `post-${Date.now()}`,
+      id: editingPostId || `post-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       title: formData.title.trim(),
       refNumber: formData.refNumber.trim() || `BHP-DOC-${Date.now().toString().slice(-4)}`,
       content: formData.content.trim(),
@@ -593,7 +597,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       imageUrl: finalPrimaryImage,
       galleryImages:
         formData.galleryImages.length > 0 ? formData.galleryImages : [finalPrimaryImage],
-      attachedDocuments: formData.attachedDocuments,
+      attachedDocuments: normalizedAttached,
       readTime: formData.readTime,
       badges: badgeArray.length > 0 ? badgeArray : ['NEWS'],
       candidateName: formData.candidateName.trim() || undefined,
@@ -605,13 +609,12 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       visaSubclass: formData.visaSubclass.trim() || undefined,
     };
 
+    const syncedPosts = await upsertStoredAdminPostAsync(postToSave);
+    setPosts(syncedPosts);
+
     if (editingPostId) {
-      const updated = posts.map((p) => (p.id === editingPostId ? postToSave : p));
-      setPosts(updated);
-      await saveStoredAdminPostsAsync(updated);
       showToast(`Post "${postToSave.title}" updated successfully.`);
 
-      // Sync with News in AdminDataContext if published
       if (postToSave.status === 'Published') {
         const newsItem: NewsItem = {
           id: postToSave.id,
@@ -632,9 +635,6 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
         deleteNews(postToSave.id);
       }
     } else {
-      const updated = [postToSave, ...posts];
-      setPosts(updated);
-      await saveStoredAdminPostsAsync(updated);
       showToast(`Post published! Searchable by ID/Ref: "${postToSave.refNumber}"`);
 
       if (postToSave.status === 'Published') {
@@ -655,18 +655,17 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   };
 
   // Delete Post
-  const handleDeletePost = (id: string, title: string) => {
-    const updated = posts.filter((p) => p.id !== id);
-    setPosts(updated);
-    saveStoredAdminPosts(updated);
+  const handleDeletePost = async (id: string, title: string) => {
+    const synced = await deleteStoredAdminPostAsync(id);
+    setPosts(synced);
     deleteNews(id);
     showToast(`Post "${title}" deleted.`);
   };
 
   // Delete All Posts
-  const handleDeleteAllPosts = () => {
+  const handleDeleteAllPosts = async () => {
     if (window.confirm('Are you sure you want to delete all posts? All items will be permanently removed.')) {
-      deleteAllStoredAdminPosts();
+      await deleteAllStoredAdminPostsAsync();
       setPosts([]);
       posts.forEach((p) => deleteNews(p.id));
       showToast('All posts removed successfully.');
@@ -1307,12 +1306,33 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                             <div className="text-xs font-bold text-white truncate">
                               {doc.name}
                             </div>
-                            <div className="flex items-center gap-2 text-[11px] text-gray-400">
+                            <div className="flex items-center gap-2 text-[11px] text-gray-400 flex-wrap mt-0.5">
                               <span className="uppercase font-mono text-[10px]">{doc.type}</span>
                               <span>•</span>
                               <span>{doc.size}</span>
                               <span>•</span>
                               <span>{doc.uploadDate}</span>
+                              <select
+                                value={doc.sectionTag || formData.category || 'Work Permit Documents (ওয়ার্ক পারমিট)'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    attachedDocuments: prev.attachedDocuments.map((d) =>
+                                      d.id === doc.id ? { ...d, sectionTag: val } : d
+                                    ),
+                                  }));
+                                }}
+                                className="bg-[#191C22] border border-[#2D313A] rounded px-1.5 py-0.5 text-[10px] text-amber-300 focus:outline-none"
+                              >
+                                <option value="Work Permit Documents (ওয়ার্ক পারমিট)">Work Permit</option>
+                                <option value="Job Confirmation & Offer Letter (অফার লেটার)">Offer Letter</option>
+                                <option value="Biometrics & VFS Global (বায়োমেট্রিক ও ভিএফএস)">Biometrics VFS</option>
+                                <option value="Medical Examination (মেডিকেল রিপোর্ট)">Medical Report</option>
+                                <option value="Employment Application & Verification">Employment Verification</option>
+                                <option value="Visa & Immigration Permits">Visa & Immigration</option>
+                                <option value="Other Official Document (অন্যান্য নথি)">Other Document</option>
+                              </select>
                             </div>
                           </div>
                         </div>
