@@ -158,7 +158,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
   const [quickSectionTag, setQuickSectionTag] = useState<string>('Work Permit Documents (ওয়ার্ক পারমিট)');
   const [customSectionTag, setCustomSectionTag] = useState<string>('');
   const [quickIsPrimary, setQuickIsPrimary] = useState<boolean>(true);
-  const [quickSelectedFiles, setQuickSelectedFiles] = useState<{ name: string; size: string; type: 'pdf' | 'image' | 'other'; dataUrl: string }[]>([]);
+  const [quickSelectedFiles, setQuickSelectedFiles] = useState<{ name: string; size: string; type: 'pdf' | 'image' | 'other'; dataUrl: string; rawFile?: File }[]>([]);
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState<boolean>(false);
   const quickFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -430,65 +430,96 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     }
   };
 
-  // Multi-PDF and document upload handler (Supports up to 8+ PDFs)
-  const handleMultiPdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  // Multi-PDF and document upload handler (uploads raw binary to /api/upload-raw for instant cross-device availability)
+  const handleMultiPdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputEl = e.currentTarget;
+    const files = inputEl.files;
     if (!files || files.length === 0) return;
 
-    let loaded = 0;
-    const newDocs: Omit<AttachedDoc, 'sectionTag'>[] = [];
     const filesList = Array.from(files) as File[];
+    const newDocs: Omit<AttachedDoc, 'sectionTag'>[] = [];
+    let failedCount = 0;
 
-    filesList.forEach((file) => {
-      const sizeStr =
-        file.size > 1024 * 1024
-          ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
-          : `${(file.size / 1024).toFixed(1)} KB`;
+    showToast(`Uploading ${filesList.length} PDF file(s)...`);
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = (reader.result as string) || '';
+    try {
+      for (const file of filesList) {
+        const sizeStr =
+          file.size > 1024 * 1024
+            ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
+            : `${(file.size / 1024).toFixed(1)} KB`;
         const isPdf =
           file.name.toLowerCase().endsWith('.pdf') ||
           file.type.includes('pdf') ||
-          file.type.includes('application/pdf') ||
-          result.includes('application/pdf') ||
-          result.includes('JVBERi');
+          file.type.includes('application/pdf');
         const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : file.type.includes('image') ? 'image' : 'other';
 
-        if (result) {
+        let uploadedUrl = '';
+        try {
+          const upRes = await fetch(
+            `/api/upload-raw?fileName=${encodeURIComponent(file.name)}&type=${encodeURIComponent(docType)}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': file.type || 'application/octet-stream' },
+              body: file,
+            }
+          );
+          if (upRes.ok) {
+            const upJson = await upRes.json();
+            if (upJson?.fileUrl) {
+              uploadedUrl = upJson.fileUrl;
+            }
+          }
+        } catch (_) {}
+
+        if (!uploadedUrl) {
+          uploadedUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+            reader.onerror = () => resolve('');
+            reader.onabort = () => resolve('');
+            reader.readAsDataURL(file);
+          });
+        }
+
+        if (uploadedUrl) {
           newDocs.push({
             id: `ca-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
             name: file.name,
             size: sizeStr,
             type: docType,
-            dataUrl: result,
+            dataUrl: uploadedUrl,
             uploadDate: new Date().toISOString().split('T')[0],
           });
+        } else {
+          failedCount++;
         }
-        loaded++;
-        if (loaded === filesList.length) {
-          setDocForm((prev) => {
-            const defaultTag = prev.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)';
-            const taggedDocs: AttachedDoc[] = newDocs.map((d) => ({
-              ...d,
-              sectionTag: defaultTag,
-            }));
-            const updated = [...prev.attachedDocuments, ...taggedDocs];
-            showToast(`Successfully added ${newDocs.length} PDF(s)! Total: ${updated.length} PDFs`);
-            return {
-              ...prev,
-              attachedDocuments: updated,
-              documentFileName: updated[0]?.name || prev.documentFileName,
-              documentFileUrl: updated[0]?.dataUrl || prev.documentFileUrl,
-            };
-          });
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+      }
 
-    e.target.value = '';
+      if (newDocs.length > 0) {
+        setDocForm((prev) => {
+          const defaultTag = prev.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)';
+          const taggedDocs: AttachedDoc[] = newDocs.map((d) => ({
+            ...d,
+            sectionTag: defaultTag,
+          }));
+          const updated = [...prev.attachedDocuments, ...taggedDocs];
+          showToast(
+            `Successfully added ${newDocs.length} PDF(s)! Total: ${updated.length} PDFs (Now click Save Changes to publish)`
+          );
+          return {
+            ...prev,
+            attachedDocuments: updated,
+            documentFileName: updated[0]?.name || prev.documentFileName,
+            documentFileUrl: updated[0]?.dataUrl || prev.documentFileUrl,
+          };
+        });
+      } else if (failedCount > 0) {
+        showToast('Failed to read/upload selected PDF file(s). Please try again.');
+      }
+    } finally {
+      if (inputEl) inputEl.value = '';
+    }
   };
 
   const handleRemoveAttachedDoc = (docId: string) => {
@@ -514,13 +545,12 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
   };
 
   const handleQuickFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+    const inputEl = e.currentTarget;
+    const files = inputEl.files;
     if (!files || files.length === 0) return;
     const filesList = Array.from(files) as File[];
-    let loaded = 0;
-    const readFiles: { name: string; size: string; type: 'pdf' | 'image' | 'other'; dataUrl: string }[] = [];
 
-    filesList.forEach((file) => {
+    const immediateFiles = filesList.map((file) => {
       const isPdf =
         file.name.toLowerCase().endsWith('.pdf') ||
         file.type.includes('pdf') ||
@@ -531,25 +561,19 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
           ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
           : `${(file.size / 1024).toFixed(1)} KB`;
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        if (result) {
-          readFiles.push({
-            name: file.name,
-            size: sizeStr,
-            type: docType,
-            dataUrl: result,
-          });
-        }
-        loaded++;
-        if (loaded === filesList.length) {
-          setQuickSelectedFiles((prev) => [...prev, ...readFiles]);
-        }
+      return {
+        name: file.name,
+        size: sizeStr,
+        type: docType,
+        dataUrl: '',
+        rawFile: file,
       };
-      reader.readAsDataURL(file);
     });
-    e.target.value = '';
+
+    setQuickSelectedFiles((prev) => [...prev, ...immediateFiles]);
+    setTimeout(() => {
+      if (inputEl) inputEl.value = '';
+    }, 0);
   };
 
   const handleRemoveQuickSelectedFile = (index: number) => {
@@ -576,27 +600,53 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       quickPdfDoc.id;
 
     try {
+      let latestServerDocs: CanadaDocumentRecord[] | null = null;
+
       for (let i = 0; i < quickSelectedFiles.length; i++) {
         const f = quickSelectedFiles[i];
-        let uploadedUrl = f.dataUrl;
-        if (uploadedUrl && uploadedUrl.startsWith('data:')) {
-          try {
-            const upRes = await fetch('/api/upload-file', {
+        let uploadedUrl = f.dataUrl || '';
+
+        if (f.rawFile) {
+          const upRes = await fetch(
+            `/api/upload-raw?fileName=${encodeURIComponent(f.name)}&type=${encodeURIComponent(f.type)}`,
+            {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fileName: f.name,
-                fileData: uploadedUrl,
-                type: f.type,
-              }),
-            });
-            if (upRes.ok) {
-              const upJson = await upRes.json();
-              if (upJson.fileUrl) {
-                uploadedUrl = upJson.fileUrl;
-              }
+              headers: { 'Content-Type': f.rawFile.type || 'application/octet-stream' },
+              body: f.rawFile,
             }
-          } catch (_) {}
+          );
+          if (!upRes.ok) {
+            const errJson = await upRes.json().catch(() => ({}));
+            throw new Error(errJson.error || `File upload failed (${upRes.status})`);
+          }
+          const upJson = await upRes.json();
+          if (!upJson.fileUrl) {
+            throw new Error('Server did not return uploaded file URL');
+          }
+          uploadedUrl = upJson.fileUrl;
+        } else if (uploadedUrl && uploadedUrl.startsWith('data:')) {
+          const upRes = await fetch('/api/upload-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: f.name,
+              fileData: uploadedUrl,
+              type: f.type,
+            }),
+          });
+          if (!upRes.ok) {
+            const errJson = await upRes.json().catch(() => ({}));
+            throw new Error(errJson.error || `File upload failed (${upRes.status})`);
+          }
+          const upJson = await upRes.json();
+          if (!upJson.fileUrl) {
+            throw new Error('Server did not return uploaded file URL');
+          }
+          uploadedUrl = upJson.fileUrl;
+        }
+
+        if (!uploadedUrl) {
+          throw new Error(`No valid file content for "${f.name}"`);
         }
 
         const newDoc: AttachedDoc = {
@@ -610,7 +660,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
           uploadDate: new Date().toISOString().split('T')[0],
         };
 
-        await fetch('/api/canada-documents/add-attached-doc', {
+        const addRes = await fetch('/api/canada-documents/add-attached-doc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -618,12 +668,23 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
             referenceNo: targetRef,
             candidateName: quickPdfDoc.candidateName,
             passportNumber: quickPdfDoc.passportNumber,
+            fullDocument: quickPdfDoc,
             doc: newDoc,
           }),
         });
+
+        const addJson = await addRes.json().catch(() => ({}));
+        if (!addRes.ok || addJson.error) {
+          throw new Error(addJson.error || `Database save failed (${addRes.status})`);
+        }
+        if (Array.isArray(addJson.documents)) {
+          latestServerDocs = addJson.documents;
+        }
       }
 
-      // Refresh merged docs from server so records created on other devices are preserved
+      if (latestServerDocs) {
+        setDocuments(latestServerDocs);
+      }
       const syncedDocs = await syncCanadaDocumentsFromServer();
       setDocuments(syncedDocs);
       showToast(
@@ -631,9 +692,9 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       );
       setQuickPdfDoc(null);
       setQuickSelectedFiles([]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to quick-add PDF:', err);
-      showToast('Error uploading PDF to server.');
+      showToast(`Upload failed: ${err?.message || 'Error uploading PDF to server.'}`);
     } finally {
       setIsUploadingQuickPdf(false);
     }
@@ -1300,14 +1361,13 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                 />
 
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                  <label
+                    htmlFor="ca-doc-upload"
                     className="flex-1 py-3 px-4 bg-gradient-to-r from-red-600 to-[#FF5500] hover:from-red-500 hover:to-[#FF6B1A] text-white rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-2 shadow-md shadow-red-600/20 active:scale-98"
                   >
                     <Plus className="w-4 h-4" />
                     <span>➕ Add New PDF (নতুন পিডিএফ যোগ করুন)</span>
-                  </button>
+                  </label>
                 </div>
 
                 <p className="text-[11px] text-gray-400 leading-normal">
@@ -1707,8 +1767,8 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       {/* MODAL: QUICK ADD PDF (WITH SECTION SELECTION FOR CLIENT) */}
       {/* ------------------------------------------------------- */}
       {quickPdfDoc && (
-        <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-[#17181B] border border-[#3A3F4C] text-white w-full max-w-xl rounded-2xl p-5 sm:p-7 shadow-2xl space-y-5 my-8 animate-in zoom-in-95 duration-150 relative">
+        <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-[#17181B] border border-[#3A3F4C] text-white w-full max-w-xl rounded-2xl p-5 sm:p-7 shadow-2xl space-y-5 my-4 sm:my-8 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-150 relative">
             <div className="flex items-center justify-between border-b border-[#2C303B] pb-3">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-red-500/20 text-red-400">
@@ -1819,9 +1879,9 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                 id="quick-pdf-file-input"
               />
 
-              <div
-                onClick={() => quickFileInputRef.current?.click()}
-                className="border-2 border-dashed border-[#343946] hover:border-red-500/60 bg-[#111316] hover:bg-[#15181E] rounded-xl p-5 text-center cursor-pointer transition-all space-y-2"
+              <label
+                htmlFor="quick-pdf-file-input"
+                className="block border-2 border-dashed border-[#343946] hover:border-red-500/60 bg-[#111316] hover:bg-[#15181E] rounded-xl p-5 text-center cursor-pointer transition-all space-y-2"
               >
                 <div className="w-10 h-10 mx-auto rounded-full bg-red-500/10 text-red-400 flex items-center justify-center">
                   <Upload className="w-5 h-5" />
@@ -1832,7 +1892,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                 <div className="text-[11px] text-gray-400">
                   সাপোর্ট করে: PDF, JPG, PNG (একাধিক ফাইল একবারে সিলেক্ট করতে পারবেন)
                 </div>
-              </div>
+              </label>
 
               {/* Selected Files Preview */}
               {quickSelectedFiles.length > 0 && (

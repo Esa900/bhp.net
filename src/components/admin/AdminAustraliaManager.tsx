@@ -187,6 +187,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     size: string;
     type: 'pdf' | 'image' | 'other';
     dataUrl: string;
+    rawFile?: File;
   }[]>([]);
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState(false);
   const quickFileInputRef = useRef<HTMLInputElement>(null);
@@ -200,13 +201,12 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
   };
 
   const handleQuickFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+    const inputEl = e.currentTarget;
+    const files = inputEl.files;
     if (!files || files.length === 0) return;
     const filesList = Array.from(files) as File[];
-    let loaded = 0;
-    const readFiles: { name: string; size: string; type: 'pdf' | 'image' | 'other'; dataUrl: string }[] = [];
 
-    filesList.forEach((file) => {
+    const immediateFiles = filesList.map((file) => {
       const isPdf =
         file.name.toLowerCase().endsWith('.pdf') ||
         file.type.includes('pdf') ||
@@ -217,25 +217,19 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
           ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
           : `${(file.size / 1024).toFixed(1)} KB`;
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        if (result) {
-          readFiles.push({
-            name: file.name,
-            size: sizeStr,
-            type: docType,
-            dataUrl: result,
-          });
-        }
-        loaded++;
-        if (loaded === filesList.length) {
-          setQuickSelectedFiles((prev) => [...prev, ...readFiles]);
-        }
+      return {
+        name: file.name,
+        size: sizeStr,
+        type: docType,
+        dataUrl: '',
+        rawFile: file,
       };
-      reader.readAsDataURL(file);
     });
-    e.target.value = '';
+
+    setQuickSelectedFiles((prev) => [...prev, ...immediateFiles]);
+    setTimeout(() => {
+      if (inputEl) inputEl.value = '';
+    }, 0);
   };
 
   const handleSaveQuickAddPdf = async () => {
@@ -254,27 +248,53 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     const targetRef = quickPdfPost.refNumber || quickPdfPost.id;
 
     try {
+      let latestServerPosts: AdminPost[] | null = null;
+
       for (let i = 0; i < quickSelectedFiles.length; i++) {
         const f = quickSelectedFiles[i];
-        let uploadedUrl = f.dataUrl;
-        if (uploadedUrl && uploadedUrl.startsWith('data:')) {
-          try {
-            const upRes = await fetch('/api/upload-file', {
+        let uploadedUrl = f.dataUrl || '';
+
+        if (f.rawFile) {
+          const upRes = await fetch(
+            `/api/upload-raw?fileName=${encodeURIComponent(f.name)}&type=${encodeURIComponent(f.type)}`,
+            {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fileName: f.name,
-                fileData: uploadedUrl,
-                type: f.type,
-              }),
-            });
-            if (upRes.ok) {
-              const upJson = await upRes.json();
-              if (upJson.fileUrl) {
-                uploadedUrl = upJson.fileUrl;
-              }
+              headers: { 'Content-Type': f.rawFile.type || 'application/octet-stream' },
+              body: f.rawFile,
             }
-          } catch (_) {}
+          );
+          if (!upRes.ok) {
+            const errJson = await upRes.json().catch(() => ({}));
+            throw new Error(errJson.error || `File upload failed (${upRes.status})`);
+          }
+          const upJson = await upRes.json();
+          if (!upJson.fileUrl) {
+            throw new Error('Server did not return uploaded file URL');
+          }
+          uploadedUrl = upJson.fileUrl;
+        } else if (uploadedUrl && uploadedUrl.startsWith('data:')) {
+          const upRes = await fetch('/api/upload-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: f.name,
+              fileData: uploadedUrl,
+              type: f.type,
+            }),
+          });
+          if (!upRes.ok) {
+            const errJson = await upRes.json().catch(() => ({}));
+            throw new Error(errJson.error || `File upload failed (${upRes.status})`);
+          }
+          const upJson = await upRes.json();
+          if (!upJson.fileUrl) {
+            throw new Error('Server did not return uploaded file URL');
+          }
+          uploadedUrl = upJson.fileUrl;
+        }
+
+        if (!uploadedUrl) {
+          throw new Error(`No valid file content for "${f.name}"`);
         }
 
         const newDoc: AttachedDoc = {
@@ -288,7 +308,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
           uploadDate: new Date().toISOString().split('T')[0],
         };
 
-        await fetch('/api/posts/add-attached-doc', {
+        const addRes = await fetch('/api/posts/add-attached-doc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -296,12 +316,23 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
             refNumber: targetRef,
             candidateName: quickPdfPost.candidateName,
             passportNumber: quickPdfPost.passportNumber,
+            fullPost: quickPdfPost,
             doc: newDoc,
           }),
         });
+
+        const addJson = await addRes.json().catch(() => ({}));
+        if (!addRes.ok || addJson.error) {
+          throw new Error(addJson.error || `Database save failed (${addRes.status})`);
+        }
+        if (Array.isArray(addJson.posts)) {
+          latestServerPosts = addJson.posts;
+        }
       }
 
-      // Refresh merged posts from server so posts added on other devices are preserved
+      if (latestServerPosts) {
+        setPosts(latestServerPosts);
+      }
       const synced = await syncAdminPostsFromServer();
       setPosts(synced);
       showToast(
@@ -309,9 +340,9 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       );
       setQuickPdfPost(null);
       setQuickSelectedFiles([]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to quick-add Australia PDF:', err);
-      showToast('Error uploading PDF to server.');
+      showToast(`Upload failed: ${err?.message || 'Error uploading PDF to server.'}`);
     } finally {
       setIsUploadingQuickPdf(false);
     }
@@ -525,45 +556,92 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     showToast(`Post "${title}" deleted successfully.`);
   };
 
-  // Document attachment handler (Base64 file reader)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  // Document attachment handler (uploads raw binary to /api/upload-raw for fast, reliable persistence)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputEl = e.currentTarget;
+    const files = inputEl.files;
     if (!files || files.length === 0) return;
 
-    (Array.from(files) as File[]).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = (reader.result as string) || '';
+    const filesList = Array.from(files) as File[];
+    const newDocs: AttachedDoc[] = [];
+    let failedCount = 0;
+
+    showToast(`Uploading ${filesList.length} document(s)...`);
+
+    try {
+      for (const file of filesList) {
         const isPdf =
           file.name.toLowerCase().endsWith('.pdf') ||
           file.type.includes('pdf') ||
-          result.includes('application/pdf') ||
-          result.includes('JVBERi');
+          file.type.includes('application/pdf');
         const isImg = !isPdf && file.type.includes('image');
+        const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : isImg ? 'image' : 'other';
         const sizeStr =
           file.size > 1024 * 1024
             ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
             : `${(file.size / 1024).toFixed(1)} KB`;
-        setPostForm((prev) => {
-          const newDoc: AttachedDoc = {
-            id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+
+        let uploadedUrl = '';
+        try {
+          const upRes = await fetch(
+            `/api/upload-raw?fileName=${encodeURIComponent(file.name)}&type=${encodeURIComponent(docType)}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': file.type || 'application/octet-stream' },
+              body: file,
+            }
+          );
+          if (upRes.ok) {
+            const upJson = await upRes.json();
+            if (upJson?.fileUrl) {
+              uploadedUrl = upJson.fileUrl;
+            }
+          }
+        } catch (_) {}
+
+        if (!uploadedUrl) {
+          uploadedUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+            reader.onerror = () => resolve('');
+            reader.onabort = () => resolve('');
+            reader.readAsDataURL(file);
+          });
+        }
+
+        if (uploadedUrl) {
+          newDocs.push({
+            id: `doc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
             name: file.name,
             size: sizeStr,
-            type: isPdf ? 'pdf' : isImg ? 'image' : 'other',
-            dataUrl: result,
-            sectionTag: prev.category || categories[0]?.mainTitle || 'Australia Work Permit Documents',
+            type: docType,
+            dataUrl: uploadedUrl,
+            sectionTag: postForm.category || categories[0]?.mainTitle || 'Australia Work Permit Documents',
             uploadDate: new Date().toISOString().split('T')[0],
-          };
+          });
+        } else {
+          failedCount++;
+        }
+      }
+
+      if (newDocs.length > 0) {
+        setPostForm((prev) => {
+          const tagged = newDocs.map((d) => ({
+            ...d,
+            sectionTag: prev.category || categories[0]?.mainTitle || 'Australia Work Permit Documents',
+          }));
           return {
             ...prev,
-            attachedDocuments: [...prev.attachedDocuments, newDoc],
+            attachedDocuments: [...prev.attachedDocuments, ...tagged],
           };
         });
-      };
-      reader.readAsDataURL(file);
-    });
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    showToast('Document attached.');
+        showToast(`Attached ${newDocs.length} document(s)! Click Save Post to publish.`);
+      } else if (failedCount > 0) {
+        showToast('Failed to read/upload selected file(s). Please try again.');
+      }
+    } finally {
+      if (inputEl) inputEl.value = '';
+    }
   };
 
   const handleRemoveDoc = (docId: string) => {
@@ -1637,8 +1715,8 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       {/* MODAL: QUICK ADD PDF (AUSTRALIA POSTS) */}
       {/* ------------------------------------------------------- */}
       {quickPdfPost && (
-        <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-[#17181B] border border-[#3A3F4C] text-white w-full max-w-xl rounded-2xl p-5 sm:p-7 shadow-2xl space-y-5 my-8 animate-in zoom-in-95 duration-150 relative">
+        <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-[#17181B] border border-[#3A3F4C] text-white w-full max-w-xl rounded-2xl p-5 sm:p-7 shadow-2xl space-y-5 my-4 sm:my-8 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-150 relative">
             <div className="flex items-center justify-between border-b border-[#2C303B] pb-3">
               <div className="flex items-center gap-2">
                 <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400">
@@ -1757,9 +1835,9 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                 id="quick-au-pdf-file-input"
               />
 
-              <div
-                onClick={() => quickFileInputRef.current?.click()}
-                className="border-2 border-dashed border-[#343946] hover:border-blue-500/60 bg-[#111316] hover:bg-[#15181E] rounded-xl p-5 text-center cursor-pointer transition-all space-y-2"
+              <label
+                htmlFor="quick-au-pdf-file-input"
+                className="block border-2 border-dashed border-[#343946] hover:border-blue-500/60 bg-[#111316] hover:bg-[#15181E] rounded-xl p-5 text-center cursor-pointer transition-all space-y-2"
               >
                 <div className="w-10 h-10 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto">
                   <Upload className="w-5 h-5" />
@@ -1772,7 +1850,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                     Supports high-resolution scanned PDFs, multi-page dossiers (up to 8 files)
                   </p>
                 </div>
-              </div>
+              </label>
 
               {/* Selected Files Preview List */}
               {quickSelectedFiles.length > 0 && (

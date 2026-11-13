@@ -822,6 +822,65 @@ async function startServer() {
     }
   });
 
+  // Raw binary file upload (avoids base64 JSON bloat and mobile FileReader memory limits)
+  app.post(
+    '/api/upload-raw',
+    express.raw({ type: '*/*', limit: '60mb' }),
+    (req: Request, res: Response) => {
+      try {
+        const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from([]);
+        if (!buffer || buffer.length === 0) {
+          res.status(400).json({ error: 'Empty file buffer received' });
+          return;
+        }
+        const rawName = String(req.query.fileName || req.headers['x-file-name'] || `upload_${Date.now()}.pdf`);
+        let decodedName = rawName;
+        try {
+          decodedName = decodeURIComponent(rawName);
+        } catch (_) {}
+        const reqType = String(req.query.type || '');
+        const headAscii = buffer.subarray(0, 8).toString('latin1');
+        const isPdf =
+          headAscii.startsWith('%PDF-') ||
+          decodedName.toLowerCase().endsWith('.pdf') ||
+          reqType === 'pdf';
+        let ext = '.pdf';
+        if (isPdf) {
+          ext = '.pdf';
+        } else if (decodedName.toLowerCase().match(/\.(jpg|jpeg)$/)) {
+          ext = '.jpg';
+        } else if (decodedName.toLowerCase().endsWith('.png')) {
+          ext = '.png';
+        } else if (decodedName.toLowerCase().endsWith('.webp')) {
+          ext = '.webp';
+        } else if (decodedName.toLowerCase().endsWith('.gif')) {
+          ext = '.gif';
+        } else {
+          const match = decodedName.toLowerCase().match(/(\.[a-z0-9]{2,5})$/);
+          if (match) ext = match[1];
+        }
+        const safeBase = (decodedName || 'document')
+          .replace(/[^a-zA-Z0-9._-]/g, '_')
+          .replace(/\.[^/.]+$/, '');
+        const finalFileName = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${safeBase}${ext}`;
+        fs.writeFileSync(path.join(UPLOADS_DIR, finalFileName), buffer);
+        try {
+          fs.writeFileSync(path.join(PUBLIC_UPLOADS, finalFileName), buffer);
+        } catch (_) {}
+        const fileUrl = `/uploads/${finalFileName}`;
+        res.json({
+          success: true,
+          fileName: decodedName || finalFileName,
+          fileUrl,
+          type: isPdf ? 'pdf' : (reqType === 'image' || ['.jpg', '.png', '.webp', '.gif'].includes(ext) ? 'image' : 'other'),
+        });
+      } catch (err) {
+        console.error('Raw upload endpoint error:', err);
+        res.status(500).json({ error: 'Failed to save uploaded binary file' });
+      }
+    }
+  );
+
   // =========================================================================
   // API: AUSTRALIA POSTS (Atomic upsert + Merge-safe multi-device persistence)
   // =========================================================================
@@ -1230,7 +1289,7 @@ async function startServer() {
 
   // Direct endpoint to attach a new PDF to an existing Canada post with section tag
   app.post('/api/canada-documents/add-attached-doc', (req: Request, res: Response) => {
-    const { docId, referenceNo, candidateName, passportNumber } = req.body || {};
+    const { docId, referenceNo, candidateName, passportNumber, fullDocument } = req.body || {};
     const attachedDocRaw = req.body?.attachedDoc || req.body?.doc;
     if (!attachedDocRaw || (!docId && !referenceNo)) {
       res.status(400).json({ error: 'Missing attachedDoc/doc or document identifier (docId/referenceNo)' });
@@ -1245,12 +1304,11 @@ async function startServer() {
     if (!attachedDoc.id) {
       attachedDoc.id = `att-ca-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     }
-    getAttachmentSignatureKeys(attachedDoc).forEach((k) => clearDeletedId('attachments', k));
 
     const docs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
     const cleanRef = String(referenceNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
 
-    const targetIdx = docs.findIndex((d) => {
+    let targetIdx = docs.findIndex((d) => {
       if (docId && d.id === docId) return true;
       if (cleanRef) {
         const dTin = (d.tinOrRef || '').toLowerCase().replace(/[-\s_./#:]/g, '');
@@ -1280,10 +1338,22 @@ async function startServer() {
       return false;
     });
 
+    if (targetIdx === -1 && fullDocument && fullDocument.id) {
+      const processedBase = processBase64InDoc(fullDocument);
+      clearDeletedId('canada', processedBase.id);
+      docs.unshift(processedBase);
+      targetIdx = 0;
+    }
+
     if (targetIdx === -1) {
+      if (!attachedDoc.sectionTag) {
+        attachedDoc.sectionTag = 'Work Permit Documents (ওয়ার্ক পারমিট)';
+      }
+      getAttachmentSignatureKeys(attachedDoc).forEach((k) => clearDeletedId('attachments', k));
       const targetRef = referenceNo || docId;
       crossSyncAttachedDocToBoth(targetRef, attachedDoc, candidateName, passportNumber);
-      res.json({ success: true, message: 'Attached and synced across records' });
+      const latestDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, docs);
+      res.json({ success: true, message: 'Attached and synced across records', documents: latestDocs });
       return;
     }
 
@@ -1293,12 +1363,21 @@ async function startServer() {
     if (!attachedDoc.sectionTag) {
       attachedDoc.sectionTag = currentDoc.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)';
     }
+    getAttachmentSignatureKeys(attachedDoc).forEach((k) => clearDeletedId('attachments', k));
 
     if (attachedDoc.isPrimary) {
       currentAttached.forEach((d) => (d.isPrimary = false));
     }
 
-    const updatedAttached = [...currentAttached, attachedDoc];
+    const newSig = `${String(attachedDoc.sectionTag || 'default').trim().toLowerCase()}::${String(attachedDoc.name || '').trim().toLowerCase()}`;
+    const filteredExisting = currentAttached.filter((d) => {
+      if (d.id && d.id === attachedDoc.id) return false;
+      const dSig = `${String(d.sectionTag || 'default').trim().toLowerCase()}::${String(d.name || '').trim().toLowerCase()}`;
+      if (dSig === newSig && d.dataUrl === attachedDoc.dataUrl) return false;
+      return true;
+    });
+    const updatedAttached = deduplicateAttachedDocs([...filteredExisting, attachedDoc]);
+
     docs[targetIdx] = {
       ...currentDoc,
       attachedDocuments: updatedAttached,
@@ -1317,12 +1396,13 @@ async function startServer() {
       currentDoc.passportNumber || passportNumber
     );
 
-    res.json({ success: saved, document: docs[targetIdx] });
+    const latestDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, docs);
+    res.json({ success: saved, document: docs[targetIdx], documents: latestDocs });
   });
 
   // Direct endpoint to attach a new PDF to an Australia post with section tag
   app.post('/api/posts/add-attached-doc', (req: Request, res: Response) => {
-    const { postId, refNumber, candidateName, passportNumber } = req.body || {};
+    const { postId, refNumber, candidateName, passportNumber, fullPost } = req.body || {};
     const attachedDocRaw = req.body?.attachedDoc || req.body?.doc;
     if (!attachedDocRaw || (!postId && !refNumber)) {
       res.status(400).json({ error: 'Missing attachedDoc/doc or post identifier (postId/refNumber)' });
@@ -1337,12 +1417,11 @@ async function startServer() {
     if (!attachedDoc.id) {
       attachedDoc.id = `att-au-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     }
-    getAttachmentSignatureKeys(attachedDoc).forEach((k) => clearDeletedId('attachments', k));
 
     const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
     const cleanRef = String(refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
 
-    const targetIdx = posts.findIndex((p) => {
+    let targetIdx = posts.findIndex((p) => {
       if (postId && p.id === postId) return true;
       if (cleanRef) {
         const pRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
@@ -1361,10 +1440,22 @@ async function startServer() {
       return false;
     });
 
+    if (targetIdx === -1 && fullPost && fullPost.id) {
+      const processedBase = processBase64InDoc(fullPost);
+      clearDeletedId('posts', processedBase.id);
+      posts.unshift(processedBase);
+      targetIdx = 0;
+    }
+
     if (targetIdx === -1) {
+      if (!attachedDoc.sectionTag) {
+        attachedDoc.sectionTag = 'Australia Work Permit Documents';
+      }
+      getAttachmentSignatureKeys(attachedDoc).forEach((k) => clearDeletedId('attachments', k));
       const targetRef = refNumber || postId;
       crossSyncAttachedDocToBoth(targetRef, attachedDoc, candidateName, passportNumber);
-      res.json({ success: true, message: 'Attached and synced across records' });
+      const latestPosts = readJsonFile<any[]>(POSTS_FILE, posts);
+      res.json({ success: true, message: 'Attached and synced across records', posts: latestPosts });
       return;
     }
 
@@ -1374,12 +1465,21 @@ async function startServer() {
     if (!attachedDoc.sectionTag) {
       attachedDoc.sectionTag = currentPost.category || 'Australia Work Permit Documents';
     }
+    getAttachmentSignatureKeys(attachedDoc).forEach((k) => clearDeletedId('attachments', k));
 
     if (attachedDoc.isPrimary) {
       currentAttached.forEach((d) => (d.isPrimary = false));
     }
 
-    const updatedAttached = [...currentAttached, attachedDoc];
+    const newSig = `${String(attachedDoc.sectionTag || 'default').trim().toLowerCase()}::${String(attachedDoc.name || '').trim().toLowerCase()}`;
+    const filteredExisting = currentAttached.filter((d) => {
+      if (d.id && d.id === attachedDoc.id) return false;
+      const dSig = `${String(d.sectionTag || 'default').trim().toLowerCase()}::${String(d.name || '').trim().toLowerCase()}`;
+      if (dSig === newSig && d.dataUrl === attachedDoc.dataUrl) return false;
+      return true;
+    });
+    const updatedAttached = deduplicateAttachedDocs([...filteredExisting, attachedDoc]);
+
     posts[targetIdx] = {
       ...currentPost,
       attachedDocuments: updatedAttached,
@@ -1396,7 +1496,8 @@ async function startServer() {
       currentPost.passportNumber || passportNumber
     );
 
-    res.json({ success: saved, post: posts[targetIdx] });
+    const latestPosts = readJsonFile<any[]>(POSTS_FILE, posts);
+    res.json({ success: saved, post: posts[targetIdx], posts: latestPosts });
   });
 
   // =========================================================================
