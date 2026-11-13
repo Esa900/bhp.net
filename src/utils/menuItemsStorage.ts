@@ -157,13 +157,6 @@ export function moveStoredMenuItem(id: string, direction: 'up' | 'down'): boolea
  * Reset all 3-line menu items back to default
  */
 export function resetStoredMenuItems(): DocumentMenuItem[] {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DOCUMENT_MENU_ITEMS));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(MENU_ITEMS_UPDATED_EVENT, { detail: DOCUMENT_MENU_ITEMS }));
-    }
-  } catch (err) {
-    console.error('Failed to reset menu items:', err);
-  }
+  saveStoredMenuItems(DOCUMENT_MENU_ITEMS);
   return DOCUMENT_MENU_ITEMS;
 }

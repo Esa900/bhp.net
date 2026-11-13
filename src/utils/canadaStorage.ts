@@ -183,35 +183,10 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
         const mergedMap = new Map<string, CanadaDocumentRecord>();
         const docsNeedingUpload: CanadaDocumentRecord[] = [];
 
-        // 1. Add server documents (exclude demo docs and deleted tombstones)
+        // 1. Add server documents (authoritative source of truth for existing IDs so removed PDFs/edits never come back from stale localStorage)
         data.documents.forEach((serverDoc: CanadaDocumentRecord) => {
           if (serverDoc && serverDoc.id && !isDemoCanadaDoc(serverDoc) && !deletedIdsSet.has(serverDoc.id)) {
-            const localDoc = local.find((l) => l.id === serverDoc.id);
-            if (localDoc && Array.isArray(localDoc.attachedDocuments) && localDoc.attachedDocuments.length > 0) {
-              const serverAtt = Array.isArray(serverDoc.attachedDocuments) ? serverDoc.attachedDocuments : [];
-              const seenKeys = new Set(
-                serverAtt.map((d: any) =>
-                  `${d.sectionTag || 'default'}_${d.name || ''}_${d.id || ''}`.trim().toLowerCase()
-                )
-              );
-              const missingFromLocal = localDoc.attachedDocuments.filter((d: any) => {
-                const key = `${d.sectionTag || 'default'}_${d.name || ''}_${d.id || ''}`.trim().toLowerCase();
-                return !seenKeys.has(key);
-              });
-              const combinedAttached = [...serverAtt, ...missingFromLocal];
-              const combinedDoc = {
-                ...serverDoc,
-                attachedDocuments: combinedAttached,
-                documentFileUrl: serverDoc.documentFileUrl || localDoc.documentFileUrl,
-                documentFileName: serverDoc.documentFileName || localDoc.documentFileName,
-              };
-              if (missingFromLocal.length > 0) {
-                docsNeedingUpload.push(combinedDoc);
-              }
-              mergedMap.set(serverDoc.id, combinedDoc);
-            } else {
-              mergedMap.set(serverDoc.id, serverDoc);
-            }
+            mergedMap.set(serverDoc.id, serverDoc);
           }
         });
 
@@ -269,34 +244,7 @@ export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const cleaned = parsed
-          .filter((d: CanadaDocumentRecord) => !isDemoCanadaDoc(d))
-          .map((d: CanadaDocumentRecord) => {
-            if (
-              (d.id === 'ca-doc-5' || d.referenceNo === 'WPD-CAN-55102' || d.id === 'ca-doc-egp56' || d.referenceNo === 'EGP56RU55H') &&
-              (!d.attachedDocuments || d.attachedDocuments.length === 0 || !d.documentFileUrl)
-            ) {
-              return {
-                ...d,
-                documentFileName: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
-                documentFileUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
-                attachedDocuments: [
-                  {
-                    id: `att-ca-${d.id}-pdf`,
-                    name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
-                    size: '737 KB',
-                    type: 'pdf' as const,
-                    dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
-                    sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
-                    isPrimary: true,
-                    uploadDate: '2026-03-02',
-                  },
-                ],
-              };
-            }
-            return d;
-          });
-        return cleaned;
+        return parsed.filter((d: CanadaDocumentRecord) => !isDemoCanadaDoc(d));
       }
     }
   } catch (err) {
@@ -423,7 +371,10 @@ function updateLocalCanadaCache(docs: CanadaDocumentRecord[]) {
 }
 
 export async function upsertCanadaDocumentAsync(doc: CanadaDocumentRecord): Promise<CanadaDocumentRecord[]> {
-  const sanitized = await sanitizeAndUploadCanadaDocFiles(doc);
+  const sanitized = {
+    ...(await sanitizeAndUploadCanadaDocFiles(doc)),
+    updatedAt: Date.now(),
+  };
   const current = getStoredCanadaDocuments();
   const idx = current.findIndex((d) => d.id === sanitized.id);
   let nextList =

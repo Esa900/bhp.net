@@ -385,8 +385,8 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       idNumber: docForm.idNumber?.trim() || baseRef,
       verificationIdNo: docForm.verificationIdNo?.trim() || baseRef,
       transitionIdNo: docForm.transitionIdNo?.trim() || baseRef,
-      documentFileName: primaryPdf?.name || docForm.documentFileName || '',
-      documentFileUrl: primaryPdf?.dataUrl || docForm.documentFileUrl || '',
+      documentFileName: primaryPdf?.name || '',
+      documentFileUrl: primaryPdf?.dataUrl || '',
       attachedDocuments: normalizedAttached,
     };
 

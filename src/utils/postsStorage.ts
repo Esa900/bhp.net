@@ -122,33 +122,10 @@ export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
         const mergedMap = new Map<string, AdminPost>();
         const postsNeedingUpload: AdminPost[] = [];
 
-        // 1. Add server posts (exclude demo posts)
+        // 1. Add server posts (authoritative source of truth for existing IDs so removed PDFs/edits never come back from stale localStorage)
         data.posts.forEach((p: AdminPost) => {
           if (p && p.id && !isDemoPost(p) && !deletedIdsSet.has(p.id)) {
-            const localPost = local.find((l) => l.id === p.id);
-            if (localPost && Array.isArray(localPost.attachedDocuments) && localPost.attachedDocuments.length > 0) {
-              const serverAtt = Array.isArray(p.attachedDocuments) ? p.attachedDocuments : [];
-              const seenKeys = new Set(
-                serverAtt.map((d: any) =>
-                  `${d.sectionTag || 'default'}_${d.name || ''}_${d.id || ''}`.trim().toLowerCase()
-                )
-              );
-              const missingFromLocal = localPost.attachedDocuments.filter((d: any) => {
-                const key = `${d.sectionTag || 'default'}_${d.name || ''}_${d.id || ''}`.trim().toLowerCase();
-                return !seenKeys.has(key);
-              });
-              const combinedAttached = [...serverAtt, ...missingFromLocal];
-              const combinedPost = {
-                ...p,
-                attachedDocuments: combinedAttached,
-              };
-              if (missingFromLocal.length > 0) {
-                postsNeedingUpload.push(combinedPost);
-              }
-              mergedMap.set(p.id, combinedPost);
-            } else {
-              mergedMap.set(p.id, p);
-            }
+            mergedMap.set(p.id, p);
           }
         });
 
@@ -374,7 +351,10 @@ function updateLocalPostsCache(posts: AdminPost[]) {
  * Atomic single-post create/update across devices (never overwrites posts added on another admin device)
  */
 export const upsertStoredAdminPostAsync = async (post: AdminPost): Promise<AdminPost[]> => {
-  const sanitized = await sanitizeAndUploadPostFiles(post);
+  const sanitized = {
+    ...(await sanitizeAndUploadPostFiles(post)),
+    updatedAt: Date.now(),
+  };
   const current = getStoredAdminPosts();
   const idx = current.findIndex((p) => p.id === sanitized.id);
   let nextList =

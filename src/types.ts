@@ -96,6 +96,7 @@ export interface AdminPost {
   issueDate?: string;
   expiryDate?: string;
   verificationIdNo?: string;
+  updatedAt?: number;
 }
 
 export interface PostCategory {

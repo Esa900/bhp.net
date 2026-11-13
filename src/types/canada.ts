@@ -46,6 +46,7 @@ export interface CanadaDocumentRecord {
   attachedDocuments?: AttachedDoc[];
   notes?: string;
   createdAt: string;
+  updatedAt?: number;
 }
 
 export interface CanadaMenuItemConfig {

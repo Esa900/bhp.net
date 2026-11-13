@@ -1,17 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
-import { Loader2, FileText, Check, Smartphone, Monitor, Download, ExternalLink, ShieldCheck, ChevronDown } from 'lucide-react';
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { Loader2, FileText, ShieldCheck } from 'lucide-react';
 
-// Cached dynamic loader for PDF.js (loaded only when a PDF is being rendered, keeping home page bundle lightweight)
-let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | null = null;
-async function getPdfjs(): Promise<typeof import('pdfjs-dist')> {
+// Cached dynamic loader for PDF.js Legacy build (compatible across all mobile Chrome/Safari and desktop browsers without Map.prototype.getOrInsertComputed)
+let pdfjsPromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null;
+async function getPdfjs(): Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> {
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {
-      const pdfjs = await import('pdfjs-dist');
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
       try {
         if (typeof window !== 'undefined') {
           // @ts-expect-error Vite ?url query asset import
-          const workerModule = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+          const workerModule = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
           const workerUrl = workerModule.default || workerModule;
           if (pdfjs.GlobalWorkerOptions) {
             pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -33,7 +33,7 @@ interface PdfCanvasRendererProps {
 }
 
 /**
- * Converts a data URI, Base64, or binary string to a Uint8Array safely on both mobile & desktop.
+ * Converts a data URI, Base64, or binary URL to a Uint8Array safely on both mobile & desktop.
  */
 async function extractPdfBytes(dataUrl: string): Promise<Uint8Array | null> {
   if (!dataUrl || dataUrl === '#' || dataUrl.length < 10) return null;
@@ -106,72 +106,108 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
 }) => {
   const [numPages, setNumPages] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [useIframeFallback, setUseIframeFallback] = useState<boolean>(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'canvas' | 'iframe'>('canvas');
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const pdfDocRef = useRef<PDFDocumentProxy | null>(null);
 
-  // Load PDF and create local blob URL
+  // Load PDF cleanly with StrictMode-safe lifecycle & automatic timeout fallback
   useEffect(() => {
     let isCancelled = false;
+    let localBlobUrl: string | null = null;
+    let activeTask: { promise: Promise<PDFDocumentProxy>; destroy?: () => Promise<void> | void } | null = null;
+    let loadedDoc: PDFDocumentProxy | null = null;
 
     async function loadPdf() {
       if (!dataUrl || dataUrl === '#' || dataUrl.length < 10) {
-        setIsLoading(false);
-        setError('No document data available.');
+        if (!isCancelled) {
+          setIsLoading(false);
+          setPdfDoc(null);
+          setNumPages(0);
+          setUseIframeFallback(false);
+        }
         return;
       }
 
-      setIsLoading(true);
-      setError(null);
+      if (!isCancelled) {
+        setIsLoading(true);
+        setUseIframeFallback(false);
+        setPdfDoc(null);
+        setNumPages(0);
+      }
 
       try {
         const bytes = await extractPdfBytes(dataUrl);
+        if (isCancelled) return;
+
         if (!bytes || bytes.length === 0) {
           throw new Error('Empty PDF byte stream');
         }
 
-        // Create clean blob URL for mobile native viewer / download / iframe
+        // Create clean local blob URL for fallback iframe rendering
         if (typeof window !== 'undefined') {
           try {
-            const blob = new Blob([bytes], { type: 'application/pdf' });
+            const blob = new Blob([bytes.slice()], { type: 'application/pdf' });
             const url = URL.createObjectURL(blob);
+            if (isCancelled) {
+              URL.revokeObjectURL(url);
+              return;
+            }
+            localBlobUrl = url;
             setBlobUrl(url);
           } catch (e) {
             console.warn('Blob creation error:', e);
           }
         }
 
-        // Load into PDF.js on-demand with fallback
         const pdfjs = await getPdfjs();
-        let pdf: PDFDocumentProxy;
-        try {
-          const loadingTask = pdfjs.getDocument({
-            data: bytes,
-            cMapPacked: true,
-          });
-          pdf = await loadingTask.promise;
-        } catch (workerErr) {
-          console.warn('PDF.js worker load error, retrying with fallback:', workerErr);
-          // Retry with fallback settings
-          const fallbackTask = pdfjs.getDocument({
-            data: bytes,
-            cMapPacked: true,
-            stopAtErrors: false,
-          });
-          pdf = await fallbackTask.promise;
-        }
-
         if (isCancelled) return;
 
-        pdfDocRef.current = pdf;
-        setNumPages(pdf.numPages);
+        const openWithTimeout = async (stopAtErrors: boolean): Promise<PDFDocumentProxy> => {
+          const task = pdfjs.getDocument({
+            data: bytes.slice(), // Always pass a fresh copy so ArrayBuffer transfer never detaches caller bytes
+            cMapPacked: true,
+            stopAtErrors,
+          });
+          activeTask = task;
+
+          let timeoutId: ReturnType<typeof setTimeout> | null = null;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              reject(new Error('PDF decode timeout'));
+            }, 8000);
+          });
+
+          try {
+            const doc = await Promise.race([task.promise, timeoutPromise]);
+            return doc;
+          } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+          }
+        };
+
+        let doc: PDFDocumentProxy;
+        try {
+          doc = await openWithTimeout(true);
+        } catch (workerErr) {
+          if (isCancelled) return;
+          console.warn('PDF.js primary load warning, retrying:', workerErr);
+          doc = await openWithTimeout(false);
+        }
+
+        if (isCancelled) {
+          await (doc as { destroy?: () => Promise<void> }).destroy?.().catch(() => {});
+          return;
+        }
+
+        loadedDoc = doc;
+        setPdfDoc(doc);
+        setNumPages(doc.numPages);
         setIsLoading(false);
       } catch (err: unknown) {
         if (isCancelled) return;
-        console.warn('PDF.js loading error:', err);
-        setError('Unable to parse PDF pages directly.');
+        console.warn('PDF.js canvas parsing fallback triggered, opening inline frame:', err);
+        setUseIframeFallback(true);
         setIsLoading(false);
       }
     }
@@ -180,29 +216,24 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
 
     return () => {
       isCancelled = true;
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
+      if (activeTask && typeof activeTask.destroy === 'function') {
+        try {
+          Promise.resolve(activeTask.destroy()).catch(() => {});
+        } catch (_) {}
+      }
+      const destroyDoc = loadedDoc ? (loadedDoc as { destroy?: () => Promise<void> }).destroy : undefined;
+      if (typeof destroyDoc === 'function') {
+        try {
+          Promise.resolve(destroyDoc.call(loadedDoc)).catch(() => {});
+        } catch (_) {}
+      }
+      if (localBlobUrl) {
+        URL.revokeObjectURL(localBlobUrl);
       }
     };
   }, [dataUrl]);
 
   const activeDocUrl = blobUrl || dataUrl;
-
-  const handleOpenNative = () => {
-    if (activeDocUrl) {
-      window.open(activeDocUrl, '_blank');
-    }
-  };
-
-  const handleDownload = () => {
-    if (!activeDocUrl) return;
-    const a = document.createElement('a');
-    a.href = activeDocUrl;
-    a.download = docName.endsWith('.pdf') ? docName : `${docName}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
 
   return (
     <div
@@ -210,73 +241,20 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
       className="w-full flex flex-col items-center justify-center select-none"
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* Document Header & Responsive Control Toolbar */}
+      {/* Document Header Bar (Clean - Corner action buttons removed) */}
       <div className="w-full max-w-[900px] flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-[#12141A] rounded-xl border border-[#272B36] mb-3 text-xs">
         <div className="flex items-center gap-2 min-w-0">
           <FileText className="w-4 h-4 text-[#FF5500] shrink-0" />
-          <span className="font-bold text-white truncate max-w-[180px] sm:max-w-md">
+          <span className="font-bold text-white truncate max-w-[220px] sm:max-w-lg">
             {docName}
           </span>
-          {numPages > 0 && (
-            <span className="px-2 py-0.5 rounded-md bg-[#1F232D] text-[#FF8E4D] font-mono text-[11px] font-bold border border-[#2C3240] shrink-0">
-              {numPages} {numPages === 1 ? 'Page' : 'Pages'}
-            </span>
-          )}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {/* View mode toggle (Canvas vs Frame) */}
-          <button
-            type="button"
-            onClick={() => setViewMode('canvas')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer border ${
-              viewMode === 'canvas'
-                ? 'bg-[#FF5500] text-white border-[#FF5500] shadow-xs'
-                : 'bg-[#181A20] text-gray-400 hover:text-white border-[#272B35]'
-            }`}
-            title="High-Resolution Multi-Page Continuous View (Works on all mobile phones and PCs)"
-          >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">All Pages</span>
-            <span className="sm:hidden">Pages</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode('iframe')}
-            className={`hidden sm:flex px-2.5 py-1 rounded-lg text-xs font-semibold items-center gap-1 transition-all cursor-pointer border ${
-              viewMode === 'iframe'
-                ? 'bg-[#FF5500] text-white border-[#FF5500] shadow-xs'
-                : 'bg-[#181A20] text-gray-400 hover:text-white border-[#272B35]'
-            }`}
-            title="Desktop Embedded PDF Frame"
-          >
-            <Monitor className="w-3.5 h-3.5" />
-            <span>Desktop Frame</span>
-          </button>
-
-          {/* Quick Download / Native View Buttons */}
-          {activeDocUrl && (
-            <>
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="px-2 py-1 rounded-lg bg-[#181A20] text-gray-300 hover:text-white border border-[#272B35] text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                title="Download PDF"
-              >
-                <Download className="w-3 h-3 text-emerald-400" />
-                <span className="hidden sm:inline">Download</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenNative}
-                className="px-2 py-1 rounded-lg bg-[#181A20] text-gray-300 hover:text-white border border-[#272B35] text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                title="Open in Native Viewer"
-              >
-                <ExternalLink className="w-3 h-3 text-[#FF5500]" />
-                <span className="hidden sm:inline">Open</span>
-              </button>
-            </>
+        <div className="flex items-center gap-2 shrink-0">
+          {numPages > 0 && (
+            <span className="px-2 py-0.5 rounded-md bg-[#1F232D] text-[#FF8E4D] font-mono text-[11px] font-bold border border-[#2C3240]">
+              {numPages} {numPages === 1 ? 'Page' : 'Pages'}
+            </span>
           )}
         </div>
       </div>
@@ -293,31 +271,8 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
         </div>
       )}
 
-      {/* VIEW MODE 1: NATIVE EMBEDDED IFRAME (OPTIONAL DESKTOP MODE) */}
-      {!isLoading && viewMode === 'iframe' && activeDocUrl && (
-        <div
-          className="w-full max-w-[950px] min-h-[600px] sm:min-h-[850px] rounded-xl overflow-hidden bg-white border border-[#2B2F38] shadow-2xl transition-transform origin-top"
-          style={{
-            transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
-            transformOrigin: 'top center',
-          }}
-        >
-          <object
-            data={`${activeDocUrl}#toolbar=0&navpanes=0`}
-            type="application/pdf"
-            className="w-full h-[600px] sm:h-[850px] rounded-xl border-0 bg-white"
-          >
-            <iframe
-              src={`${activeDocUrl}#toolbar=0&navpanes=0`}
-              title={docName}
-              className="w-full h-full border-0 bg-white"
-            />
-          </object>
-        </div>
-      )}
-
-      {/* VIEW MODE 2: HIGH-DPI HTML5 CANVAS MULTI-PAGE RENDERER (100% RELIABLE ON MOBILE & DESKTOP) */}
-      {!isLoading && viewMode === 'canvas' && !error && pdfDocRef.current && (
+      {/* HIGH-DPI HTML5 CANVAS MULTI-PAGE DIRECT OPEN RENDERER */}
+      {!isLoading && !useIframeFallback && pdfDoc && (
         <div
           className="flex flex-col items-center gap-5 w-full max-w-full overflow-x-auto transition-transform duration-150 origin-top pb-4"
           style={{
@@ -328,7 +283,7 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
           {Array.from({ length: numPages }, (_, index) => (
             <PdfPageCanvas
               key={`page-${index + 1}`}
-              pdfDoc={pdfDocRef.current!}
+              pdfDoc={pdfDoc}
               pageNumber={index + 1}
               totalPages={numPages}
             />
@@ -336,34 +291,26 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
         </div>
       )}
 
-      {/* FALLBACK IF CANVAS RENDERING ENCOUNTERS AN UNREADABLE ENCODING */}
-      {!isLoading && error && (
-        <div className="w-full max-w-[950px] flex flex-col items-center p-6 bg-[#16181F] rounded-2xl border border-[#2B2F38] space-y-4">
-          <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
-            <FileText className="w-5 h-5" />
-            <span>Document File Ready ({docName})</span>
-          </div>
-          <p className="text-xs text-gray-300 text-center max-w-md">
-            This document is securely attached to the client record. You can open or download the complete original PDF file below:
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleOpenNative}
-              className="px-4 py-2 bg-[#FF5500] hover:bg-[#E04B00] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span>Open Full Document (সম্পূর্ণ ফাইল দেখুন)</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleDownload}
-              className="px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-200 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border border-[#3A3F4C]"
-            >
-              <Download className="w-4 h-4 text-emerald-400" />
-              <span>Download PDF</span>
-            </button>
-          </div>
+      {/* AUTOMATIC DIRECT-OPEN INLINE EMBEDDED VIEWER FALLBACK (NEVER STUCK ON SPINNER) */}
+      {!isLoading && useIframeFallback && activeDocUrl && activeDocUrl !== '#' && (
+        <div
+          className="w-full max-w-[900px] min-h-[650px] sm:min-h-[850px] rounded-xl overflow-hidden bg-white border border-[#2B2F38] shadow-2xl transition-transform origin-top"
+          style={{
+            transform: zoom !== 100 ? `scale(${zoom / 100})` : undefined,
+            transformOrigin: 'top center',
+          }}
+        >
+          <object
+            data={`${activeDocUrl}#view=FitH&toolbar=0&navpanes=0`}
+            type="application/pdf"
+            className="w-full h-[650px] sm:h-[850px] rounded-xl border-0 bg-white"
+          >
+            <iframe
+              src={`${activeDocUrl}#view=FitH&toolbar=0&navpanes=0`}
+              title={docName}
+              className="w-full h-[650px] sm:h-[850px] border-0 bg-white"
+            />
+          </object>
         </div>
       )}
     </div>
@@ -388,9 +335,9 @@ const PdfPageCanvas: React.FC<PdfPageCanvasProps> = ({ pdfDoc, pageNumber, total
     async function renderPage() {
       try {
         setPageLoading(true);
-        // Stagger page rendering on mobile so Page 1 renders instantly and remaining pages stream in smoothly
+        // Stagger page rendering smoothly so Page 1 renders immediately and subsequent pages stream in
         if (pageNumber > 1) {
-          await new Promise((r) => setTimeout(r, Math.min((pageNumber - 1) * 75, 750)));
+          await new Promise((r) => setTimeout(r, Math.min((pageNumber - 1) * 60, 600)));
           if (isCancelled) return;
         }
 

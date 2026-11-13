@@ -25,30 +25,147 @@ const DELETED_IDS_FILE = path.join(DATA_DIR, 'deleted_ids.json');
 interface DeletedIdsStore {
   posts: string[];
   canada: string[];
+  attachments: string[];
 }
 
 function getDeletedIds(): DeletedIdsStore {
-  const data = readJsonFile<DeletedIdsStore>(DELETED_IDS_FILE, { posts: [], canada: [] });
+  const data = readJsonFile<DeletedIdsStore>(DELETED_IDS_FILE, { posts: [], canada: [], attachments: [] });
   return {
     posts: Array.isArray(data?.posts) ? data.posts : [],
     canada: Array.isArray(data?.canada) ? data.canada : [],
+    attachments: Array.isArray(data?.attachments) ? data.attachments : [],
   };
 }
 
-function recordDeletedIds(type: 'posts' | 'canada', ids: string[]) {
+function recordDeletedIds(type: 'posts' | 'canada' | 'attachments', ids: string[]) {
   if (!ids || ids.length === 0) return;
   const current = getDeletedIds();
   const nextSet = new Set([...current[type], ...ids.filter(Boolean)]);
-  current[type] = Array.from(nextSet).slice(-500);
+  current[type] = Array.from(nextSet).slice(-1000);
   writeJsonFile(DELETED_IDS_FILE, current);
 }
 
-function clearDeletedId(type: 'posts' | 'canada', id?: string) {
+function clearDeletedId(type: 'posts' | 'canada' | 'attachments', id?: string) {
   if (!id) return;
   const current = getDeletedIds();
   if (current[type].includes(id)) {
     current[type] = current[type].filter((item) => item !== id);
     writeJsonFile(DELETED_IDS_FILE, current);
+  }
+}
+
+function getAttachmentSignatureKeys(att: any): string[] {
+  if (!att) return [];
+  const keys: string[] = [];
+  if (att.id) keys.push(String(att.id).toLowerCase());
+  const name = String(att.name || '').trim().toLowerCase();
+  const sec = String(att.sectionTag || '').trim().toLowerCase();
+  if (name) keys.push(`${sec}::${name}`);
+  return keys;
+}
+
+function removeDeletedAttachmentsFromList(list: any[] = [], deletedAttachments: string[]): any[] {
+  if (!Array.isArray(list) || deletedAttachments.length === 0) return Array.isArray(list) ? list : [];
+  const delSet = new Set(deletedAttachments.map((k) => k.toLowerCase()));
+  return list.filter((att) => !getAttachmentSignatureKeys(att).some((k) => delSet.has(k)));
+}
+
+function propagateRemovedAttachmentsAcrossClient(
+  removedAtts: any[],
+  sourceRec: any
+) {
+  if (!removedAtts || removedAtts.length === 0 || !sourceRec) return;
+
+  const removedKeys = new Set<string>();
+  const removedUrls = new Set<string>();
+  removedAtts.forEach((att) => {
+    getAttachmentSignatureKeys(att).forEach((k) => removedKeys.add(k));
+    if (att?.dataUrl && att.dataUrl !== '#') {
+      removedUrls.add(String(att.dataUrl));
+    }
+  });
+
+  if (removedKeys.size === 0) return;
+  recordDeletedIds('attachments', Array.from(removedKeys));
+
+  const sourceRefs = new Set(
+    [sourceRec.refNumber, sourceRec.tinOrRef, sourceRec.referenceNo, sourceRec.idNumber]
+      .map((v) => String(v || '').toLowerCase().replace(/[-\s_./#:]/g, ''))
+      .filter((v) => v.length >= 4)
+  );
+  const sourcePass = String(sourceRec.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+  const sourceName = String(sourceRec.candidateName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+
+  const isSameClient = (rec: any) => {
+    if (!rec) return false;
+    const recRefs = [rec.refNumber, rec.tinOrRef, rec.referenceNo, rec.idNumber]
+      .map((v) => String(v || '').toLowerCase().replace(/[-\s_./#:]/g, ''))
+      .filter((v) => v.length >= 4);
+    if (recRefs.some((r) => sourceRefs.has(r))) return true;
+    const recPass = String(rec.passportNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+    const recName = String(rec.candidateName || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+    if (sourcePass && recPass && sourcePass === recPass) {
+      if (!sourceName || !recName || sourceName === recName) return true;
+    }
+    if (sourceName && sourceName.length >= 5 && recName === sourceName) return true;
+    return false;
+  };
+
+  const filterAtt = (att: any) => !getAttachmentSignatureKeys(att).some((k) => removedKeys.has(k));
+
+  // Sync removal to linked Canada documents
+  try {
+    const caDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, []);
+    let changed = false;
+    const updatedCa = caDocs.map((c) => {
+      if (!isSameClient(c)) return c;
+      const before = Array.isArray(c.attachedDocuments) ? c.attachedDocuments : [];
+      const after = before.filter(filterAtt);
+      let nextFileUrl = c.documentFileUrl;
+      let nextFileName = c.documentFileName;
+      if (nextFileUrl && removedUrls.has(nextFileUrl)) {
+        nextFileUrl = after[0]?.dataUrl || '';
+        nextFileName = after[0]?.name || '';
+        changed = true;
+      }
+      if (after.length !== before.length || changed) {
+        changed = true;
+        return {
+          ...c,
+          attachedDocuments: after,
+          documentFileUrl: nextFileUrl,
+          documentFileName: nextFileName,
+          updatedAt: Date.now(),
+        };
+      }
+      return c;
+    });
+    if (changed) writeJsonFile(CANADA_DOCS_FILE, updatedCa);
+  } catch (e) {
+    console.warn('Propagate removal to Canada error:', e);
+  }
+
+  // Sync removal to linked Australia/General posts
+  try {
+    const posts = readJsonFile<any[]>(POSTS_FILE, []);
+    let changed = false;
+    const updatedPosts = posts.map((p) => {
+      if (!isSameClient(p)) return p;
+      const before = Array.isArray(p.attachedDocuments) ? p.attachedDocuments : [];
+      const after = before.filter(filterAtt);
+      if (after.length !== before.length) {
+        changed = true;
+        return {
+          ...p,
+          attachedDocuments: after,
+          updatedAt: Date.now(),
+        };
+      }
+      return p;
+    });
+    if (changed) writeJsonFile(POSTS_FILE, updatedPosts);
+  } catch (e) {
+    console.warn('Propagate removal to Posts error:', e);
   }
 }
 
@@ -593,67 +710,16 @@ function processBase64InDoc(doc: any) {
   return copy;
 }
 
-// Auto-seed files on server boot
+// Auto-seed files ONLY on initial boot when JSON files do not exist yet (never resurrect deleted records!)
 function seedServerStorageIfEmpty() {
-  let existingPosts = readJsonFile<any[]>(POSTS_FILE, []);
-  if (!existingPosts || existingPosts.length === 0) {
+  if (!fs.existsSync(POSTS_FILE)) {
     writeJsonFile(POSTS_FILE, INITIAL_DEFAULT_POSTS);
     console.log('[Server Storage] Seeded posts.json with initial records');
-  } else {
-    const hasEgp56 = existingPosts.some(
-      (p) => p.refNumber === 'EGP56RU55H' || p.id === 'post-doc-egp56'
-    );
-    if (!hasEgp56) {
-      existingPosts = [...INITIAL_DEFAULT_POSTS, ...existingPosts];
-      writeJsonFile(POSTS_FILE, existingPosts);
-      console.log('[Server Storage] Added EGP56RU55H record to posts.json');
-    }
   }
 
-  let existingCaDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, []);
-  if (!existingCaDocs || existingCaDocs.length === 0) {
+  if (!fs.existsSync(CANADA_DOCS_FILE)) {
     writeJsonFile(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
     console.log('[Server Storage] Seeded canada_documents.json with initial records');
-  } else {
-    // Ensure ca-doc-egp56 and ca-doc-5 have the 11-page Canada Visa Application PDF attached if missing
-    let updated = false;
-    existingCaDocs = existingCaDocs.map((doc) => {
-      const isTargetDoc =
-        doc.id === 'ca-doc-egp56' ||
-        doc.id === 'ca-doc-5' ||
-        doc.referenceNo === 'EGP56RU55H' ||
-        doc.tinOrRef === 'EGP56RU55H' ||
-        doc.referenceNo === 'WPD-CAN-55102' ||
-        doc.tinOrRef === 'WPD-CAN-55102';
-      if (
-        isTargetDoc &&
-        (!doc.attachedDocuments || doc.attachedDocuments.length === 0 || !doc.documentFileUrl)
-      ) {
-        updated = true;
-        return {
-          ...doc,
-          documentFileName: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
-          documentFileUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
-          attachedDocuments: [
-            {
-              id: `att-ca-${doc.id || 'doc'}-pdf`,
-              name: 'Canada Visa Application - MD IBRAHIM KHALIL MOZUMDER.pdf',
-              size: '737 KB',
-              type: 'pdf',
-              dataUrl: '/uploads/Canada_Visa_Application_MD_IBRAHIM_KHALIL_MOZUMDER.pdf',
-              sectionTag: 'Work Permit Documents (ওয়ার্ক পারমিট)',
-              isPrimary: true,
-              uploadDate: '2026-03-02',
-            },
-          ],
-        };
-      }
-      return doc;
-    });
-    if (updated) {
-      writeJsonFile(CANADA_DOCS_FILE, existingCaDocs);
-      console.log('[Server Storage] Updated ca-doc-egp56 and ca-doc-5 with 11-page Canada Visa Application PDF in canada_documents.json');
-    }
   }
 
   const existingMenuItems = readJsonFile<any[]>(MENU_ITEMS_FILE, []);
@@ -671,21 +737,32 @@ function seedServerStorageIfEmpty() {
 
 seedServerStorageIfEmpty();
 
+function deduplicateAttachedDocs(list: any[] = []): any[] {
+  const result: any[] = [];
+  const seenIds = new Set<string>();
+  const seenSigs = new Set<string>();
+  for (const d of (Array.isArray(list) ? list : [])) {
+    if (!d) continue;
+    const idKey = d.id ? String(d.id).trim().toLowerCase() : '';
+    const sigKey = `${String(d.sectionTag || 'default').trim().toLowerCase()}::${String(d.name || '').trim().toLowerCase()}`;
+    if ((idKey && seenIds.has(idKey)) || (d.name && seenSigs.has(sigKey))) {
+      continue;
+    }
+    if (idKey) seenIds.add(idKey);
+    if (d.name) seenSigs.add(sigKey);
+    result.push(d);
+  }
+  return result;
+}
+
 function mergeAttachedDocsLists(serverAtt: any[] = [], incomingAtt: any[] = [], preferIncoming = false): any[] {
   if (preferIncoming) {
-    return Array.isArray(incomingAtt) ? incomingAtt : [];
+    return deduplicateAttachedDocs(Array.isArray(incomingAtt) ? incomingAtt : []);
   }
-  const map = new Map<string, any>();
-  const addItem = (d: any) => {
-    if (!d) return;
-    const key = d.id || `${d.sectionTag || 'default'}_${d.name || ''}_${d.dataUrl || ''}`.toLowerCase();
-    if (!map.has(key)) {
-      map.set(key, d);
-    }
-  };
-  (Array.isArray(serverAtt) ? serverAtt : []).forEach(addItem);
-  (Array.isArray(incomingAtt) ? incomingAtt : []).forEach(addItem);
-  return Array.from(map.values());
+  return deduplicateAttachedDocs([
+    ...(Array.isArray(serverAtt) ? serverAtt : []),
+    ...(Array.isArray(incomingAtt) ? incomingAtt : []),
+  ]);
 }
 
 async function startServer() {
@@ -761,24 +838,43 @@ async function startServer() {
       res.status(400).json({ error: 'Expected post object with id' });
       return;
     }
-    const processed = processBase64InDoc(rawPost);
+    const processed = {
+      ...processBase64InDoc(rawPost),
+      updatedAt: Date.now(),
+    };
     clearDeletedId('posts', processed.id);
 
     const existingPosts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
+    const prevPost = existingPosts.find((p) => p.id === processed.id);
+
+    // Detect any attachedDocuments that the admin explicitly removed
+    const nextAttList = Array.isArray(processed.attachedDocuments) ? processed.attachedDocuments : [];
+    const nextAttKeys = new Set<string>();
+    nextAttList.forEach((a: any) => getAttachmentSignatureKeys(a).forEach((k) => nextAttKeys.add(k)));
+
+    // Clear tombstones for attachments being saved now
+    nextAttKeys.forEach((k) => clearDeletedId('attachments', k));
+
+    const removedAtts = (prevPost?.attachedDocuments || []).filter(
+      (old: any) => !getAttachmentSignatureKeys(old).some((k) => nextAttKeys.has(k))
+    );
+
     const idx = existingPosts.findIndex((p) => p.id === processed.id);
-    let updatedPosts: any[];
-    if (idx !== -1) {
-      updatedPosts = existingPosts.map((p, i) => (i === idx ? { ...p, ...processed } : p));
-    } else {
-      updatedPosts = [processed, ...existingPosts];
-    }
+    const updatedPosts =
+      idx !== -1
+        ? existingPosts.map((p, i) => (i === idx ? { ...p, ...processed, attachedDocuments: nextAttList } : p))
+        : [processed, ...existingPosts];
 
     const saved = writeJsonFile(POSTS_FILE, updatedPosts);
 
+    if (removedAtts.length > 0) {
+      propagateRemovedAttachmentsAcrossClient(removedAtts, processed);
+    }
+
     try {
       const ref = processed.refNumber || processed.id;
-      if (Array.isArray(processed.attachedDocuments)) {
-        processed.attachedDocuments.forEach((att: any) => {
+      if (nextAttList.length > 0) {
+        nextAttList.forEach((att: any) => {
           crossSyncAttachedDocToBoth(ref, att, processed.candidateName, processed.passportNumber);
         });
       }
@@ -823,29 +919,36 @@ async function startServer() {
       finalPosts = incoming;
     } else {
       const existing = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
-      const deletedSet = new Set(getDeletedIds().posts);
+      const deleted = getDeletedIds();
+      const deletedSet = new Set(deleted.posts);
       const mergedMap = new Map<string, any>();
 
-      // Keep existing server records first (preserving other devices' posts!)
       existing.forEach((p) => {
         if (p && p.id && !deletedSet.has(p.id)) {
           mergedMap.set(p.id, p);
         }
       });
 
-      // Merge incoming posts into map without erasing existing ones
       incoming.forEach((p) => {
         if (!p || !p.id) return;
-        if (deletedSet.has(p.id)) return; // Skip already-deleted posts from stale device caches
+        if (deletedSet.has(p.id)) return;
+        const cleanIncomingAtt = removeDeletedAttachmentsFromList(p.attachedDocuments || [], deleted.attachments);
         const prev = mergedMap.get(p.id);
         if (prev) {
+          if ((prev.updatedAt || 0) > (p.updatedAt || 0)) {
+            return; // Server already has newer version (e.g. attachments were removed)
+          }
           mergedMap.set(p.id, {
             ...prev,
             ...p,
-            attachedDocuments: mergeAttachedDocsLists(prev.attachedDocuments, p.attachedDocuments, false),
+            attachedDocuments: mergeAttachedDocsLists(
+              prev.attachedDocuments,
+              cleanIncomingAtt,
+              false
+            ),
           });
         } else {
-          mergedMap.set(p.id, p);
+          mergedMap.set(p.id, { ...p, attachedDocuments: cleanIncomingAtt });
         }
       });
 
@@ -886,24 +989,49 @@ async function startServer() {
       res.status(400).json({ error: 'Expected document object with id' });
       return;
     }
-    const processed = processBase64InDoc(rawDoc);
+    const processed = {
+      ...processBase64InDoc(rawDoc),
+      updatedAt: Date.now(),
+    };
     clearDeletedId('canada', processed.id);
 
     const existingDocs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
-    const idx = existingDocs.findIndex((d) => d.id === processed.id);
-    let updatedDocs: any[];
-    if (idx !== -1) {
-      updatedDocs = existingDocs.map((d, i) => (i === idx ? { ...d, ...processed } : d));
-    } else {
-      updatedDocs = [processed, ...existingDocs];
+    const prevDoc = existingDocs.find((d) => d.id === processed.id);
+
+    const nextAttList = Array.isArray(processed.attachedDocuments) ? processed.attachedDocuments : [];
+    const nextAttKeys = new Set<string>();
+    nextAttList.forEach((a: any) => getAttachmentSignatureKeys(a).forEach((k) => nextAttKeys.add(k)));
+    nextAttKeys.forEach((k) => clearDeletedId('attachments', k));
+
+    const removedAtts = (prevDoc?.attachedDocuments || []).filter(
+      (old: any) => !getAttachmentSignatureKeys(old).some((k) => nextAttKeys.has(k))
+    );
+
+    // Ensure documentFileUrl stays consistent when primary/all attachments are removed
+    if (nextAttList.length === 0) {
+      processed.documentFileUrl = '';
+      processed.documentFileName = '';
+    } else if (!processed.documentFileUrl) {
+      processed.documentFileUrl = nextAttList[0].dataUrl;
+      processed.documentFileName = nextAttList[0].name;
     }
+
+    const idx = existingDocs.findIndex((d) => d.id === processed.id);
+    const updatedDocs =
+      idx !== -1
+        ? existingDocs.map((d, i) => (i === idx ? { ...d, ...processed, attachedDocuments: nextAttList } : d))
+        : [processed, ...existingDocs];
 
     const saved = writeJsonFile(CANADA_DOCS_FILE, updatedDocs);
 
+    if (removedAtts.length > 0) {
+      propagateRemovedAttachmentsAcrossClient(removedAtts, processed);
+    }
+
     try {
       const ref = processed.tinOrRef || processed.referenceNo || processed.idNumber || processed.id;
-      if (Array.isArray(processed.attachedDocuments)) {
-        processed.attachedDocuments.forEach((att: any) => {
+      if (nextAttList.length > 0) {
+        nextAttList.forEach((att: any) => {
           crossSyncAttachedDocToBoth(ref, att, processed.candidateName, processed.passportNumber);
         });
       }
@@ -948,7 +1076,8 @@ async function startServer() {
       finalDocs = incoming;
     } else {
       const existing = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
-      const deletedSet = new Set(getDeletedIds().canada);
+      const deleted = getDeletedIds();
+      const deletedSet = new Set(deleted.canada);
       const mergedMap = new Map<string, any>();
 
       existing.forEach((d) => {
@@ -960,15 +1089,19 @@ async function startServer() {
       incoming.forEach((d) => {
         if (!d || !d.id) return;
         if (deletedSet.has(d.id)) return;
+        const cleanIncomingAtt = removeDeletedAttachmentsFromList(d.attachedDocuments || [], deleted.attachments);
         const prev = mergedMap.get(d.id);
         if (prev) {
+          if ((prev.updatedAt || 0) > (d.updatedAt || 0)) {
+            return;
+          }
           mergedMap.set(d.id, {
             ...prev,
             ...d,
-            attachedDocuments: mergeAttachedDocsLists(prev.attachedDocuments, d.attachedDocuments, false),
+            attachedDocuments: mergeAttachedDocsLists(prev.attachedDocuments, cleanIncomingAtt, false),
           });
         } else {
-          mergedMap.set(d.id, d);
+          mergedMap.set(d.id, { ...d, attachedDocuments: cleanIncomingAtt });
         }
       });
 
@@ -1112,6 +1245,7 @@ async function startServer() {
     if (!attachedDoc.id) {
       attachedDoc.id = `att-ca-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     }
+    getAttachmentSignatureKeys(attachedDoc).forEach((k) => clearDeletedId('attachments', k));
 
     const docs = readJsonFile<any[]>(CANADA_DOCS_FILE, INITIAL_CANADA_DOCUMENTS);
     const cleanRef = String(referenceNo || '').toLowerCase().replace(/[-\s_./#:]/g, '');
@@ -1170,6 +1304,7 @@ async function startServer() {
       attachedDocuments: updatedAttached,
       documentFileUrl: attachedDoc.isPrimary ? attachedDoc.dataUrl : (currentDoc.documentFileUrl || attachedDoc.dataUrl),
       documentFileName: attachedDoc.isPrimary ? attachedDoc.name : (currentDoc.documentFileName || attachedDoc.name),
+      updatedAt: Date.now(),
     };
 
     const saved = writeJsonFile(CANADA_DOCS_FILE, docs);
@@ -1202,6 +1337,7 @@ async function startServer() {
     if (!attachedDoc.id) {
       attachedDoc.id = `att-au-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     }
+    getAttachmentSignatureKeys(attachedDoc).forEach((k) => clearDeletedId('attachments', k));
 
     const posts = readJsonFile<any[]>(POSTS_FILE, INITIAL_DEFAULT_POSTS);
     const cleanRef = String(refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
@@ -1247,6 +1383,7 @@ async function startServer() {
     posts[targetIdx] = {
       ...currentPost,
       attachedDocuments: updatedAttached,
+      updatedAt: Date.now(),
     };
 
     const saved = writeJsonFile(POSTS_FILE, posts);
@@ -1404,7 +1541,7 @@ async function startServer() {
       res.json({ found: false, result: null });
       return;
     }
-    const targetSection = String(req.query.section || '').trim().toLowerCase();
+    const targetSection = String(req.query.section || req.query.targetSection || '').trim().toLowerCase();
     const preferredSource = String(req.query.source || '').trim().toLowerCase();
 
     const cleanQuery = rawQuery.toLowerCase().replace(/[-\s_./#:]/g, '');
