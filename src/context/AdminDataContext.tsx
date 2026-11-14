@@ -83,6 +83,7 @@ interface AdminDataContextType {
   // Authentication & Security
   isAuthenticated: boolean;
   loginAdmin: (password: string) => boolean;
+  unlockAdminSession: () => void;
   logoutAdmin: () => void;
   adminPassword: string;
   changeAdminPassword: (oldPass: string, newPass: string) => { success: boolean; message: string };
@@ -417,6 +418,11 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return false;
   };
 
+  const unlockAdminSession = () => {
+    setIsAuthenticated(true);
+    sessionStorage.setItem('bhp_admin_auth', 'true');
+  };
+
   const logoutAdmin = () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem('bhp_admin_auth');
@@ -670,6 +676,7 @@ export const AdminDataProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       value={{
         isAuthenticated,
         loginAdmin,
+        unlockAdminSession,
         logoutAdmin,
         adminPassword,
         changeAdminPassword,

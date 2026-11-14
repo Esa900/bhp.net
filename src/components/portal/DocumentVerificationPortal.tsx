@@ -58,9 +58,7 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
         const u = universalMatch.document;
         setMatchedUniversalDoc(u);
         setMatchedSectionTag(menuItem.mainTitle || menuItem.subMenu || '');
-        if (u.attachedDocuments && u.attachedDocuments.length > 0) {
-          setShowFullPdfViewer(true);
-        }
+        setShowFullPdfViewer(true);
         const convertedProfile: ApplicantProfile = {
           id: u.id,
           fullName: u.candidateName,

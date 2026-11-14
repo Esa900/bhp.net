@@ -155,6 +155,23 @@ export function waitForFirebaseAuthInit(): Promise<void> {
   return authReadyPromise;
 }
 
+export async function ensureFirebaseCloudAdmin(): Promise<boolean> {
+  await Promise.race([
+    authReadyPromise,
+    new Promise<void>((resolve) => setTimeout(resolve, 600)),
+  ]);
+  if (isFirebaseAdminReady()) {
+    return true;
+  }
+  const res = await signInWithFirebaseGoogle();
+  if (!res.isAdmin) {
+    throw new Error(
+      `Signed in as ${res.user.email || 'user'}. Please select the Admin Google Account (${BOOTSTRAPPED_ADMIN_EMAIL}) to save to Cloud.`
+    );
+  }
+  return true;
+}
+
 if (typeof window !== 'undefined') {
   onAuthStateChanged(auth, async (user) => {
     await verifyAndSyncAdminStatus(user);

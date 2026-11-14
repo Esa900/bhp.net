@@ -45,6 +45,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
   const {
     isAuthenticated,
     loginAdmin,
+    unlockAdminSession,
     logoutAdmin,
     adminRole,
     setAdminRole,
@@ -220,6 +221,50 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               <span>Unlock AP (প্রবেশ করুন)</span>
             </button>
 
+            <div className="relative flex items-center py-1">
+              <div className="flex-grow border-t border-[#2F333D]" />
+              <span className="px-2.5 text-[10px] uppercase font-bold text-gray-500">OR</span>
+              <div className="flex-grow border-t border-[#2F333D]" />
+            </div>
+
+            <button
+              type="button"
+              disabled={isConnectingCloud}
+              onClick={async () => {
+                setIsConnectingCloud(true);
+                setAuthError('');
+                try {
+                  const res = await signInWithFirebaseGoogle();
+                  setCloudAdminReady(res.isAdmin);
+                  setCloudEmail(res.user.email || '');
+                  if (res.isAdmin) {
+                    unlockAdminSession();
+                    showToast(`Admin Google Cloud unlocked (${res.user.email})!`);
+                    await Promise.allSettled([
+                      syncAdminPostsFromServer(),
+                      syncCanadaDocumentsFromServer(),
+                    ]);
+                  } else {
+                    setAuthError(
+                      `Signed in as ${res.user.email}. Please select mdesaali391@gmail.com to unlock Admin Panel.`
+                    );
+                  }
+                } catch (err: any) {
+                  setAuthError(err?.message || 'Google Sign-In cancelled or blocked.');
+                } finally {
+                  setIsConnectingCloud(false);
+                }
+              }}
+              className="w-full py-2.5 bg-white hover:bg-gray-100 text-gray-900 rounded-xl text-xs font-bold shadow transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Cloud className="w-4 h-4 text-blue-600" />
+              <span>
+                {isConnectingCloud
+                  ? 'Connecting Admin Google...'
+                  : 'Sign in with Admin Google (Direct Cloud Unlock)'}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={onClose}
@@ -284,21 +329,21 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-bold cursor-pointer transition-colors ${
                 cloudAdminReady
                   ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/70'
-                  : 'bg-amber-950/60 border-amber-500/50 text-amber-300 hover:bg-amber-900/70 animate-pulse'
+                  : 'bg-[#23262D] border-[#373B45] text-gray-200 hover:bg-[#2F333D]'
               }`}
               title={
                 cloudAdminReady
                   ? `Connected to Firebase Cloud (${cloudEmail})`
-                  : 'Click to sign in with Admin Google Account for worldwide cross-device cloud PDF uploads'
+                  : 'Click to sign in with Admin Google Account for cloud sync'
               }
             >
-              <Cloud className="w-3.5 h-3.5" />
+              <Cloud className={`w-3.5 h-3.5 ${cloudAdminReady ? 'text-emerald-400' : 'text-blue-400'}`} />
               <span className="hidden lg:inline">
                 {isConnectingCloud
                   ? 'Connecting...'
                   : cloudAdminReady
                   ? 'Cloud Synced'
-                  : 'Connect Google Cloud'}
+                  : 'Google Cloud'}
               </span>
             </button>
 

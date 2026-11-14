@@ -2,6 +2,7 @@ import { AdminPost, AttachedDoc, PostCategory } from '../types';
 import { setLargeItem, getLargeItem } from './pdfIndexedDb';
 import { isFirebaseAdminReady } from './firebaseClient';
 import {
+  deleteAllPostsFromFirestore,
   deletePostFromFirestore,
   fetchPostsFromFirestoreForAdmin,
   syncLocalRecordsToFirestoreIfEmpty,
@@ -137,90 +138,81 @@ export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
   if (typeof window === 'undefined') return getStoredAdminPosts();
 
   const startEpoch = postsMutationEpoch;
+  const local = getStoredAdminPosts();
 
-  // 1. Try Express backend sync first if available
-  try {
-    const res = await fetch('/api/posts', { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      if (postsMutationEpoch !== startEpoch) {
-        return getStoredAdminPosts();
-      }
-      if (data && Array.isArray(data.posts)) {
-        const deletedIdsSet = new Set<string>(Array.isArray(data.deletedIds) ? data.deletedIds : []);
-        const local = getStoredAdminPosts();
-        const mergedMap = new Map<string, AdminPost>();
-        const postsNeedingUpload: AdminPost[] = [];
+  const [expressRes, cloudPosts] = await Promise.all([
+    fetch('/api/posts', { cache: 'no-store' })
+      .then(async (res) => (res.ok ? await res.json().catch(() => null) : null))
+      .catch(() => null),
+    isFirebaseAdminReady()
+      ? fetchPostsFromFirestoreForAdmin().catch(() => null)
+      : Promise.resolve(null),
+  ]);
 
-        data.posts.forEach((p: AdminPost) => {
-          if (p && p.id && !isDemoPost(p) && !deletedIdsSet.has(p.id)) {
-            mergedMap.set(p.id, p);
-          }
-        });
-
-        local.forEach((p: AdminPost) => {
-          if (p && p.id && !isDemoPost(p) && !deletedIdsSet.has(p.id) && !mergedMap.has(p.id)) {
-            mergedMap.set(p.id, p);
-            postsNeedingUpload.push(p);
-          }
-        });
-
-        const mergedList = Array.from(mergedMap.values());
-        (window as any).__bhp_admin_posts_cache = mergedList;
-
-        try {
-          localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(mergedList));
-        } catch (e) {
-          console.warn('Local storage cache update error:', e);
-        }
-
-        if (postsNeedingUpload.length > 0) {
-          Promise.allSettled(
-            postsNeedingUpload.map((post) =>
-              fetch('/api/posts/upsert', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ post }),
-              })
-            )
-          ).catch(() => {});
-        }
-
-        if (isFirebaseAdminReady()) {
-          syncLocalRecordsToFirestoreIfEmpty(mergedList, getStoredCanadaDocuments()).catch(() => {});
-        }
-
-        window.dispatchEvent(new CustomEvent('bhp_posts_updated', { detail: mergedList }));
-        return mergedList;
-      }
-    }
-  } catch (err) {
-    console.warn('Network sync for admin posts skipped (offline or static host):', err);
+  if (postsMutationEpoch !== startEpoch) {
+    return getStoredAdminPosts();
   }
 
-  // 2. Firestore Admin Cloud Sync (works on Vercel / static hosts / separate devices)
+  const expressPosts: AdminPost[] | null =
+    expressRes && Array.isArray(expressRes.posts) ? expressRes.posts : null;
+  const deletedIdsSet = new Set<string>(
+    expressRes && Array.isArray(expressRes.deletedIds) ? expressRes.deletedIds : []
+  );
+
+  if (!expressPosts && !cloudPosts) {
+    return local;
+  }
+
+  const mergedMap = new Map<string, AdminPost>();
+  const putLatest = (p: AdminPost) => {
+    if (!p || !p.id || isDemoPost(p) || deletedIdsSet.has(p.id)) return;
+    const prev = mergedMap.get(p.id);
+    if (!prev || Number(p.updatedAt || 0) >= Number(prev.updatedAt || 0)) {
+      mergedMap.set(p.id, p);
+    }
+  };
+
+  (expressPosts || []).forEach(putLatest);
+  (cloudPosts || []).forEach(putLatest);
+
+  local.forEach((p) => {
+    if (!p || !p.id || isDemoPost(p) || deletedIdsSet.has(p.id)) return;
+    if (!mergedMap.has(p.id)) {
+      mergedMap.set(p.id, p);
+    }
+  });
+
+  const mergedList = Array.from(mergedMap.values());
+  updateLocalPostsCache(mergedList);
+
+  if (expressPosts) {
+    const expressById = new Map(expressPosts.map((p) => [p.id, p]));
+    const postsNeedingExpressPush = mergedList.filter((p) => {
+      const ex = expressById.get(p.id);
+      return !ex || Number(p.updatedAt || 0) > Number(ex.updatedAt || 0);
+    });
+    if (postsNeedingExpressPush.length > 0) {
+      Promise.allSettled(
+        postsNeedingExpressPush.map((post) =>
+          fetch('/api/posts/upsert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ post }),
+          })
+        )
+      ).catch(() => {});
+    }
+  }
+
   if (isFirebaseAdminReady()) {
-    try {
-      const cloudPosts = await fetchPostsFromFirestoreForAdmin();
-      if (postsMutationEpoch !== startEpoch) {
-        return getStoredAdminPosts();
-      }
-      if (cloudPosts && cloudPosts.length > 0) {
-        const cleaned = cloudPosts.filter((p) => p && !isDemoPost(p));
-        updateLocalPostsCache(cleaned);
-        return cleaned;
-      } else if (cloudPosts && cloudPosts.length === 0) {
-        const local = getStoredAdminPosts();
-        if (local.length > 0) {
-          syncLocalRecordsToFirestoreIfEmpty(local, getStoredCanadaDocuments()).catch(() => {});
-        }
-      }
-    } catch (err) {
-      console.warn('Firestore admin posts sync note:', err);
-    }
+    syncLocalRecordsToFirestoreIfEmpty(
+      mergedList,
+      getStoredCanadaDocuments(),
+      Array.from(deletedIdsSet)
+    ).catch(() => {});
   }
 
-  return getStoredAdminPosts();
+  return mergedList;
 };
 
 // Auto-trigger sync on module load in browser
@@ -271,24 +263,18 @@ async function sanitizeAndUploadPostFiles(post: AdminPost): Promise<AdminPost> {
   const cleanPost: AdminPost = { ...post };
 
   if (cleanPost.candidatePhotoUrl && cleanPost.candidatePhotoUrl.startsWith('data:')) {
-    try {
-      cleanPost.candidatePhotoUrl = await uploadDataUrlDocument('candidate_photo.png', cleanPost.candidatePhotoUrl, 'image');
-    } catch (_) {}
+    cleanPost.candidatePhotoUrl = await uploadDataUrlDocument('candidate_photo.png', cleanPost.candidatePhotoUrl, 'image');
   }
 
   if (cleanPost.imageUrl && cleanPost.imageUrl.startsWith('data:')) {
-    try {
-      cleanPost.imageUrl = await uploadDataUrlDocument('post_cover.png', cleanPost.imageUrl, 'image');
-    } catch (_) {}
+    cleanPost.imageUrl = await uploadDataUrlDocument('post_cover.png', cleanPost.imageUrl, 'image');
   }
 
   if (Array.isArray(cleanPost.galleryImages) && cleanPost.galleryImages.length > 0) {
     cleanPost.galleryImages = await Promise.all(
       cleanPost.galleryImages.map(async (img, idx) => {
         if (img && img.startsWith('data:')) {
-          try {
-            return await uploadDataUrlDocument(`gallery_${idx + 1}.png`, img, 'image');
-          } catch (_) {}
+          return await uploadDataUrlDocument(`gallery_${idx + 1}.png`, img, 'image');
         }
         return img;
       })
@@ -306,15 +292,13 @@ async function sanitizeAndUploadPostFiles(post: AdminPost): Promise<AdminPost> {
         const nextType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : att.type;
 
         if (att.dataUrl && att.dataUrl.startsWith('data:')) {
-          try {
-            const uploadedUrl = await uploadDataUrlDocument(att.name || 'document.pdf', att.dataUrl, nextType);
-            return {
-              ...att,
-              type: nextType,
-              sectionTag: fallbackSection,
-              dataUrl: uploadedUrl,
-            };
-          } catch (_) {}
+          const uploadedUrl = await uploadDataUrlDocument(att.name || 'document.pdf', att.dataUrl, nextType);
+          return {
+            ...att,
+            type: nextType,
+            sectionTag: fallbackSection,
+            dataUrl: uploadedUrl,
+          };
         }
         return {
           ...att,
@@ -365,11 +349,11 @@ export const upsertStoredAdminPostAsync = async (post: AdminPost): Promise<Admin
 
   updateLocalPostsCache(nextList);
 
+  let savedRemote = false;
   if (typeof window !== 'undefined') {
     if (isFirebaseAdminReady()) {
-      await upsertPostToFirestore(sanitized, nextList, getStoredCanadaDocuments()).catch((err) =>
-        console.warn('Firestore post upsert note:', err)
-      );
+      await upsertPostToFirestore(sanitized, nextList, getStoredCanadaDocuments());
+      savedRemote = true;
     }
 
     try {
@@ -379,15 +363,34 @@ export const upsertStoredAdminPostAsync = async (post: AdminPost): Promise<Admin
         body: JSON.stringify({ post: sanitized }),
       });
       if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json.posts)) {
+        savedRemote = true;
+        const json = await res.json().catch(() => null);
+        if (json && Array.isArray(json.posts)) {
           postsMutationEpoch += 1;
-          nextList = json.posts;
+          const expressMap = new Map<string, AdminPost>();
+          nextList.forEach((p) => expressMap.set(p.id, p));
+          json.posts.forEach((p: AdminPost) => {
+            if (!p?.id || isDemoPost(p)) return;
+            const prev = expressMap.get(p.id);
+            if (!prev || Number(p.updatedAt || 0) >= Number(prev.updatedAt || 0)) {
+              expressMap.set(p.id, p);
+            }
+          });
+          nextList = Array.from(expressMap.values());
           updateLocalPostsCache(nextList);
         }
+      } else if (!savedRemote && res.status === 404) {
+        throw new Error(
+          'CLOUD_AUTH_REQUIRED: ক্লাউড ডাটাবেজে সেভ করতে প্রথমে Admin Google Account দিয়ে Sign-In করুন।'
+        );
+      } else if (!savedRemote) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || `Save failed (HTTP ${res.status})`);
       }
     } catch (err) {
-      console.warn('Express upsert post skipped:', err);
+      if (!savedRemote) {
+        throw err;
+      }
     }
   }
 
@@ -568,6 +571,11 @@ export const deleteAllStoredAdminPostsAsync = async (): Promise<void> => {
   postsMutationEpoch += 1;
   updateLocalPostsCache([]);
   if (typeof window !== 'undefined') {
+    if (isFirebaseAdminReady()) {
+      await deleteAllPostsFromFirestore(getStoredCanadaDocuments()).catch((err) =>
+        console.warn('Firestore delete all posts note:', err)
+      );
+    }
     try {
       await fetch('/api/posts/delete-all', { method: 'POST' });
     } catch (err) {

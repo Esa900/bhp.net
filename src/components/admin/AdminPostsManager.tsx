@@ -49,6 +49,7 @@ import {
 import { uploadBinaryDocument, uploadDataUrlDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
 import {
   BHP_FIREBASE_AUTH_EVENT,
+  ensureFirebaseCloudAdmin,
   isFirebaseAdminReady,
   signInWithFirebaseGoogle,
 } from '../../utils/firebaseClient';
@@ -269,15 +270,13 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState<boolean>(false);
   const [quickUploadError, setQuickUploadError] = useState<string | null>(null);
   const [quickUploadStatus, setQuickUploadStatus] = useState<string | null>(null);
-  const [cloudReady, setCloudReady] = useState<boolean>(() => isFirebaseAdminReady());
+  const [isSavingPost, setIsSavingPost] = useState<boolean>(false);
   const [isConnectingCloud, setIsConnectingCloud] = useState<boolean>(false);
   const quickFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const onAuth = () => {
-      const ready = isFirebaseAdminReady();
-      setCloudReady(ready);
-      if (ready) {
+      if (isFirebaseAdminReady()) {
         syncAdminPostsFromServer().then(setPosts).catch(() => {});
       }
     };
@@ -289,10 +288,9 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     setIsConnectingCloud(true);
     try {
       const res = await signInWithFirebaseGoogle();
-      setCloudReady(res.isAdmin);
       if (res.isAdmin) {
         setQuickUploadError(null);
-        showToast(`Cloud Sync Connected (${res.user.email})! You can now upload PDFs from any device.`);
+        showToast(`Cloud Connected (${res.user.email})!`);
         syncAdminPostsFromServer().then(setPosts).catch(() => {});
       } else {
         showToast(`Signed in as ${res.user.email}. Use admin Google account (mdesaali391@gmail.com) for cloud writes.`);
@@ -355,7 +353,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
 
     setIsUploadingQuickPdf(true);
     setQuickUploadError(null);
-    setQuickUploadStatus('Preparing upload...');
+    setQuickUploadStatus('Connecting to Cloud & preparing upload...');
 
     const finalSection =
       quickSectionTag === 'Other Custom Section' && customSectionTag.trim()
@@ -365,6 +363,12 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     const targetRef = quickPostDoc.refNumber || quickPostDoc.id;
 
     try {
+      if (!isFirebaseAdminReady()) {
+        await ensureFirebaseCloudAdmin().catch((authErr) => {
+          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
+        });
+      }
+
       let latestServerPosts: AdminPost[] | null = null;
       const total = quickSelectedFiles.length;
 
@@ -536,6 +540,12 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     showToast(`Uploading ${filesList.length} PDF file(s)...`);
 
     try {
+      if (!isFirebaseAdminReady()) {
+        await ensureFirebaseCloudAdmin().catch((authErr) => {
+          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
+        });
+      }
+
       for (const file of filesList) {
         const docType = inferDocumentType(file.name, file.type);
         try {
@@ -648,6 +658,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   // Save Post
   const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingPost) return;
     if (!formData.title.trim()) {
       showToast('Error: Please enter a post title.');
       return;
@@ -693,49 +704,63 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
       visaSubclass: formData.visaSubclass.trim() || undefined,
     };
 
-    const syncedPosts = await upsertStoredAdminPostAsync(postToSave);
-    setPosts(syncedPosts);
-
-    if (editingPostId) {
-      showToast(`Post "${postToSave.title}" updated successfully.`);
-
-      if (postToSave.status === 'Published') {
-        const newsItem: NewsItem = {
-          id: postToSave.id,
-          title: postToSave.title,
-          badges: postToSave.badges,
-          date: postToSave.date,
-          readTime: postToSave.readTime,
-          imageUrl: postToSave.imageUrl,
-          linkText: 'Read article',
-        };
-        const existsInNews = news.some((n) => n.id === postToSave.id);
-        if (existsInNews) {
-          updateNews(postToSave.id, newsItem);
-        } else {
-          addNews(newsItem);
-        }
-      } else {
-        deleteNews(postToSave.id);
-      }
-    } else {
-      showToast(`Post published! Searchable by ID/Ref: "${postToSave.refNumber}"`);
-
-      if (postToSave.status === 'Published') {
-        addNews({
-          id: postToSave.id,
-          title: postToSave.title,
-          badges: postToSave.badges,
-          date: postToSave.date,
-          readTime: postToSave.readTime,
-          imageUrl: postToSave.imageUrl,
-          linkText: 'Read article',
+    setIsSavingPost(true);
+    try {
+      if (!isFirebaseAdminReady()) {
+        await ensureFirebaseCloudAdmin().catch((authErr) => {
+          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
         });
       }
-    }
 
-    handleResetForm();
-    onSwitchSubView('all');
+      const syncedPosts = await upsertStoredAdminPostAsync(postToSave);
+      setPosts(syncedPosts);
+
+      if (editingPostId) {
+        showToast(`Post "${postToSave.title}" saved to Cloud successfully.`);
+
+        if (postToSave.status === 'Published') {
+          const newsItem: NewsItem = {
+            id: postToSave.id,
+            title: postToSave.title,
+            badges: postToSave.badges,
+            date: postToSave.date,
+            readTime: postToSave.readTime,
+            imageUrl: postToSave.imageUrl,
+            linkText: 'Read article',
+          };
+          const existsInNews = news.some((n) => n.id === postToSave.id);
+          if (existsInNews) {
+            updateNews(postToSave.id, newsItem);
+          } else {
+            addNews(newsItem);
+          }
+        } else {
+          deleteNews(postToSave.id);
+        }
+      } else {
+        showToast(`Post saved to Cloud! Searchable Ref: "${postToSave.refNumber}"`);
+
+        if (postToSave.status === 'Published') {
+          addNews({
+            id: postToSave.id,
+            title: postToSave.title,
+            badges: postToSave.badges,
+            date: postToSave.date,
+            readTime: postToSave.readTime,
+            imageUrl: postToSave.imageUrl,
+            linkText: 'Read article',
+          });
+        }
+      }
+
+      handleResetForm();
+      onSwitchSubView('all');
+    } catch (err: any) {
+      const msg = (err?.message || 'Failed to save post to Cloud.').replace(/^CLOUD_AUTH_REQUIRED:\s*/i, '');
+      showToast(`Error: ${msg}`);
+    } finally {
+      setIsSavingPost(false);
+    }
   };
 
   // Delete Post
@@ -1532,10 +1557,20 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold rounded-lg transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                    disabled={isSavingPost}
+                    className="px-5 py-2.5 bg-[#0284c7] hover:bg-[#0369a1] disabled:opacity-60 text-white font-bold rounded-lg transition-all shadow-md cursor-pointer flex items-center gap-1.5"
                   >
-                    <Check className="w-4 h-4" />
-                    <span>{editingPostId ? 'Update Post' : 'Publish Post'}</span>
+                    {isSavingPost ? (
+                      <>
+                        <RotateCcw className="w-4 h-4 animate-spin" />
+                        <span>Saving to Cloud...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>{editingPostId ? 'Update Post' : 'Publish Post'}</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -2147,30 +2182,13 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
               )}
             </div>
 
-            {!cloudReady && (
-              <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <div className="flex items-start gap-2 text-amber-200">
-                  <Cloud className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <span>
-                    সব ডিভাইসে পিডিএফ সেভ করতে Admin Google Account (<strong>mdesaali391@gmail.com</strong>) কানেক্ট করুন।
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  disabled={isConnectingCloud}
-                  onClick={handleConnectGoogleCloud}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] shrink-0 cursor-pointer transition-colors"
-                >
-                  {isConnectingCloud ? 'Connecting...' : 'Connect Google Cloud'}
-                </button>
-              </div>
-            )}
-
             {quickUploadError && (
               <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 space-y-2">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <span className="break-words">{quickUploadError}</span>
+                  <span className="break-words">
+                    {quickUploadError.replace(/^CLOUD_AUTH_REQUIRED:\s*/i, '')}
+                  </span>
                 </div>
                 {quickUploadError.includes('CLOUD_AUTH_REQUIRED') && (
                   <button
@@ -2183,7 +2201,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                     <span>
                       {isConnectingCloud
                         ? 'Signing in with Google...'
-                        : 'Sign In with Google (mdesaali391@gmail.com) & Retry'}
+                        : 'Sign In with Google & Retry'}
                     </span>
                   </button>
                 )}

@@ -654,6 +654,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
             );
             const isPdf = Boolean(doc.dataUrl) && !isImage && (
               doc.type === 'pdf' ||
+              isFirestorePdfUrl(doc.dataUrl) ||
               doc.name.toLowerCase().endsWith('.pdf') ||
               doc.dataUrl.startsWith('data:application/pdf') ||
               doc.dataUrl.includes('application/pdf') ||
@@ -908,7 +909,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                   <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 bg-[#F8FAFC] p-4 rounded-xl border border-gray-200">
                     {document.featuredImageUrl && !document.featuredImageUrl.includes('unsplash') && (
                       <div className="w-20 h-24 rounded-lg overflow-hidden border-2 border-gray-300 shadow-sm bg-white shrink-0 flex items-center justify-center">
-                        <img
+                        <ResolvedDocImage
                           src={document.featuredImageUrl}
                           alt={document.candidateName || 'Candidate'}
                           className="w-full h-full object-cover"

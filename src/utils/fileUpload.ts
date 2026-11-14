@@ -73,11 +73,7 @@ export async function uploadDataUrlDocument(
 ): Promise<string> {
   const docType = explicitType || inferDocumentType(fileName);
   if (isFirebaseAdminReady()) {
-    try {
-      return await uploadDataUrlToFirestore(fileName, dataUrl, docType);
-    } catch (err) {
-      console.warn('Firestore dataUrl upload fallback:', err);
-    }
+    return await uploadDataUrlToFirestore(fileName, dataUrl, docType);
   }
   const upRes = await fetch('/api/upload-file', {
     method: 'POST',
@@ -94,7 +90,7 @@ export async function uploadDataUrlDocument(
     return payload.fileUrl;
   }
   if (upRes.status === 404) {
-    throw new Error('CLOUD_AUTH_REQUIRED: Please sign in with Admin Google Account to upload to cloud database.');
+    throw new Error('CLOUD_AUTH_REQUIRED: ক্লাউড ডাটাবেজে সেভ করতে Admin Google Account (mdesaali391@gmail.com) দিয়ে Sign-In করুন।');
   }
   throw new Error(payload?.error || `Upload failed (HTTP ${upRes.status})`);
 }

@@ -393,7 +393,40 @@ async function upsertVerificationKeysForRecord(
   if (!user || !isFirebaseAdminReady()) return;
 
   const combinedRecord = buildCombinedClientPayload(source, record, allPosts, allCanadaDocs);
-  const keys = extractLookupKeysForRecord(combinedRecord as RecordLookupFields);
+  const keySet = new Set<string>(extractLookupKeysForRecord(combinedRecord as RecordLookupFields));
+
+  const norm = (v?: string) => (v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const targetRefs = new Set<string>();
+  [
+    (record as AdminPost).refNumber,
+    (record as CanadaDocumentRecord).tinOrRef,
+    (record as CanadaDocumentRecord).referenceNo,
+    (record as CanadaDocumentRecord).idNumber,
+    record.verificationIdNo,
+  ].forEach((v) => {
+    const n = norm(v);
+    if (n.length >= 4) targetRefs.add(n);
+  });
+  const targetPassport = norm(record.passportNumber);
+  const targetName = norm(record.candidateName);
+  const belongs = (r: RecordLookupFields) => {
+    const rRefs = [r.refNumber, r.tinOrRef, r.referenceNo, r.idNumber, r.verificationIdNo].map(norm);
+    if (rRefs.some((k) => k.length >= 4 && targetRefs.has(k))) return true;
+    const rPass = norm(r.passportNumber);
+    if (targetPassport.length >= 5 && rPass === targetPassport) return true;
+    const rName = norm(r.candidateName);
+    if (targetName.length >= 5 && rName === targetName) return true;
+    return false;
+  };
+
+  allPosts.filter(belongs).forEach((p) => {
+    extractLookupKeysForRecord(p).forEach((k) => keySet.add(k));
+  });
+  allCanadaDocs.filter(belongs).forEach((c) => {
+    extractLookupKeysForRecord(c).forEach((k) => keySet.add(k));
+  });
+
+  const keys = Array.from(keySet);
   const recordId = sanitizeDocId(record.id);
   const isPublished =
     source === 'australia' ? (record as AdminPost).status !== 'Draft' : true;
@@ -775,28 +808,61 @@ export async function fetchMenuConfigFromFirestore<T>(
   return null;
 }
 
+export async function deleteAllPostsFromFirestore(allCanadaDocs: CanadaDocumentRecord[] = []): Promise<void> {
+  if (!isFirebaseAdminReady()) return;
+  try {
+    const snap = await getDocs(collection(db, 'posts'));
+    for (const d of snap.docs) {
+      const data = firestoreDocToAdminPost(d.data() as Record<string, unknown>);
+      await deletePostFromFirestore(d.id, data, [], allCanadaDocs);
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, 'posts');
+  }
+}
+
+export async function deleteAllCanadaDocsFromFirestore(allPosts: AdminPost[] = []): Promise<void> {
+  if (!isFirebaseAdminReady()) return;
+  try {
+    const snap = await getDocs(collection(db, 'canada_documents'));
+    for (const d of snap.docs) {
+      const data = firestoreDocToCanadaRecord(d.data() as Record<string, unknown>);
+      await deleteCanadaDocFromFirestore(d.id, data, allPosts, []);
+    }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, 'canada_documents');
+  }
+}
+
 export async function syncLocalRecordsToFirestoreIfEmpty(
   localPosts: AdminPost[],
-  localCanadaDocs: CanadaDocumentRecord[]
+  localCanadaDocs: CanadaDocumentRecord[],
+  deletedIds: string[] = []
 ): Promise<void> {
   if (!isFirebaseAdminReady()) return;
   try {
+    const deletedSet = new Set(deletedIds);
     const [remotePostsSnap, remoteCanadaSnap] = await Promise.all([
       getDocs(collection(db, 'posts')),
       getDocs(collection(db, 'canada_documents')),
     ]);
 
-    if (remotePostsSnap.empty && localPosts.length > 0) {
-      for (const p of localPosts) {
+    const existingPostIds = new Set(remotePostsSnap.docs.map((d) => d.id));
+    const existingCanadaIds = new Set(remoteCanadaSnap.docs.map((d) => d.id));
+
+    for (const p of localPosts) {
+      if (!p?.id || deletedSet.has(p.id)) continue;
+      if (!existingPostIds.has(sanitizeDocId(p.id))) {
         await upsertPostToFirestore(p, localPosts, localCanadaDocs);
       }
     }
-    if (remoteCanadaSnap.empty && localCanadaDocs.length > 0) {
-      for (const c of localCanadaDocs) {
+    for (const c of localCanadaDocs) {
+      if (!c?.id || deletedSet.has(c.id)) continue;
+      if (!existingCanadaIds.has(sanitizeDocId(c.id))) {
         await upsertCanadaDocToFirestore(c, localPosts, localCanadaDocs);
       }
     }
   } catch (err) {
-    console.warn('Initial cloud bootstrap skipped:', err);
+    console.warn('Cloud sync missing records note:', err);
   }
 }

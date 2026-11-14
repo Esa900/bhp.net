@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldCheck, CheckCircle2, FileText, Check, Award, Lock, ExternalLink, User } from 'lucide-react';
 import { UnifiedDocumentData } from './FullPdfDocumentViewer';
+import { isFirestorePdfUrl, resolveFirestorePdfBlobUrl } from '../utils/firebaseCloud';
 
 interface OfficialAttachedPdfSheetProps {
   document: UnifiedDocumentData;
@@ -22,7 +23,31 @@ export const OfficialAttachedPdfSheet: React.FC<OfficialAttachedPdfSheetProps> =
       ? document.featuredImageUrl
       : document.galleryImages?.find((img) => img && !img.includes('unsplash.com') && img !== '#');
 
-  const hasPhoto = Boolean(candidatePhoto);
+  const [resolvedCandidatePhoto, setResolvedCandidatePhoto] = React.useState<string>(
+    candidatePhoto && !isFirestorePdfUrl(candidatePhoto) ? candidatePhoto : ''
+  );
+
+  React.useEffect(() => {
+    let active = true;
+    if (!candidatePhoto) {
+      setResolvedCandidatePhoto('');
+      return;
+    }
+    if (!isFirestorePdfUrl(candidatePhoto)) {
+      setResolvedCandidatePhoto(candidatePhoto);
+      return;
+    }
+    resolveFirestorePdfBlobUrl(candidatePhoto)
+      .then((blobUrl) => {
+        if (active && blobUrl) setResolvedCandidatePhoto(blobUrl);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [candidatePhoto]);
+
+  const hasPhoto = Boolean(resolvedCandidatePhoto || candidatePhoto);
 
   const nameParts = (document.candidateName || 'Applicant').trim().split(/\s+/);
   const initials =
@@ -68,9 +93,9 @@ export const OfficialAttachedPdfSheet: React.FC<OfficialAttachedPdfSheetProps> =
         {/* Right: Candidate Passport Photo (Exact Uploaded Client Photo) */}
         <div className="flex flex-col items-end shrink-0">
           <div className="w-20 h-24 sm:w-24 sm:h-28 rounded-md overflow-hidden border-2 border-gray-300 shadow-md bg-gray-100 flex items-center justify-center">
-            {hasPhoto ? (
+            {resolvedCandidatePhoto ? (
               <img
-                src={candidatePhoto}
+                src={resolvedCandidatePhoto}
                 alt={document.candidateName || 'Candidate'}
                 className="w-full h-full object-cover"
               />

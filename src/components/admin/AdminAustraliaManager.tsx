@@ -56,6 +56,7 @@ import {
 import { uploadBinaryDocument, uploadDataUrlDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
 import {
   BHP_FIREBASE_AUTH_EVENT,
+  ensureFirebaseCloudAdmin,
   isFirebaseAdminReady,
   signInWithFirebaseGoogle,
 } from '../../utils/firebaseClient';
@@ -201,7 +202,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState(false);
   const [quickUploadError, setQuickUploadError] = useState<string | null>(null);
   const [quickUploadStatus, setQuickUploadStatus] = useState<string | null>(null);
-  const [cloudReady, setCloudReady] = useState<boolean>(() => isFirebaseAdminReady());
+  const [isSavingPost, setIsSavingPost] = useState(false);
   const [isConnectingCloud, setIsConnectingCloud] = useState(false);
   const quickFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -209,10 +210,9 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     setIsConnectingCloud(true);
     try {
       const res = await signInWithFirebaseGoogle();
-      setCloudReady(res.isAdmin);
       if (res.isAdmin) {
         setQuickUploadError(null);
-        showToast(`Cloud Sync Connected (${res.user.email})! You can now upload PDFs from any device.`);
+        showToast(`Cloud Connected (${res.user.email})!`);
         syncAdminPostsFromServer().then(setPosts).catch(() => {});
       } else {
         showToast(`Signed in as ${res.user.email}. Use admin Google account (mdesaali391@gmail.com) for cloud writes.`);
@@ -271,7 +271,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
 
     setIsUploadingQuickPdf(true);
     setQuickUploadError(null);
-    setQuickUploadStatus('Preparing upload...');
+    setQuickUploadStatus('Connecting to Cloud & preparing upload...');
 
     const finalSection =
       quickSectionTag === 'Other Custom Section' && customSectionTag.trim()
@@ -281,6 +281,12 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     const targetRef = quickPdfPost.refNumber || quickPdfPost.id;
 
     try {
+      if (!isFirebaseAdminReady()) {
+        await ensureFirebaseCloudAdmin().catch((authErr) => {
+          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
+        });
+      }
+
       let latestServerPosts: AdminPost[] | null = null;
       const total = quickSelectedFiles.length;
 
@@ -372,9 +378,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       setPosts(getStoredAdminPosts());
     };
     const handleFirebaseAuth = () => {
-      const ready = isFirebaseAdminReady();
-      setCloudReady(ready);
-      if (ready) {
+      if (isFirebaseAdminReady()) {
         syncAdminPostsFromServer().then(setPosts).catch(() => {});
         syncMenuItemsFromServer().then(setCategories).catch(() => {});
       }
@@ -507,6 +511,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
 
   const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingPost) return;
     if (!postForm.title.trim()) {
       showToast('Error: Post title is required.');
       return;
@@ -556,16 +561,30 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       verificationIdNo: `VRF-AU-${postForm.refNumber.replace(/[^0-9]/g, '') || '99420'}`,
     };
 
-    const syncedPosts = await upsertStoredAdminPostAsync(postData);
-    if (editingPostId) {
-      showToast(`Post "${postData.title}" updated and synchronized!`);
-    } else {
-      showToast(`New post "${postData.title}" published! Searchable Ref: "${postData.refNumber}"`);
-    }
+    setIsSavingPost(true);
+    try {
+      if (!isFirebaseAdminReady()) {
+        await ensureFirebaseCloudAdmin().catch((authErr) => {
+          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
+        });
+      }
 
-    setPosts(syncedPosts);
-    setEditingPostId(null);
-    setActiveTab('all-posts');
+      const syncedPosts = await upsertStoredAdminPostAsync(postData);
+      if (editingPostId) {
+        showToast(`Post "${postData.title}" updated and saved to Cloud!`);
+      } else {
+        showToast(`New post "${postData.title}" saved to Cloud! Ref: "${postData.refNumber}"`);
+      }
+
+      setPosts(syncedPosts);
+      setEditingPostId(null);
+      setActiveTab('all-posts');
+    } catch (err: any) {
+      const msg = (err?.message || 'Failed to save post to Cloud.').replace(/^CLOUD_AUTH_REQUIRED:\s*/i, '');
+      showToast(`Error: ${msg}`);
+    } finally {
+      setIsSavingPost(false);
+    }
   };
 
   const handleDeletePost = async (id: string, title: string) => {
@@ -589,6 +608,12 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     showToast(`Uploading ${filesList.length} document(s)...`);
 
     try {
+      if (!isFirebaseAdminReady()) {
+        await ensureFirebaseCloudAdmin().catch((authErr) => {
+          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
+        });
+      }
+
       for (const file of filesList) {
         const docType = inferDocumentType(file.name, file.type);
         try {
@@ -1437,9 +1462,17 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold cursor-pointer shadow-lg shadow-blue-600/30 transition-all"
+                disabled={isSavingPost}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-lg text-xs font-bold cursor-pointer shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2"
               >
-                {editingPostId ? 'Save Changes' : 'Publish Australia Post'}
+                {isSavingPost ? (
+                  <>
+                    <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving to Cloud...</span>
+                  </>
+                ) : (
+                  <span>{editingPostId ? 'Save Changes' : 'Publish Australia Post'}</span>
+                )}
               </button>
             </div>
           </div>
@@ -1776,25 +1809,6 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
               </div>
             </div>
 
-            {!cloudReady && (
-              <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <div className="flex items-start gap-2 text-amber-200">
-                  <Cloud className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <span>
-                    সব ডিভাইসে পিডিএফ সেভ করতে Admin Google Account (<strong>mdesaali391@gmail.com</strong>) কানেক্ট করুন।
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  disabled={isConnectingCloud}
-                  onClick={handleConnectGoogleCloud}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] shrink-0 cursor-pointer transition-colors"
-                >
-                  {isConnectingCloud ? 'Connecting...' : 'Connect Google Cloud'}
-                </button>
-              </div>
-            )}
-
             {/* Section Selection */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-white flex items-center gap-1.5">
@@ -1920,7 +1934,9 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
               <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 space-y-2">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <span className="break-words">{quickUploadError}</span>
+                  <span className="break-words">
+                    {quickUploadError.replace(/^CLOUD_AUTH_REQUIRED:\s*/i, '')}
+                  </span>
                 </div>
                 {quickUploadError.includes('CLOUD_AUTH_REQUIRED') && (
                   <button
@@ -1933,7 +1949,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                     <span>
                       {isConnectingCloud
                         ? 'Signing in with Google...'
-                        : 'Sign In with Google (mdesaali391@gmail.com) & Retry'}
+                        : 'Sign In with Google & Retry'}
                     </span>
                   </button>
                 )}

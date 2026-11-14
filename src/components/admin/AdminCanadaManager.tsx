@@ -50,6 +50,7 @@ import {
 import { uploadBinaryDocument, uploadDataUrlDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
 import {
   BHP_FIREBASE_AUTH_EVENT,
+  ensureFirebaseCloudAdmin,
   isFirebaseAdminReady,
   signInWithFirebaseGoogle,
 } from '../../utils/firebaseClient';
@@ -170,7 +171,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState<boolean>(false);
   const [quickUploadError, setQuickUploadError] = useState<string | null>(null);
   const [quickUploadStatus, setQuickUploadStatus] = useState<string | null>(null);
-  const [cloudReady, setCloudReady] = useState<boolean>(() => isFirebaseAdminReady());
+  const [isSavingPost, setIsSavingPost] = useState<boolean>(false);
   const [isConnectingCloud, setIsConnectingCloud] = useState<boolean>(false);
   const quickFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -178,10 +179,9 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     setIsConnectingCloud(true);
     try {
       const res = await signInWithFirebaseGoogle();
-      setCloudReady(res.isAdmin);
       if (res.isAdmin) {
         setQuickUploadError(null);
-        showToast(`Cloud Sync Connected (${res.user.email})! You can now upload PDFs from any device.`);
+        showToast(`Cloud Connected (${res.user.email})!`);
         syncCanadaDocumentsFromServer().then(setDocuments).catch(() => {});
       } else {
         showToast(`Signed in as ${res.user.email}. Use admin Google account (mdesaali391@gmail.com) for cloud writes.`);
@@ -223,9 +223,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       setMenuConfigs(getStoredCanadaMenuConfigs());
     };
     const handleFirebaseAuth = () => {
-      const ready = isFirebaseAdminReady();
-      setCloudReady(ready);
-      if (ready) {
+      if (isFirebaseAdminReady()) {
         syncCanadaDocumentsFromServer().then(setDocuments).catch(() => {});
         syncCanadaMenuConfigsFromServer().then(setMenuConfigs).catch(() => {});
       }
@@ -399,6 +397,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
 
   const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingPost) return;
 
     const candidateName = docForm.candidateName.trim() || 'BHP Canada Authorized Client';
     const passportNumber = docForm.passportNumber.trim() || `CAN-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -445,16 +444,30 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
           createdAt: new Date().toISOString(),
         };
 
-    const syncedDocs = await upsertCanadaDocumentAsync(recordToSave);
-    if (editingDocId) {
-      showToast(`Canada post for "${candidateName}" updated with ${normalizedAttached.length} PDF(s).`);
-    } else {
-      showToast(`Canada post published with ${normalizedAttached.length} PDF(s)! Searchable Ref: "${postPayload.tinOrRef}"`);
-    }
+    setIsSavingPost(true);
+    try {
+      if (!isFirebaseAdminReady()) {
+        await ensureFirebaseCloudAdmin().catch((authErr) => {
+          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
+        });
+      }
 
-    setDocuments(syncedDocs);
-    setEditingDocId(null);
-    setActiveTab('all-posts');
+      const syncedDocs = await upsertCanadaDocumentAsync(recordToSave);
+      if (editingDocId) {
+        showToast(`Canada post for "${candidateName}" saved to Cloud with ${normalizedAttached.length} PDF(s).`);
+      } else {
+        showToast(`Canada post saved to Cloud with ${normalizedAttached.length} PDF(s)! Ref: "${postPayload.tinOrRef}"`);
+      }
+
+      setDocuments(syncedDocs);
+      setEditingDocId(null);
+      setActiveTab('all-posts');
+    } catch (err: any) {
+      const msg = (err?.message || 'Failed to save post to Cloud.').replace(/^CLOUD_AUTH_REQUIRED:\s*/i, '');
+      showToast(`Error: ${msg}`);
+    } finally {
+      setIsSavingPost(false);
+    }
   };
 
   const handleDeletePost = async (id: string, name: string) => {
@@ -471,7 +484,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     }
   };
 
-  // Multi-PDF and document upload handler (uploads binary to /api/upload-raw with fallback and auto-persists when editing)
+  // Multi-PDF and document upload handler (uploads to Cloud Firestore + mirrors to Express if active)
   const handleMultiPdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputEl = e.currentTarget;
     const files = inputEl.files;
@@ -485,6 +498,12 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     showToast(`Uploading ${filesList.length} PDF file(s)...`);
 
     try {
+      if (!isFirebaseAdminReady()) {
+        await ensureFirebaseCloudAdmin().catch((authErr) => {
+          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
+        });
+      }
+
       for (const file of filesList) {
         const docType = inferDocumentType(file.name, file.type);
         try {
@@ -623,7 +642,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
 
     setIsUploadingQuickPdf(true);
     setQuickUploadError(null);
-    setQuickUploadStatus('Preparing upload...');
+    setQuickUploadStatus('Connecting to Cloud & preparing upload...');
 
     const finalSection =
       quickSectionTag === 'Other Custom Section' && customSectionTag.trim()
@@ -637,6 +656,12 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       quickPdfDoc.id;
 
     try {
+      if (!isFirebaseAdminReady()) {
+        await ensureFirebaseCloudAdmin().catch((authErr) => {
+          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
+        });
+      }
+
       let latestServerDocs: CanadaDocumentRecord[] | null = null;
       const total = quickSelectedFiles.length;
 
@@ -1508,9 +1533,17 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold cursor-pointer shadow-lg shadow-red-600/30 transition-all"
+                disabled={isSavingPost}
+                className="px-6 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-lg text-xs font-bold cursor-pointer shadow-lg shadow-red-600/30 transition-all flex items-center gap-2"
               >
-                {editingDocId ? 'Save Changes' : 'Publish Canada Post'}
+                {isSavingPost ? (
+                  <>
+                    <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving to Cloud...</span>
+                  </>
+                ) : (
+                  <span>{editingDocId ? 'Save Changes' : 'Publish Canada Post'}</span>
+                )}
               </button>
             </div>
           </div>
@@ -1825,25 +1858,6 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
               </div>
             </div>
 
-            {!cloudReady && (
-              <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <div className="flex items-start gap-2 text-amber-200">
-                  <Cloud className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <span>
-                    সব ডিভাইসে পিডিএফ সেভ করতে Admin Google Account (<strong>mdesaali391@gmail.com</strong>) কানেক্ট করুন।
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  disabled={isConnectingCloud}
-                  onClick={handleConnectGoogleCloud}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] shrink-0 cursor-pointer transition-colors"
-                >
-                  {isConnectingCloud ? 'Connecting...' : 'Connect Google Cloud'}
-                </button>
-              </div>
-            )}
-
             {/* Section Selection */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-white flex items-center gap-1.5">
@@ -1957,7 +1971,9 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
               <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 space-y-2">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                  <span className="break-words">{quickUploadError}</span>
+                  <span className="break-words">
+                    {quickUploadError.replace(/^CLOUD_AUTH_REQUIRED:\s*/i, '')}
+                  </span>
                 </div>
                 {quickUploadError.includes('CLOUD_AUTH_REQUIRED') && (
                   <button
@@ -1970,7 +1986,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                     <span>
                       {isConnectingCloud
                         ? 'Signing in with Google...'
-                        : 'Sign In with Google (mdesaali391@gmail.com) & Retry'}
+                        : 'Sign In with Google & Retry'}
                     </span>
                   </button>
                 )}
