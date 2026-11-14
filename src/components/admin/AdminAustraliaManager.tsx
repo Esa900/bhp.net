@@ -23,6 +23,7 @@ import {
   Sparkles,
   Paperclip,
   AlertCircle,
+  AlertTriangle,
   ShieldCheck,
   RotateCcw,
   ArrowUp,
@@ -49,7 +50,10 @@ import {
   syncAdminPostsFromServer,
   upsertStoredAdminPostAsync,
   deleteStoredAdminPostAsync,
+  setAdminPostsCache,
+  bumpPostsMutationEpoch,
 } from '../../utils/postsStorage';
+import { uploadBinaryDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
 import {
   FullPdfDocumentViewer,
   postToUnifiedDoc,
@@ -190,6 +194,8 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     rawFile?: File;
   }[]>([]);
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState(false);
+  const [quickUploadError, setQuickUploadError] = useState<string | null>(null);
+  const [quickUploadStatus, setQuickUploadStatus] = useState<string | null>(null);
   const quickFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleOpenQuickAddPdf = (post: AdminPost) => {
@@ -198,6 +204,8 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     setCustomSectionTag('');
     setQuickIsPrimary(true);
     setQuickSelectedFiles([]);
+    setQuickUploadError(null);
+    setQuickUploadStatus(null);
   };
 
   const handleQuickFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -205,17 +213,11 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     const files = inputEl.files;
     if (!files || files.length === 0) return;
     const filesList = Array.from(files) as File[];
+    setQuickUploadError(null);
 
     const immediateFiles = filesList.map((file) => {
-      const isPdf =
-        file.name.toLowerCase().endsWith('.pdf') ||
-        file.type.includes('pdf') ||
-        file.type.includes('application/pdf');
-      const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : file.type.includes('image') ? 'image' : 'other';
-      const sizeStr =
-        file.size > 1024 * 1024
-          ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
-          : `${(file.size / 1024).toFixed(1)} KB`;
+      const docType = inferDocumentType(file.name, file.type);
+      const sizeStr = formatFileSize(file.size);
 
       return {
         name: file.name,
@@ -235,11 +237,16 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
   const handleSaveQuickAddPdf = async () => {
     if (!quickPdfPost) return;
     if (quickSelectedFiles.length === 0) {
-      showToast('Please select at least one PDF or document to upload.');
+      const msg = 'Please select at least one PDF or document to upload.';
+      setQuickUploadError(msg);
+      showToast(msg);
       return;
     }
 
     setIsUploadingQuickPdf(true);
+    setQuickUploadError(null);
+    setQuickUploadStatus('Preparing upload...');
+
     const finalSection =
       quickSectionTag === 'Other Custom Section' && customSectionTag.trim()
         ? customSectionTag.trim()
@@ -249,29 +256,23 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
 
     try {
       let latestServerPosts: AdminPost[] | null = null;
+      const total = quickSelectedFiles.length;
 
-      for (let i = 0; i < quickSelectedFiles.length; i++) {
+      for (let i = 0; i < total; i++) {
         const f = quickSelectedFiles[i];
+        setQuickUploadStatus(`Uploading ${i + 1} of ${total}: ${f.name}...`);
+
         let uploadedUrl = f.dataUrl || '';
+        let resolvedType: 'pdf' | 'image' | 'other' = f.type;
+        let resolvedName = f.name;
+        let resolvedSize = f.size;
 
         if (f.rawFile) {
-          const upRes = await fetch(
-            `/api/upload-raw?fileName=${encodeURIComponent(f.name)}&type=${encodeURIComponent(f.type)}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': f.rawFile.type || 'application/octet-stream' },
-              body: f.rawFile,
-            }
-          );
-          if (!upRes.ok) {
-            const errJson = await upRes.json().catch(() => ({}));
-            throw new Error(errJson.error || `File upload failed (${upRes.status})`);
-          }
-          const upJson = await upRes.json();
-          if (!upJson.fileUrl) {
-            throw new Error('Server did not return uploaded file URL');
-          }
-          uploadedUrl = upJson.fileUrl;
+          const uploaded = await uploadBinaryDocument(f.rawFile, f.type);
+          uploadedUrl = uploaded.fileUrl;
+          resolvedType = uploaded.type;
+          resolvedName = uploaded.fileName || f.name;
+          resolvedSize = uploaded.sizeStr || f.size;
         } else if (uploadedUrl && uploadedUrl.startsWith('data:')) {
           const upRes = await fetch('/api/upload-file', {
             method: 'POST',
@@ -297,11 +298,14 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
           throw new Error(`No valid file content for "${f.name}"`);
         }
 
+        setQuickUploadStatus(`Saving ${i + 1} of ${total} to central database...`);
+        bumpPostsMutationEpoch();
+
         const newDoc: AttachedDoc = {
           id: `att-au-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          name: f.name,
-          size: f.size,
-          type: f.type,
+          name: resolvedName,
+          size: resolvedSize,
+          type: resolvedType,
           dataUrl: uploadedUrl,
           sectionTag: finalSection,
           isPrimary: i === 0 ? quickIsPrimary : false,
@@ -327,22 +331,30 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
         }
         if (Array.isArray(addJson.posts)) {
           latestServerPosts = addJson.posts;
+          setAdminPostsCache(addJson.posts, true);
+          setPosts(addJson.posts);
         }
       }
 
       if (latestServerPosts) {
+        setAdminPostsCache(latestServerPosts, true);
         setPosts(latestServerPosts);
+      } else {
+        const synced = await syncAdminPostsFromServer();
+        setPosts(synced);
       }
-      const synced = await syncAdminPostsFromServer();
-      setPosts(synced);
       showToast(
         `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved to central database.`
       );
       setQuickPdfPost(null);
       setQuickSelectedFiles([]);
+      setQuickUploadStatus(null);
     } catch (err: any) {
       console.error('Failed to quick-add Australia PDF:', err);
-      showToast(`Upload failed: ${err?.message || 'Error uploading PDF to server.'}`);
+      const errMsg = err?.message || 'Error uploading PDF to server.';
+      setQuickUploadError(errMsg);
+      setQuickUploadStatus(null);
+      showToast(`Upload failed: ${errMsg}`);
     } finally {
       setIsUploadingQuickPdf(false);
     }
@@ -556,7 +568,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
     showToast(`Post "${title}" deleted successfully.`);
   };
 
-  // Document attachment handler (uploads raw binary to /api/upload-raw for fast, reliable persistence)
+  // Document attachment handler (uses robust binary uploader + auto-persists in edit mode)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputEl = e.currentTarget;
     const files = inputEl.files;
@@ -564,67 +576,66 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
 
     const filesList = Array.from(files) as File[];
     const newDocs: AttachedDoc[] = [];
-    let failedCount = 0;
+    let lastError = '';
+    const defaultSection =
+      postForm.category || categories[0]?.mainTitle || 'Australia Work Permit Documents';
 
     showToast(`Uploading ${filesList.length} document(s)...`);
 
     try {
       for (const file of filesList) {
-        const isPdf =
-          file.name.toLowerCase().endsWith('.pdf') ||
-          file.type.includes('pdf') ||
-          file.type.includes('application/pdf');
-        const isImg = !isPdf && file.type.includes('image');
-        const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : isImg ? 'image' : 'other';
-        const sizeStr =
-          file.size > 1024 * 1024
-            ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
-            : `${(file.size / 1024).toFixed(1)} KB`;
-
-        let uploadedUrl = '';
+        const docType = inferDocumentType(file.name, file.type);
         try {
-          const upRes = await fetch(
-            `/api/upload-raw?fileName=${encodeURIComponent(file.name)}&type=${encodeURIComponent(docType)}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': file.type || 'application/octet-stream' },
-              body: file,
-            }
-          );
-          if (upRes.ok) {
-            const upJson = await upRes.json();
-            if (upJson?.fileUrl) {
-              uploadedUrl = upJson.fileUrl;
-            }
-          }
-        } catch (_) {}
-
-        if (!uploadedUrl) {
-          uploadedUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-            reader.onerror = () => resolve('');
-            reader.onabort = () => resolve('');
-            reader.readAsDataURL(file);
-          });
-        }
-
-        if (uploadedUrl) {
+          const uploaded = await uploadBinaryDocument(file, docType);
           newDocs.push({
             id: `doc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            name: file.name,
-            size: sizeStr,
-            type: docType,
-            dataUrl: uploadedUrl,
-            sectionTag: postForm.category || categories[0]?.mainTitle || 'Australia Work Permit Documents',
+            name: uploaded.fileName || file.name,
+            size: uploaded.sizeStr || formatFileSize(file.size),
+            type: uploaded.type,
+            dataUrl: uploaded.fileUrl,
+            sectionTag: defaultSection,
             uploadDate: new Date().toISOString().split('T')[0],
           });
-        } else {
-          failedCount++;
+        } catch (uploadErr: any) {
+          console.error('Australia edit-form upload error:', uploadErr);
+          lastError = uploadErr?.message || `Failed to upload ${file.name}`;
         }
       }
 
       if (newDocs.length > 0) {
+        const editingRecord = editingPostId ? posts.find((p) => p.id === editingPostId) : null;
+        if (editingPostId && editingRecord) {
+          const targetRef = postForm.refNumber?.trim() || editingRecord.refNumber || editingPostId;
+          let latestPosts: AdminPost[] | null = null;
+          for (const nd of newDocs) {
+            try {
+              bumpPostsMutationEpoch();
+              const addRes = await fetch('/api/posts/add-attached-doc', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  postId: editingPostId,
+                  refNumber: targetRef,
+                  candidateName: postForm.candidateName || editingRecord.candidateName,
+                  passportNumber: postForm.passportNumber || editingRecord.passportNumber,
+                  fullPost: { ...editingRecord, ...postForm, id: editingPostId },
+                  doc: nd,
+                }),
+              });
+              const addJson = await addRes.json().catch(() => ({}));
+              if (addRes.ok && Array.isArray(addJson.posts)) {
+                latestPosts = addJson.posts;
+              }
+            } catch (err) {
+              console.warn('Auto-persist Australia edit upload error:', err);
+            }
+          }
+          if (latestPosts) {
+            setAdminPostsCache(latestPosts, true);
+            setPosts(latestPosts);
+          }
+        }
+
         setPostForm((prev) => {
           const tagged = newDocs.map((d) => ({
             ...d,
@@ -635,9 +646,13 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
             attachedDocuments: [...prev.attachedDocuments, ...tagged],
           };
         });
-        showToast(`Attached ${newDocs.length} document(s)! Click Save Post to publish.`);
-      } else if (failedCount > 0) {
-        showToast('Failed to read/upload selected file(s). Please try again.');
+        showToast(
+          editingPostId
+            ? `Added & saved ${newDocs.length} document(s) to database!`
+            : `Attached ${newDocs.length} document(s)! Click Save Post to publish.`
+        );
+      } else if (lastError) {
+        showToast(`Upload failed: ${lastError}`);
       }
     } finally {
       if (inputEl) inputEl.value = '';
@@ -1166,7 +1181,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                     ref={candidatePhotoInputRef}
                     accept="image/*"
                     onChange={handleCandidatePhotoUpload}
-                    className="hidden"
+                    className="sr-only"
                     id="au-candidate-photo-upload"
                   />
                   <label
@@ -1336,7 +1351,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                 multiple
                 accept=".pdf,image/*"
                 onChange={handleFileUpload}
-                className="hidden"
+                className="sr-only"
                 id="au-doc-upload"
               />
               <label
@@ -1736,6 +1751,8 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                 onClick={() => {
                   setQuickPdfPost(null);
                   setQuickSelectedFiles([]);
+                  setQuickUploadError(null);
+                  setQuickUploadStatus(null);
                 }}
                 className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer"
                 title="Close"
@@ -1831,7 +1848,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                 multiple
                 accept=".pdf, application/pdf, image/*"
                 onChange={handleQuickFileSelect}
-                className="hidden"
+                className="sr-only"
                 id="quick-au-pdf-file-input"
               />
 
@@ -1883,6 +1900,20 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
               )}
             </div>
 
+            {quickUploadError && (
+              <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span className="break-words">{quickUploadError}</span>
+              </div>
+            )}
+
+            {quickUploadStatus && !quickUploadError && (
+              <div className="p-3 rounded-xl bg-blue-950/50 border border-blue-500/40 text-xs text-blue-200 flex items-center gap-2 font-semibold">
+                <RotateCcw className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+                <span>{quickUploadStatus}</span>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2C303B]">
               <button
@@ -1890,6 +1921,8 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                 onClick={() => {
                   setQuickPdfPost(null);
                   setQuickSelectedFiles([]);
+                  setQuickUploadError(null);
+                  setQuickUploadStatus(null);
                 }}
                 disabled={isUploadingQuickPdf}
                 className="px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
@@ -1905,7 +1938,7 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
                 {isUploadingQuickPdf ? (
                   <>
                     <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Uploading & Syncing...</span>
+                    <span>{quickUploadStatus || 'Uploading & Syncing...'}</span>
                   </>
                 ) : (
                   <>

@@ -58,6 +58,8 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
   const [copiedText, setCopiedText] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchSeqRef = useRef<number>(0);
+  const lastExecutedQueryRef = useRef<string>('');
 
   // Sync with activeConfig prop
   useEffect(() => {
@@ -69,6 +71,8 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
   // When modal opens or config changes, reset query & search state
   useEffect(() => {
     if (isOpen) {
+      searchSeqRef.current++;
+      lastExecutedQueryRef.current = '';
       syncCanadaDocumentsFromServer().catch(() => {});
       setQuery('');
       setHasSearched(false);
@@ -77,6 +81,9 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
       setMatchedRecord(null);
       setMatchedAdminPost(null);
       setTimeout(() => inputRef.current?.focus(), 80);
+    } else {
+      searchSeqRef.current++;
+      lastExecutedQueryRef.current = '';
     }
   }, [isOpen, currentConfig]);
 
@@ -102,11 +109,17 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
     const trimmed = query.trim();
     if (!trimmed || trimmed.length < 2) {
       if (trimmed.length === 0 && hasSearched) {
+        searchSeqRef.current++;
+        lastExecutedQueryRef.current = '';
         setHasSearched(false);
         setMatchedRecord(null);
         setMatchedAdminPost(null);
         setMatchedUniversalDoc(null);
       }
+      return;
+    }
+
+    if (trimmed === lastExecutedQueryRef.current) {
       return;
     }
 
@@ -135,11 +148,17 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
     const term = (searchQuery !== undefined ? searchQuery : query).trim();
     if (!term) return;
 
+    const seq = ++searchSeqRef.current;
+    const isNewTerm = term !== lastExecutedQueryRef.current;
+    lastExecutedQueryRef.current = term;
+
     setIsSearching(true);
     setHasSearched(true);
-    setMatchedUniversalDoc(null);
-    setMatchedRecord(null);
-    setMatchedAdminPost(null);
+    if (isNewTerm) {
+      setMatchedUniversalDoc(null);
+      setMatchedRecord(null);
+      setMatchedAdminPost(null);
+    }
 
     try {
       // 1. Prioritize live server search so documents uploaded from other devices are instantly found worldwide
@@ -148,6 +167,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
         currentConfig.mainTitle || currentConfig.id,
         'canada'
       );
+      if (seq !== searchSeqRef.current) return;
       if (universalResult) {
         setMatchedUniversalDoc(universalResult.document);
         if (universalResult.source === 'canada') {
@@ -155,7 +175,6 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
         } else if (universalResult.source === 'australia') {
           setMatchedAdminPost(universalResult.rawRecord);
         }
-        setIsSearching(false);
         return;
       }
 
@@ -164,13 +183,14 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
       if (foundCa) {
         setMatchedRecord(foundCa);
         setMatchedUniversalDoc(canadaRecordToUnifiedDoc(foundCa));
-        setIsSearching(false);
         return;
       }
     } catch (err) {
       console.warn('Canada search error:', err);
     } finally {
-      setIsSearching(false);
+      if (seq === searchSeqRef.current) {
+        setIsSearching(false);
+      }
     }
   };
 
@@ -182,6 +202,8 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
         targetSectionTag={currentConfig.mainTitle || currentConfig.subMenu}
         defaultFullScreen={true}
         onSearchAnother={() => {
+          searchSeqRef.current++;
+          lastExecutedQueryRef.current = '';
           setQuery('');
           setHasSearched(false);
           setMatchedUniversalDoc(null);
@@ -273,8 +295,11 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
                   <button
                     type="button"
                     onClick={() => {
+                      searchSeqRef.current++;
+                      lastExecutedQueryRef.current = '';
                       setQuery('');
                       setHasSearched(false);
+                      setMatchedUniversalDoc(null);
                       setMatchedRecord(null);
                       setMatchedAdminPost(null);
                       inputRef.current?.focus();
@@ -320,6 +345,8 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
                   document={matchedUniversalDoc}
                   targetSectionTag={currentConfig.mainTitle || currentConfig.subMenu}
                   onSearchAnother={() => {
+                    searchSeqRef.current++;
+                    lastExecutedQueryRef.current = '';
                     setQuery('');
                     setHasSearched(false);
                     setMatchedUniversalDoc(null);

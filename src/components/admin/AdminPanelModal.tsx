@@ -215,7 +215,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
   // -------------------------------------------------------------
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-      <div className="relative w-full max-w-7xl h-[92vh] bg-[#141517] border border-[#2F3238] text-white rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-7xl h-[92vh] bg-[#141517] border border-[#2F3238] text-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
         
         {/* Top Navigation Bar */}
         <div className="px-6 py-4 bg-[#191B1E] border-b border-[#2C2F36] flex items-center justify-between shrink-0">
@@ -296,15 +296,29 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           </div>
         </div>
 
-        {/* Toast Alert */}
+        {/* Floating Toast Alert (Always visible above z-60 modals) */}
         {toastMessage && (
-          <div className="bg-[#1E3A2B] border-b border-green-500/50 px-6 py-2 flex items-center justify-between text-xs text-green-200 font-semibold animate-in slide-in-from-top duration-200">
-            <div className="flex items-center gap-2">
-              <Check className="w-4 h-4 text-green-400" />
-              <span>{toastMessage}</span>
+          <div
+            className={`fixed top-4 right-4 z-[250] max-w-md px-4 py-3 rounded-xl border shadow-2xl flex items-center justify-between gap-3 text-xs font-semibold ${
+              /error|failed|exceeds|empty/i.test(toastMessage)
+                ? 'bg-[#3A1B1E] border-red-500/60 text-red-100'
+                : 'bg-[#173324] border-emerald-500/60 text-emerald-100'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              {/error|failed|exceeds|empty/i.test(toastMessage) ? (
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              ) : (
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+              )}
+              <span className="break-words">{toastMessage}</span>
             </div>
-            <button onClick={() => setToastMessage(null)} className="text-gray-400 hover:text-white">
-              <X className="w-3.5 h-3.5" />
+            <button
+              type="button"
+              onClick={() => setToastMessage(null)}
+              className="text-gray-300 hover:text-white shrink-0 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
         )}

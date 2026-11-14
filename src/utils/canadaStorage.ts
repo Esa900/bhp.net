@@ -166,6 +166,21 @@ export const isDemoCanadaDoc = (c: Partial<CanadaDocumentRecord>): boolean => {
   );
 };
 
+let canadaMutationEpoch = 0;
+
+export function bumpCanadaMutationEpoch(): number {
+  canadaMutationEpoch += 1;
+  return canadaMutationEpoch;
+}
+
+export function setCanadaDocumentsCache(docs: CanadaDocumentRecord[], bumpEpoch = true): void {
+  if (bumpEpoch) {
+    canadaMutationEpoch += 1;
+  }
+  const cleaned = (Array.isArray(docs) ? docs : []).filter((d: CanadaDocumentRecord) => d && !isDemoCanadaDoc(d));
+  updateLocalCanadaCache(cleaned);
+}
+
 /**
  * Fetch latest Canada documents from server with SMART TWO-WAY MERGE.
  * Preserves locally created Canada documents and syncs missing documents to and from the server.
@@ -173,10 +188,15 @@ export const isDemoCanadaDoc = (c: Partial<CanadaDocumentRecord>): boolean => {
 export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRecord[]> {
   if (typeof window === 'undefined') return getStoredCanadaDocuments();
 
+  const startEpoch = canadaMutationEpoch;
   try {
     const res = await fetch('/api/canada-documents', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
+      // Discard stale GET response if a local mutation happened while request was in flight
+      if (canadaMutationEpoch !== startEpoch) {
+        return getStoredCanadaDocuments();
+      }
       if (data && Array.isArray(data.documents)) {
         const deletedIdsSet = new Set<string>(Array.isArray(data.deletedIds) ? data.deletedIds : []);
         const local = getStoredCanadaDocuments();
@@ -239,12 +259,22 @@ if (typeof window !== 'undefined') {
 }
 
 export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
+  if (typeof window !== 'undefined' && Array.isArray((window as any).__bhp_canada_documents_cache)) {
+    const cached = (window as any).__bhp_canada_documents_cache.filter((d: CanadaDocumentRecord) => d && !isDemoCanadaDoc(d));
+    (window as any).__bhp_canada_documents_cache = cached;
+    return cached;
+  }
+
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(CANADA_STORAGE_KEY) : null;
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter((d: CanadaDocumentRecord) => !isDemoCanadaDoc(d));
+        const cleaned = parsed.filter((d: CanadaDocumentRecord) => d && !isDemoCanadaDoc(d));
+        if (typeof window !== 'undefined') {
+          (window as any).__bhp_canada_documents_cache = cleaned;
+        }
+        return cleaned;
       }
     }
   } catch (err) {
@@ -255,6 +285,9 @@ export function getStoredCanadaDocuments(): CanadaDocumentRecord[] {
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(INITIAL_CANADA_DOCUMENTS));
+    }
+    if (typeof window !== 'undefined') {
+      (window as any).__bhp_canada_documents_cache = INITIAL_CANADA_DOCUMENTS;
     }
   } catch (e) {
     console.error(e);
@@ -371,6 +404,7 @@ function updateLocalCanadaCache(docs: CanadaDocumentRecord[]) {
 }
 
 export async function upsertCanadaDocumentAsync(doc: CanadaDocumentRecord): Promise<CanadaDocumentRecord[]> {
+  canadaMutationEpoch += 1;
   const sanitized = {
     ...(await sanitizeAndUploadCanadaDocFiles(doc)),
     updatedAt: Date.now(),
@@ -394,6 +428,7 @@ export async function upsertCanadaDocumentAsync(doc: CanadaDocumentRecord): Prom
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.documents)) {
+          canadaMutationEpoch += 1;
           nextList = json.documents;
           updateLocalCanadaCache(nextList);
         }
@@ -407,6 +442,7 @@ export async function upsertCanadaDocumentAsync(doc: CanadaDocumentRecord): Prom
 }
 
 export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Promise<boolean> {
+  canadaMutationEpoch += 1;
   const sanitizedDocs = await Promise.all(docs.map(sanitizeAndUploadCanadaDocFiles));
   updateLocalCanadaCache(sanitizedDocs);
 
@@ -420,6 +456,7 @@ export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Pr
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.documents)) {
+          canadaMutationEpoch += 1;
           updateLocalCanadaCache(json.documents);
         }
       }
@@ -439,6 +476,7 @@ export function saveCanadaDocuments(docs: CanadaDocumentRecord[]): void {
 }
 
 export async function deleteAllCanadaDocumentsAsync(): Promise<void> {
+  canadaMutationEpoch += 1;
   updateLocalCanadaCache([]);
   if (typeof window !== 'undefined') {
     try {
@@ -475,6 +513,7 @@ export function updateCanadaDocument(id: string, updates: Partial<CanadaDocument
 }
 
 export async function deleteCanadaDocumentAsync(id: string): Promise<CanadaDocumentRecord[]> {
+  canadaMutationEpoch += 1;
   const current = getStoredCanadaDocuments();
   const filtered = current.filter((d) => d.id !== id);
   updateLocalCanadaCache(filtered);
@@ -487,6 +526,7 @@ export async function deleteCanadaDocumentAsync(id: string): Promise<CanadaDocum
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.documents)) {
+          canadaMutationEpoch += 1;
           updateLocalCanadaCache(json.documents);
           return json.documents;
         }

@@ -744,12 +744,12 @@ function deduplicateAttachedDocs(list: any[] = []): any[] {
   for (const d of (Array.isArray(list) ? list : [])) {
     if (!d) continue;
     const idKey = d.id ? String(d.id).trim().toLowerCase() : '';
-    const sigKey = `${String(d.sectionTag || 'default').trim().toLowerCase()}::${String(d.name || '').trim().toLowerCase()}`;
-    if ((idKey && seenIds.has(idKey)) || (d.name && seenSigs.has(sigKey))) {
+    const sigKey = `${String(d.sectionTag || 'default').trim().toLowerCase()}::${String(d.name || '').trim().toLowerCase()}::${String(d.dataUrl || '').trim()}`;
+    if ((idKey && seenIds.has(idKey)) || (d.name && d.dataUrl && seenSigs.has(sigKey))) {
       continue;
     }
     if (idKey) seenIds.add(idKey);
-    if (d.name) seenSigs.add(sigKey);
+    if (d.name && d.dataUrl) seenSigs.add(sigKey);
     result.push(d);
   }
   return result;
@@ -1215,11 +1215,13 @@ async function startServer() {
 
         if (isMatch) {
           const existingList = Array.isArray(c.attachedDocuments) ? [...c.attachedDocuments] : [];
-          // Deduplicate ONLY by exact id or same (name + sectionTag). NEVER by dataUrl alone!
+          // Deduplicate ONLY by exact id OR identical (name + sectionTag + dataUrl) so distinct scans with same filename are preserved
           const alreadyHas = existingList.some(
             (d) =>
               (attachedDoc.id && d.id === attachedDoc.id) ||
-              (d.name === attachedDoc.name && d.sectionTag === attachedDoc.sectionTag)
+              (d.name === attachedDoc.name &&
+                d.sectionTag === attachedDoc.sectionTag &&
+                d.dataUrl === attachedDoc.dataUrl)
           );
           if (!alreadyHas) {
             caChanged = true;
@@ -1231,6 +1233,7 @@ async function startServer() {
               attachedDocuments: [...existingList, attachedDoc],
               documentFileUrl: attachedDoc.isPrimary ? attachedDoc.dataUrl : (c.documentFileUrl || attachedDoc.dataUrl),
               documentFileName: attachedDoc.isPrimary ? attachedDoc.name : (c.documentFileName || attachedDoc.name),
+              updatedAt: Date.now(),
             };
           }
         }
@@ -1260,11 +1263,13 @@ async function startServer() {
 
         if (isMatch) {
           const existingList = Array.isArray(p.attachedDocuments) ? [...p.attachedDocuments] : [];
-          // Deduplicate ONLY by exact id or same (name + sectionTag). NEVER by dataUrl alone!
+          // Deduplicate ONLY by exact id OR identical (name + sectionTag + dataUrl)
           const alreadyHas = existingList.some(
             (d) =>
               (attachedDoc.id && d.id === attachedDoc.id) ||
-              (d.name === attachedDoc.name && d.sectionTag === attachedDoc.sectionTag)
+              (d.name === attachedDoc.name &&
+                d.sectionTag === attachedDoc.sectionTag &&
+                d.dataUrl === attachedDoc.dataUrl)
           );
           if (!alreadyHas) {
             pChanged = true;
@@ -1274,6 +1279,7 @@ async function startServer() {
             return {
               ...p,
               attachedDocuments: [...existingList, attachedDoc],
+              updatedAt: Date.now(),
             };
           }
         }
@@ -1890,6 +1896,12 @@ async function startServer() {
             const [targetDoc] = allAttached.splice(matchedIdx, 1);
             allAttached.unshift(targetDoc);
           }
+        } else if (allAttached.length > 1) {
+          const primaryIdx = allAttached.findIndex((att) => att && att.isPrimary === true);
+          if (primaryIdx > 0) {
+            const [primaryDoc] = allAttached.splice(primaryIdx, 1);
+            allAttached.unshift(primaryDoc);
+          }
         }
 
         if (allAttached.length > 0) {
@@ -1956,6 +1968,18 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Ensure API errors (e.g. payload too large) return JSON instead of Express HTML error pages
+  app.use((err: any, req: Request, res: Response, next: any) => {
+    if (req.path.startsWith('/api/')) {
+      const status = err?.status || err?.statusCode || 500;
+      res.status(status).json({
+        error: err?.message || 'Server request error',
+      });
+      return;
+    }
+    next(err);
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`BHP Full-Stack Server running at http://0.0.0.0:${PORT}`);

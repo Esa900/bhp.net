@@ -64,6 +64,8 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
   const [previewMaximized, setPreviewMaximized] = useState<boolean>(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchSeqRef = useRef<number>(0);
+  const lastExecutedQueryRef = useRef<string>('');
 
   // Load and subscribe to admin posts updates
   useEffect(() => {
@@ -103,6 +105,8 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         setQuery(activeItem.sampleValue);
         handleSearch(activeItem.sampleValue);
       } else {
+        searchSeqRef.current++;
+        lastExecutedQueryRef.current = '';
         setQuery('');
         setHasSearched(false);
         setMatchedUniversalDoc(null);
@@ -110,6 +114,9 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         setMatchedProfile(null);
         setTimeout(() => inputRef.current?.focus(), 80);
       }
+    } else {
+      searchSeqRef.current++;
+      lastExecutedQueryRef.current = '';
     }
   }, [isOpen, activeItem]);
 
@@ -119,11 +126,17 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
     const trimmed = query.trim();
     if (!trimmed || trimmed.length < 2) {
       if (trimmed.length === 0 && hasSearched) {
+        searchSeqRef.current++;
+        lastExecutedQueryRef.current = '';
         setHasSearched(false);
         setMatchedUniversalDoc(null);
         setMatchedAdminPost(null);
         setMatchedProfile(null);
       }
+      return;
+    }
+
+    if (trimmed === lastExecutedQueryRef.current) {
       return;
     }
 
@@ -191,11 +204,17 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
     const searchTerm = (overrideQuery !== undefined ? overrideQuery : query).trim();
     if (!searchTerm) return;
 
+    const seq = ++searchSeqRef.current;
+    const isNewTerm = searchTerm !== lastExecutedQueryRef.current;
+    lastExecutedQueryRef.current = searchTerm;
+
     setIsSearching(true);
     setHasSearched(true);
-    setMatchedUniversalDoc(null);
-    setMatchedAdminPost(null);
-    setMatchedProfile(null);
+    if (isNewTerm) {
+      setMatchedUniversalDoc(null);
+      setMatchedAdminPost(null);
+      setMatchedProfile(null);
+    }
 
     try {
       // 1. Prioritize live server search so documents/posts uploaded from other devices are instantly found worldwide
@@ -204,6 +223,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         activeItem.mainTitle || activeItem.id,
         'australia'
       );
+      if (seq !== searchSeqRef.current) return;
       if (result) {
         setMatchedUniversalDoc(result.document);
         if (result.source === 'australia') {
@@ -211,12 +231,12 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         } else if (result.source === 'portal') {
           setMatchedProfile(result.rawRecord);
         }
-        setIsSearching(false);
         return;
       }
 
       // 2. Fallback to memory and local storage if offline
       const immediate = searchUniversalDocument(searchTerm);
+      if (seq !== searchSeqRef.current) return;
       if (immediate) {
         setMatchedUniversalDoc(immediate.document);
         if (immediate.source === 'australia') {
@@ -224,7 +244,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
         } else if (immediate.source === 'portal') {
           setMatchedProfile(immediate.rawRecord);
         }
-        setIsSearching(false);
         return;
       }
 
@@ -235,7 +254,6 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       if (directPost) {
         setMatchedAdminPost(directPost);
         setMatchedUniversalDoc(postToUnifiedDoc(directPost, 'australia'));
-        setIsSearching(false);
         return;
       }
 
@@ -243,13 +261,14 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       const directCa = searchCanadaDocument(searchTerm);
       if (directCa) {
         setMatchedUniversalDoc(canadaRecordToUnifiedDoc(directCa));
-        setIsSearching(false);
         return;
       }
     } catch (err) {
       console.warn('Search execution error:', err);
     } finally {
-      setIsSearching(false);
+      if (seq === searchSeqRef.current) {
+        setIsSearching(false);
+      }
     }
   };
 
@@ -266,6 +285,8 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
   };
 
   const handleReset = () => {
+    searchSeqRef.current++;
+    lastExecutedQueryRef.current = '';
     setQuery('');
     setHasSearched(false);
     setMatchedUniversalDoc(null);

@@ -105,6 +105,21 @@ export const INITIAL_DEFAULT_POSTS: AdminPost[] = [
 /**
  * Retrieve all Admin Posts from LocalStorage (or in-memory cache / initial defaults)
  */
+let postsMutationEpoch = 0;
+
+export const bumpPostsMutationEpoch = (): number => {
+  postsMutationEpoch += 1;
+  return postsMutationEpoch;
+};
+
+export const setAdminPostsCache = (posts: AdminPost[], bumpEpoch = true): void => {
+  if (bumpEpoch) {
+    postsMutationEpoch += 1;
+  }
+  const cleaned = (Array.isArray(posts) ? posts : []).filter((p: AdminPost) => p && !isDemoPost(p));
+  updateLocalPostsCache(cleaned);
+};
+
 /**
  * Fetch latest admin posts from server with SMART TWO-WAY MERGE.
  * Preserves locally created posts and syncs missing posts to and from the server.
@@ -112,10 +127,14 @@ export const INITIAL_DEFAULT_POSTS: AdminPost[] = [
 export const syncAdminPostsFromServer = async (): Promise<AdminPost[]> => {
   if (typeof window === 'undefined') return getStoredAdminPosts();
 
+  const startEpoch = postsMutationEpoch;
   try {
     const res = await fetch('/api/posts', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
+      if (postsMutationEpoch !== startEpoch) {
+        return getStoredAdminPosts();
+      }
       if (data && Array.isArray(data.posts)) {
         const deletedIdsSet = new Set<string>(Array.isArray(data.deletedIds) ? data.deletedIds : []);
         const local = getStoredAdminPosts();
@@ -351,6 +370,7 @@ function updateLocalPostsCache(posts: AdminPost[]) {
  * Atomic single-post create/update across devices (never overwrites posts added on another admin device)
  */
 export const upsertStoredAdminPostAsync = async (post: AdminPost): Promise<AdminPost[]> => {
+  postsMutationEpoch += 1;
   const sanitized = {
     ...(await sanitizeAndUploadPostFiles(post)),
     updatedAt: Date.now(),
@@ -374,6 +394,7 @@ export const upsertStoredAdminPostAsync = async (post: AdminPost): Promise<Admin
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.posts)) {
+          postsMutationEpoch += 1;
           nextList = json.posts;
           updateLocalPostsCache(nextList);
         }
@@ -390,6 +411,7 @@ export const upsertStoredAdminPostAsync = async (post: AdminPost): Promise<Admin
  * Save Admin Posts to Memory, IndexedDB, LocalStorage and merge-sync to Server
  */
 export const saveStoredAdminPostsAsync = async (posts: AdminPost[]): Promise<boolean> => {
+  postsMutationEpoch += 1;
   const sanitizedPosts = await Promise.all(posts.map(sanitizeAndUploadPostFiles));
   updateLocalPostsCache(sanitizedPosts);
 
@@ -403,6 +425,7 @@ export const saveStoredAdminPostsAsync = async (posts: AdminPost[]): Promise<boo
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.posts)) {
+          postsMutationEpoch += 1;
           updateLocalPostsCache(json.posts);
         }
       }
@@ -428,6 +451,7 @@ export const saveStoredAdminPosts = (posts: AdminPost[]): void => {
  * Delete a single Admin Post on both local device and server safely
  */
 export const deleteStoredAdminPostAsync = async (id: string): Promise<AdminPost[]> => {
+  postsMutationEpoch += 1;
   const current = getStoredAdminPosts();
   const filtered = current.filter((p) => p.id !== id);
   updateLocalPostsCache(filtered);
@@ -440,6 +464,7 @@ export const deleteStoredAdminPostAsync = async (id: string): Promise<AdminPost[
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.posts)) {
+          postsMutationEpoch += 1;
           updateLocalPostsCache(json.posts);
           return json.posts;
         }
@@ -455,6 +480,7 @@ export const deleteStoredAdminPostAsync = async (id: string): Promise<AdminPost[
  * Delete all stored Admin Posts completely (both locally and on server)
  */
 export const deleteAllStoredAdminPostsAsync = async (): Promise<void> => {
+  postsMutationEpoch += 1;
   updateLocalPostsCache([]);
   if (typeof window !== 'undefined') {
     try {

@@ -34,6 +34,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const [serverResult, setServerResult] = useState<UniversalSearchResult | null>(null);
   const [isSearchingLive, setIsSearchingLive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchSeqRef = useRef<number>(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -44,6 +45,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       syncCanadaDocumentsFromServer().then((docs) => setCanadaDocs(docs)).catch(() => {});
       setTimeout(() => inputRef.current?.focus(), 50);
     } else {
+      searchSeqRef.current++;
       setQuery('');
       setServerResult(null);
     }
@@ -54,19 +56,25 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     if (!isOpen) return;
     const trimmed = query.trim();
     if (!trimmed || trimmed.length < 2) {
+      searchSeqRef.current++;
       setServerResult(null);
+      setIsSearchingLive(false);
       return;
     }
 
+    const seq = ++searchSeqRef.current;
     const timer = setTimeout(async () => {
       setIsSearchingLive(true);
       try {
         const res = await searchUniversalDocumentAsync(trimmed);
+        if (seq !== searchSeqRef.current) return;
         setServerResult(res);
       } catch (err) {
         console.warn('Live search error:', err);
       } finally {
-        setIsSearchingLive(false);
+        if (seq === searchSeqRef.current) {
+          setIsSearchingLive(false);
+        }
       }
     }, 180);
 
@@ -165,6 +173,29 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       })
     : [];
 
+  const cleanServerRef = (serverResult?.document?.referenceNumber || '')
+    .toLowerCase()
+    .replace(/[-\s_./#:]/g, '');
+  const serverRawId = serverResult?.rawRecord?.id;
+
+  const dedupMatchedPosts = matchedPosts.filter((p) => {
+    if (!serverResult) return true;
+    if (serverRawId && p.id === serverRawId) return false;
+    const pCleanRef = (p.refNumber || '').toLowerCase().replace(/[-\s_./#:]/g, '');
+    if (cleanServerRef && pCleanRef && pCleanRef === cleanServerRef) return false;
+    return true;
+  });
+
+  const dedupMatchedCanada = matchedCanada.filter((c) => {
+    if (!serverResult) return true;
+    if (serverRawId && c.id === serverRawId) return false;
+    const caRefs = [c.tinOrRef, c.referenceNo, c.idNumber, c.verificationIdNo]
+      .filter(Boolean)
+      .map((r) => String(r).toLowerCase().replace(/[-\s_./#:]/g, ''));
+    if (cleanServerRef && caRefs.includes(cleanServerRef)) return false;
+    return true;
+  });
+
   const handleSelectAdminPost = (post: AdminPost) => {
     onClose();
     if (onOpenDocumentSearch) {
@@ -248,13 +279,13 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         {/* Results / Quick Topics */}
         <div className="p-6 max-h-[60vh] overflow-y-auto space-y-5">
           {/* Matched Verified Documents (Live Server Match or Local Canada / Australia) */}
-          {(serverResult || matchedPosts.length > 0 || matchedCanada.length > 0) && (
+          {(serverResult || dedupMatchedPosts.length > 0 || dedupMatchedCanada.length > 0) && (
             <div>
               <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2.5 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4" />
                   <span>
-                    Verified Official Documents ({serverResult ? 1 : (matchedPosts.length + matchedCanada.length)})
+                    Verified Official Documents ({(serverResult ? 1 : 0) + dedupMatchedPosts.length + dedupMatchedCanada.length})
                   </span>
                 </div>
                 {isSearchingLive && (
@@ -314,7 +345,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                   </button>
                 )}
                 {/* Australia Posts */}
-                {matchedPosts.map((post) => (
+                {dedupMatchedPosts.map((post) => (
                   <button
                     key={post.id}
                     type="button"
@@ -365,7 +396,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                 ))}
 
                 {/* Canada Documents */}
-                {matchedCanada.map((doc) => (
+                {dedupMatchedCanada.map((doc) => (
                   <button
                     key={doc.id}
                     type="button"
@@ -436,7 +467,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                     </button>
                   );
                 })
-              ) : matchedPosts.length === 0 ? (
+              ) : !serverResult && dedupMatchedPosts.length === 0 && dedupMatchedCanada.length === 0 ? (
                 <div className="py-8 text-center text-gray-400 text-sm">
                   No matching results found for "{query}". Try searching by Reference number (e.g. <span className="text-[#F25C05]">BHP-DOC-2026</span>) or keyword.
                 </div>

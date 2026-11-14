@@ -27,6 +27,8 @@ import {
   Sparkles,
   Paperclip,
   AlertCircle,
+  AlertTriangle,
+  RotateCcw,
   FileCheck,
   Maximize2,
   Lock,
@@ -41,7 +43,10 @@ import {
   upsertStoredAdminPostAsync,
   deleteStoredAdminPostAsync,
   deleteAllStoredAdminPostsAsync,
+  setAdminPostsCache,
+  bumpPostsMutationEpoch,
 } from '../../utils/postsStorage';
+import { uploadBinaryDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
 
 interface AdminPostsManagerProps {
   subView: 'all' | 'new' | 'categories';
@@ -257,6 +262,8 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   const [quickIsPrimary, setQuickIsPrimary] = useState<boolean>(true);
   const [quickSelectedFiles, setQuickSelectedFiles] = useState<{ name: string; size: string; type: 'pdf' | 'image' | 'other'; dataUrl: string; rawFile?: File }[]>([]);
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState<boolean>(false);
+  const [quickUploadError, setQuickUploadError] = useState<string | null>(null);
+  const [quickUploadStatus, setQuickUploadStatus] = useState<string | null>(null);
   const quickFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleOpenQuickAddPdf = (post: AdminPost) => {
@@ -265,6 +272,8 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     setCustomSectionTag('');
     setQuickIsPrimary(true);
     setQuickSelectedFiles([]);
+    setQuickUploadError(null);
+    setQuickUploadStatus(null);
   };
 
   const handleQuickFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -272,17 +281,11 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     const files = inputEl.files;
     if (!files || files.length === 0) return;
     const filesList = Array.from(files) as File[];
+    setQuickUploadError(null);
 
     const immediateFiles = filesList.map((file) => {
-      const isPdf =
-        file.name.toLowerCase().endsWith('.pdf') ||
-        file.type.includes('pdf') ||
-        file.type.includes('application/pdf');
-      const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : file.type.includes('image') ? 'image' : 'other';
-      const sizeStr =
-        file.size > 1024 * 1024
-          ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
-          : `${(file.size / 1024).toFixed(1)} KB`;
+      const docType = inferDocumentType(file.name, file.type);
+      const sizeStr = formatFileSize(file.size);
 
       return {
         name: file.name,
@@ -306,11 +309,16 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   const handleSaveQuickAddPdf = async () => {
     if (!quickPostDoc) return;
     if (quickSelectedFiles.length === 0) {
-      showToast('Please select at least one PDF or document to upload.');
+      const msg = 'Please select at least one PDF or document to upload.';
+      setQuickUploadError(msg);
+      showToast(msg);
       return;
     }
 
     setIsUploadingQuickPdf(true);
+    setQuickUploadError(null);
+    setQuickUploadStatus('Preparing upload...');
+
     const finalSection =
       quickSectionTag === 'Other Custom Section' && customSectionTag.trim()
         ? customSectionTag.trim()
@@ -320,29 +328,23 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
 
     try {
       let latestServerPosts: AdminPost[] | null = null;
+      const total = quickSelectedFiles.length;
 
-      for (let i = 0; i < quickSelectedFiles.length; i++) {
+      for (let i = 0; i < total; i++) {
         const f = quickSelectedFiles[i];
+        setQuickUploadStatus(`Uploading ${i + 1} of ${total}: ${f.name}...`);
+
         let uploadedUrl = f.dataUrl || '';
+        let resolvedType: 'pdf' | 'image' | 'other' = f.type;
+        let resolvedName = f.name;
+        let resolvedSize = f.size;
 
         if (f.rawFile) {
-          const upRes = await fetch(
-            `/api/upload-raw?fileName=${encodeURIComponent(f.name)}&type=${encodeURIComponent(f.type)}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': f.rawFile.type || 'application/octet-stream' },
-              body: f.rawFile,
-            }
-          );
-          if (!upRes.ok) {
-            const errJson = await upRes.json().catch(() => ({}));
-            throw new Error(errJson.error || `File upload failed (${upRes.status})`);
-          }
-          const upJson = await upRes.json();
-          if (!upJson.fileUrl) {
-            throw new Error('Server did not return uploaded file URL');
-          }
-          uploadedUrl = upJson.fileUrl;
+          const uploaded = await uploadBinaryDocument(f.rawFile, f.type);
+          uploadedUrl = uploaded.fileUrl;
+          resolvedType = uploaded.type;
+          resolvedName = uploaded.fileName || f.name;
+          resolvedSize = uploaded.sizeStr || f.size;
         } else if (uploadedUrl && uploadedUrl.startsWith('data:')) {
           const upRes = await fetch('/api/upload-file', {
             method: 'POST',
@@ -368,11 +370,14 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
           throw new Error(`No valid file content for "${f.name}"`);
         }
 
+        setQuickUploadStatus(`Saving ${i + 1} of ${total} to central database...`);
+        bumpPostsMutationEpoch();
+
         const newDoc: AttachedDoc = {
           id: `att-au-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          name: f.name,
-          size: f.size,
-          type: f.type,
+          name: resolvedName,
+          size: resolvedSize,
+          type: resolvedType,
           dataUrl: uploadedUrl,
           sectionTag: finalSection,
           isPrimary: i === 0 ? quickIsPrimary : false,
@@ -398,22 +403,30 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
         }
         if (Array.isArray(addJson.posts)) {
           latestServerPosts = addJson.posts;
+          setAdminPostsCache(addJson.posts, true);
+          setPosts(addJson.posts);
         }
       }
 
       if (latestServerPosts) {
+        setAdminPostsCache(latestServerPosts, true);
         setPosts(latestServerPosts);
+      } else {
+        const synced = await syncAdminPostsFromServer();
+        setPosts(synced);
       }
-      const synced = await syncAdminPostsFromServer();
-      setPosts(synced);
       showToast(
         `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved to central database.`
       );
       setQuickPostDoc(null);
       setQuickSelectedFiles([]);
+      setQuickUploadStatus(null);
     } catch (err: any) {
       console.error('Failed to quick-add PDF:', err);
-      showToast(`Upload failed: ${err?.message || 'Error uploading PDF to server.'}`);
+      const errMsg = err?.message || 'Error uploading PDF to server.';
+      setQuickUploadError(errMsg);
+      setQuickUploadStatus(null);
+      showToast(`Upload failed: ${errMsg}`);
     } finally {
       setIsUploadingQuickPdf(false);
     }
@@ -501,74 +514,82 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
     showToast('Primary cover image updated.');
   };
 
-  // Handle PDF & Document Picture Upload (uploads raw binary to /api/upload-raw for instant persistence)
+  // Handle PDF & Document Picture Upload (uses robust binary uploader + auto-persists in edit mode)
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputEl = e.currentTarget;
     const files = inputEl.files;
     if (!files || files.length === 0) return;
 
     const filesList = Array.from(files) as File[];
-    const newDocs: Omit<AttachedDoc, 'sectionTag'>[] = [];
-    let failedCount = 0;
+    const newDocs: AttachedDoc[] = [];
+    let lastError = '';
+    const defaultSection = formData.category || 'Employment Application & Verification';
 
     showToast(`Uploading ${filesList.length} PDF file(s)...`);
 
     try {
       for (const file of filesList) {
-        const sizeStr =
-          file.size > 1024 * 1024
-            ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
-            : `${(file.size / 1024).toFixed(1)} KB`;
-        const isPdf =
-          file.name.toLowerCase().endsWith('.pdf') ||
-          file.type.includes('pdf') ||
-          file.type.includes('application/pdf');
-        const isImg = !isPdf && file.type.includes('image');
-        const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : isImg ? 'image' : 'other';
-
-        let uploadedUrl = '';
+        const docType = inferDocumentType(file.name, file.type);
         try {
-          const upRes = await fetch(
-            `/api/upload-raw?fileName=${encodeURIComponent(file.name)}&type=${encodeURIComponent(docType)}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': file.type || 'application/octet-stream' },
-              body: file,
-            }
-          );
-          if (upRes.ok) {
-            const upJson = await upRes.json();
-            if (upJson?.fileUrl) {
-              uploadedUrl = upJson.fileUrl;
-            }
-          }
-        } catch (_) {}
-
-        if (!uploadedUrl) {
-          uploadedUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (event) => resolve(typeof event.target?.result === 'string' ? event.target.result : '');
-            reader.onerror = () => resolve('');
-            reader.onabort = () => resolve('');
-            reader.readAsDataURL(file);
-          });
-        }
-
-        if (uploadedUrl) {
+          const uploaded = await uploadBinaryDocument(file, docType);
           newDocs.push({
             id: `doc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            name: file.name,
-            size: sizeStr,
-            type: docType,
-            dataUrl: uploadedUrl,
+            name: uploaded.fileName || file.name,
+            size: uploaded.sizeStr || formatFileSize(file.size),
+            type: uploaded.type,
+            dataUrl: uploaded.fileUrl,
+            sectionTag: defaultSection,
             uploadDate: new Date().toISOString().split('T')[0],
           });
-        } else {
-          failedCount++;
+        } catch (uploadErr: any) {
+          console.error('Posts edit-form upload error:', uploadErr);
+          lastError = uploadErr?.message || `Failed to upload ${file.name}`;
         }
       }
 
       if (newDocs.length > 0) {
+        const editingRecord = editingPostId ? posts.find((p) => p.id === editingPostId) : null;
+        if (editingPostId && editingRecord) {
+          const targetRef = formData.refNumber?.trim() || editingRecord.refNumber || editingPostId;
+          let latestPosts: AdminPost[] | null = null;
+          for (const nd of newDocs) {
+            try {
+              bumpPostsMutationEpoch();
+              const addRes = await fetch('/api/posts/add-attached-doc', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  postId: editingPostId,
+                  refNumber: targetRef,
+                  candidateName: formData.candidateName || editingRecord.candidateName,
+                  passportNumber: formData.passportNumber || editingRecord.passportNumber,
+                  fullPost: {
+                    ...editingRecord,
+                    title: formData.title || editingRecord.title,
+                    refNumber: targetRef,
+                    category: formData.category || editingRecord.category,
+                    content: formData.content || editingRecord.content,
+                    candidateName: formData.candidateName || editingRecord.candidateName,
+                    passportNumber: formData.passportNumber || editingRecord.passportNumber,
+                    id: editingPostId,
+                  },
+                  doc: nd,
+                }),
+              });
+              const addJson = await addRes.json().catch(() => ({}));
+              if (addRes.ok && Array.isArray(addJson.posts)) {
+                latestPosts = addJson.posts;
+              }
+            } catch (err) {
+              console.warn('Auto-persist post edit upload error:', err);
+            }
+          }
+          if (latestPosts) {
+            setAdminPostsCache(latestPosts, true);
+            setPosts(latestPosts);
+          }
+        }
+
         setFormData((prev) => {
           const tagged: AttachedDoc[] = newDocs.map((d) => ({
             ...d,
@@ -579,9 +600,13 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
             attachedDocuments: [...prev.attachedDocuments, ...tagged],
           };
         });
-        showToast(`Attached ${newDocs.length} PDF / document file(s)! Click Save Post to publish.`);
-      } else if (failedCount > 0) {
-        showToast('Failed to read/upload selected PDF file(s). Please try again.');
+        showToast(
+          editingPostId
+            ? `Added & saved ${newDocs.length} PDF(s) to database!`
+            : `Attached ${newDocs.length} PDF / document file(s)! Click Publish Post to finalize.`
+        );
+      } else if (lastError) {
+        showToast(`Upload failed: ${lastError}`);
       }
     } finally {
       if (inputEl) inputEl.value = '';
@@ -625,7 +650,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
   const handleSavePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title.trim()) {
-      alert('Please enter a post title.');
+      showToast('Error: Please enter a post title.');
       return;
     }
 
@@ -1004,7 +1029,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                       ref={candidatePhotoInputRef}
                       accept="image/*"
                       onChange={handleCandidatePhotoUpload}
-                      className="hidden"
+                      className="sr-only"
                       id="au-candidate-photo-upload"
                     />
                     <label
@@ -1063,7 +1088,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                     multiple
                     accept="image/*"
                     onChange={handleImagesUpload}
-                    className="hidden"
+                    className="sr-only"
                   />
                   <button
                     type="button"
@@ -1288,7 +1313,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                     multiple
                     accept=".pdf, application/pdf, image/*, .doc, .docx"
                     onChange={handlePdfUpload}
-                    className="hidden"
+                    className="sr-only"
                   />
                   <label
                     htmlFor="posts-pdf-files-upload"
@@ -1986,6 +2011,8 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                 onClick={() => {
                   setQuickPostDoc(null);
                   setQuickSelectedFiles([]);
+                  setQuickUploadError(null);
+                  setQuickUploadStatus(null);
                 }}
                 className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-[#252830] transition-colors cursor-pointer"
                 title="Close"
@@ -2075,7 +2102,7 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                 multiple
                 accept=".pdf, application/pdf, image/*"
                 onChange={handleQuickFileSelect}
-                className="hidden"
+                className="sr-only"
                 id="quick-post-pdf-file-input"
               />
 
@@ -2121,6 +2148,20 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
               )}
             </div>
 
+            {quickUploadError && (
+              <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span className="break-words">{quickUploadError}</span>
+              </div>
+            )}
+
+            {quickUploadStatus && !quickUploadError && (
+              <div className="p-3 rounded-xl bg-sky-950/50 border border-sky-500/40 text-xs text-sky-200 flex items-center gap-2 font-semibold">
+                <RotateCcw className="w-4 h-4 text-sky-400 animate-spin shrink-0" />
+                <span>{quickUploadStatus}</span>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2C303B]">
               <button
@@ -2128,6 +2169,8 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                 onClick={() => {
                   setQuickPostDoc(null);
                   setQuickSelectedFiles([]);
+                  setQuickUploadError(null);
+                  setQuickUploadStatus(null);
                 }}
                 disabled={isUploadingQuickPdf}
                 className="px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-300 rounded-xl text-xs font-bold cursor-pointer transition-colors"
@@ -2142,7 +2185,10 @@ export const AdminPostsManager: React.FC<AdminPostsManagerProps> = ({
                 className="px-5 py-2.5 bg-gradient-to-r from-[#0284c7] to-[#0369a1] hover:from-[#0369a1] hover:to-[#0284c7] disabled:opacity-50 text-white rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-2 shadow-lg shadow-[#0284c7]/30 active:scale-95"
               >
                 {isUploadingQuickPdf ? (
-                  <span>Saving to Database...</span>
+                  <>
+                    <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                    <span>{quickUploadStatus || 'Saving to Database...'}</span>
+                  </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />

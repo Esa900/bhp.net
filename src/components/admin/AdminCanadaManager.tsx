@@ -36,6 +36,8 @@ import {
   deleteCanadaDocumentAsync,
   deleteAllCanadaDocumentsAsync,
   syncCanadaDocumentsFromServer,
+  setCanadaDocumentsCache,
+  bumpCanadaMutationEpoch,
   CANADA_DOCUMENTS_UPDATED_EVENT,
   getStoredCanadaMenuConfigs,
   addStoredCanadaMenuConfig,
@@ -45,6 +47,7 @@ import {
   syncCanadaMenuConfigsFromServer,
   CANADA_MENU_CONFIGS_UPDATED_EVENT,
 } from '../../utils/canadaStorage';
+import { uploadBinaryDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
 import {
   FullPdfDocumentViewer,
   canadaRecordToUnifiedDoc,
@@ -160,6 +163,8 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
   const [quickIsPrimary, setQuickIsPrimary] = useState<boolean>(true);
   const [quickSelectedFiles, setQuickSelectedFiles] = useState<{ name: string; size: string; type: 'pdf' | 'image' | 'other'; dataUrl: string; rawFile?: File }[]>([]);
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState<boolean>(false);
+  const [quickUploadError, setQuickUploadError] = useState<string | null>(null);
+  const [quickUploadStatus, setQuickUploadStatus] = useState<string | null>(null);
   const quickFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -430,82 +435,86 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     }
   };
 
-  // Multi-PDF and document upload handler (uploads raw binary to /api/upload-raw for instant cross-device availability)
+  // Multi-PDF and document upload handler (uploads binary to /api/upload-raw with fallback and auto-persists when editing)
   const handleMultiPdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputEl = e.currentTarget;
     const files = inputEl.files;
     if (!files || files.length === 0) return;
 
     const filesList = Array.from(files) as File[];
-    const newDocs: Omit<AttachedDoc, 'sectionTag'>[] = [];
-    let failedCount = 0;
+    const newDocs: AttachedDoc[] = [];
+    const defaultSection = docForm.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)';
+    let lastError = '';
 
     showToast(`Uploading ${filesList.length} PDF file(s)...`);
 
     try {
       for (const file of filesList) {
-        const sizeStr =
-          file.size > 1024 * 1024
-            ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
-            : `${(file.size / 1024).toFixed(1)} KB`;
-        const isPdf =
-          file.name.toLowerCase().endsWith('.pdf') ||
-          file.type.includes('pdf') ||
-          file.type.includes('application/pdf');
-        const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : file.type.includes('image') ? 'image' : 'other';
-
-        let uploadedUrl = '';
+        const docType = inferDocumentType(file.name, file.type);
         try {
-          const upRes = await fetch(
-            `/api/upload-raw?fileName=${encodeURIComponent(file.name)}&type=${encodeURIComponent(docType)}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': file.type || 'application/octet-stream' },
-              body: file,
-            }
-          );
-          if (upRes.ok) {
-            const upJson = await upRes.json();
-            if (upJson?.fileUrl) {
-              uploadedUrl = upJson.fileUrl;
-            }
-          }
-        } catch (_) {}
-
-        if (!uploadedUrl) {
-          uploadedUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-            reader.onerror = () => resolve('');
-            reader.onabort = () => resolve('');
-            reader.readAsDataURL(file);
-          });
-        }
-
-        if (uploadedUrl) {
-          newDocs.push({
+          const uploaded = await uploadBinaryDocument(file, docType);
+          const newDoc: AttachedDoc = {
             id: `ca-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            name: file.name,
-            size: sizeStr,
-            type: docType,
-            dataUrl: uploadedUrl,
+            name: uploaded.fileName || file.name,
+            size: uploaded.sizeStr || formatFileSize(file.size),
+            type: uploaded.type,
+            dataUrl: uploaded.fileUrl,
+            sectionTag: defaultSection,
             uploadDate: new Date().toISOString().split('T')[0],
-          });
-        } else {
-          failedCount++;
+          };
+          newDocs.push(newDoc);
+        } catch (uploadErr: any) {
+          console.error('Edit-form upload error:', uploadErr);
+          lastError = uploadErr?.message || `Failed to upload ${file.name}`;
         }
       }
 
       if (newDocs.length > 0) {
+        // If editing an existing saved client, persist newly uploaded PDFs immediately to central server
+        const editingRecord = editingDocId ? documents.find((d) => d.id === editingDocId) : null;
+        if (editingDocId && editingRecord) {
+          const targetRef =
+            docForm.tinOrRef?.trim() ||
+            docForm.referenceNo?.trim() ||
+            docForm.idNumber?.trim() ||
+            editingRecord.tinOrRef ||
+            editingDocId;
+          let latestDocs: CanadaDocumentRecord[] | null = null;
+          for (const nd of newDocs) {
+            try {
+              bumpCanadaMutationEpoch();
+              const addRes = await fetch('/api/canada-documents/add-attached-doc', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  docId: editingDocId,
+                  referenceNo: targetRef,
+                  candidateName: docForm.candidateName || editingRecord.candidateName,
+                  passportNumber: docForm.passportNumber || editingRecord.passportNumber,
+                  fullDocument: { ...editingRecord, ...docForm, id: editingDocId },
+                  doc: nd,
+                }),
+              });
+              const addJson = await addRes.json().catch(() => ({}));
+              if (addRes.ok && Array.isArray(addJson.documents)) {
+                latestDocs = addJson.documents;
+              }
+            } catch (err) {
+              console.warn('Auto-persist edit upload error:', err);
+            }
+          }
+          if (latestDocs) {
+            setCanadaDocumentsCache(latestDocs, true);
+            setDocuments(latestDocs);
+          }
+        }
+
         setDocForm((prev) => {
-          const defaultTag = prev.mainTitle || 'Work Permit Documents (ওয়ার্ক পারমিট)';
-          const taggedDocs: AttachedDoc[] = newDocs.map((d) => ({
-            ...d,
-            sectionTag: defaultTag,
-          }));
-          const updated = [...prev.attachedDocuments, ...taggedDocs];
+          const updated = [...prev.attachedDocuments, ...newDocs];
           showToast(
-            `Successfully added ${newDocs.length} PDF(s)! Total: ${updated.length} PDFs (Now click Save Changes to publish)`
+            editingDocId
+              ? `Added & saved ${newDocs.length} PDF(s) to database! Total: ${updated.length} PDFs.`
+              : `Attached ${newDocs.length} PDF(s)! Total: ${updated.length} PDFs (Click Publish/Save to finalize)`
           );
           return {
             ...prev,
@@ -514,8 +523,8 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
             documentFileUrl: updated[0]?.dataUrl || prev.documentFileUrl,
           };
         });
-      } else if (failedCount > 0) {
-        showToast('Failed to read/upload selected PDF file(s). Please try again.');
+      } else if (lastError) {
+        showToast(`Upload failed: ${lastError}`);
       }
     } finally {
       if (inputEl) inputEl.value = '';
@@ -542,6 +551,8 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     setCustomSectionTag('');
     setQuickIsPrimary(true);
     setQuickSelectedFiles([]);
+    setQuickUploadError(null);
+    setQuickUploadStatus(null);
   };
 
   const handleQuickFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -549,17 +560,11 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     const files = inputEl.files;
     if (!files || files.length === 0) return;
     const filesList = Array.from(files) as File[];
+    setQuickUploadError(null);
 
     const immediateFiles = filesList.map((file) => {
-      const isPdf =
-        file.name.toLowerCase().endsWith('.pdf') ||
-        file.type.includes('pdf') ||
-        file.type.includes('application/pdf');
-      const docType: 'pdf' | 'image' | 'other' = isPdf ? 'pdf' : file.type.includes('image') ? 'image' : 'other';
-      const sizeStr =
-        file.size > 1024 * 1024
-          ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
-          : `${(file.size / 1024).toFixed(1)} KB`;
+      const docType = inferDocumentType(file.name, file.type);
+      const sizeStr = formatFileSize(file.size);
 
       return {
         name: file.name,
@@ -583,11 +588,16 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
   const handleSaveQuickAddPdf = async () => {
     if (!quickPdfDoc) return;
     if (quickSelectedFiles.length === 0) {
-      showToast('Please select at least one PDF or document to upload.');
+      const msg = 'Please select at least one PDF or document to upload.';
+      setQuickUploadError(msg);
+      showToast(msg);
       return;
     }
 
     setIsUploadingQuickPdf(true);
+    setQuickUploadError(null);
+    setQuickUploadStatus('Preparing upload...');
+
     const finalSection =
       quickSectionTag === 'Other Custom Section' && customSectionTag.trim()
         ? customSectionTag.trim()
@@ -601,29 +611,23 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
 
     try {
       let latestServerDocs: CanadaDocumentRecord[] | null = null;
+      const total = quickSelectedFiles.length;
 
-      for (let i = 0; i < quickSelectedFiles.length; i++) {
+      for (let i = 0; i < total; i++) {
         const f = quickSelectedFiles[i];
+        setQuickUploadStatus(`Uploading ${i + 1} of ${total}: ${f.name}...`);
+
         let uploadedUrl = f.dataUrl || '';
+        let resolvedType: 'pdf' | 'image' | 'other' = f.type;
+        let resolvedName = f.name;
+        let resolvedSize = f.size;
 
         if (f.rawFile) {
-          const upRes = await fetch(
-            `/api/upload-raw?fileName=${encodeURIComponent(f.name)}&type=${encodeURIComponent(f.type)}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': f.rawFile.type || 'application/octet-stream' },
-              body: f.rawFile,
-            }
-          );
-          if (!upRes.ok) {
-            const errJson = await upRes.json().catch(() => ({}));
-            throw new Error(errJson.error || `File upload failed (${upRes.status})`);
-          }
-          const upJson = await upRes.json();
-          if (!upJson.fileUrl) {
-            throw new Error('Server did not return uploaded file URL');
-          }
-          uploadedUrl = upJson.fileUrl;
+          const uploaded = await uploadBinaryDocument(f.rawFile, f.type);
+          uploadedUrl = uploaded.fileUrl;
+          resolvedType = uploaded.type;
+          resolvedName = uploaded.fileName || f.name;
+          resolvedSize = uploaded.sizeStr || f.size;
         } else if (uploadedUrl && uploadedUrl.startsWith('data:')) {
           const upRes = await fetch('/api/upload-file', {
             method: 'POST',
@@ -649,11 +653,14 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
           throw new Error(`No valid file content for "${f.name}"`);
         }
 
+        setQuickUploadStatus(`Saving ${i + 1} of ${total} to central database...`);
+        bumpCanadaMutationEpoch();
+
         const newDoc: AttachedDoc = {
           id: `att-ca-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          name: f.name,
-          size: f.size,
-          type: f.type,
+          name: resolvedName,
+          size: resolvedSize,
+          type: resolvedType,
           dataUrl: uploadedUrl,
           sectionTag: finalSection,
           isPrimary: i === 0 ? quickIsPrimary : false,
@@ -679,22 +686,31 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
         }
         if (Array.isArray(addJson.documents)) {
           latestServerDocs = addJson.documents;
+          setCanadaDocumentsCache(addJson.documents, true);
+          setDocuments(addJson.documents);
         }
       }
 
       if (latestServerDocs) {
+        setCanadaDocumentsCache(latestServerDocs, true);
         setDocuments(latestServerDocs);
+      } else {
+        const syncedDocs = await syncCanadaDocumentsFromServer();
+        setDocuments(syncedDocs);
       }
-      const syncedDocs = await syncCanadaDocumentsFromServer();
-      setDocuments(syncedDocs);
+
       showToast(
         `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved to central database.`
       );
       setQuickPdfDoc(null);
       setQuickSelectedFiles([]);
+      setQuickUploadStatus(null);
     } catch (err: any) {
       console.error('Failed to quick-add PDF:', err);
-      showToast(`Upload failed: ${err?.message || 'Error uploading PDF to server.'}`);
+      const errMsg = err?.message || 'Error uploading PDF to server.';
+      setQuickUploadError(errMsg);
+      setQuickUploadStatus(null);
+      showToast(`Upload failed: ${errMsg}`);
     } finally {
       setIsUploadingQuickPdf(false);
     }
@@ -1168,7 +1184,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                     ref={photoInputRef}
                     accept="image/*"
                     onChange={handlePhotoUpload}
-                    className="hidden"
+                    className="sr-only"
                     id="ca-candidate-photo-upload"
                   />
                   <label
@@ -1356,7 +1372,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                   multiple
                   accept=".pdf, application/pdf, image/*"
                   onChange={handleMultiPdfUpload}
-                  className="hidden"
+                  className="sr-only"
                   id="ca-doc-upload"
                 />
 
@@ -1875,7 +1891,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                 multiple
                 accept=".pdf, application/pdf, image/*"
                 onChange={handleQuickFileSelect}
-                className="hidden"
+                className="sr-only"
                 id="quick-pdf-file-input"
               />
 
@@ -1921,6 +1937,20 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
               )}
             </div>
 
+            {quickUploadError && (
+              <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span className="break-words">{quickUploadError}</span>
+              </div>
+            )}
+
+            {quickUploadStatus && !quickUploadError && (
+              <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-xs text-amber-200 flex items-center gap-2 font-semibold">
+                <RotateCcw className="w-4 h-4 text-amber-400 animate-spin shrink-0" />
+                <span>{quickUploadStatus}</span>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2C303B]">
               <button
@@ -1928,6 +1958,8 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                 onClick={() => {
                   setQuickPdfDoc(null);
                   setQuickSelectedFiles([]);
+                  setQuickUploadError(null);
+                  setQuickUploadStatus(null);
                 }}
                 disabled={isUploadingQuickPdf}
                 className="px-4 py-2 bg-[#252830] hover:bg-[#323640] text-gray-300 rounded-xl text-xs font-bold cursor-pointer transition-colors"
@@ -1942,7 +1974,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                 className="px-5 py-2.5 bg-gradient-to-r from-red-600 to-[#FF5500] hover:from-red-500 hover:to-[#FF6B1A] disabled:opacity-50 text-white rounded-xl text-xs font-bold cursor-pointer transition-all flex items-center gap-2 shadow-lg shadow-red-600/30 active:scale-95"
               >
                 {isUploadingQuickPdf ? (
-                  <span>Saving to Database...</span>
+                  <span>{quickUploadStatus || 'Saving to Database...'}</span>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
