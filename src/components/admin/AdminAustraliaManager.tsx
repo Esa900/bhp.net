@@ -31,6 +31,7 @@ import {
   Tag,
   Hash,
   ArrowLeft,
+  Cloud,
 } from 'lucide-react';
 import { DocumentMenuItem } from '../../data/menuNavigationItems';
 import { DocumentType } from '../../types/portal';
@@ -49,11 +50,15 @@ import {
   getStoredAdminPosts,
   syncAdminPostsFromServer,
   upsertStoredAdminPostAsync,
+  addAttachedDocToPostAsync,
   deleteStoredAdminPostAsync,
-  setAdminPostsCache,
-  bumpPostsMutationEpoch,
 } from '../../utils/postsStorage';
-import { uploadBinaryDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
+import { uploadBinaryDocument, uploadDataUrlDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
+import {
+  BHP_FIREBASE_AUTH_EVENT,
+  isFirebaseAdminReady,
+  signInWithFirebaseGoogle,
+} from '../../utils/firebaseClient';
 import {
   FullPdfDocumentViewer,
   postToUnifiedDoc,
@@ -196,7 +201,28 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState(false);
   const [quickUploadError, setQuickUploadError] = useState<string | null>(null);
   const [quickUploadStatus, setQuickUploadStatus] = useState<string | null>(null);
+  const [cloudReady, setCloudReady] = useState<boolean>(() => isFirebaseAdminReady());
+  const [isConnectingCloud, setIsConnectingCloud] = useState(false);
   const quickFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleConnectGoogleCloud = async () => {
+    setIsConnectingCloud(true);
+    try {
+      const res = await signInWithFirebaseGoogle();
+      setCloudReady(res.isAdmin);
+      if (res.isAdmin) {
+        setQuickUploadError(null);
+        showToast(`Cloud Sync Connected (${res.user.email})! You can now upload PDFs from any device.`);
+        syncAdminPostsFromServer().then(setPosts).catch(() => {});
+      } else {
+        showToast(`Signed in as ${res.user.email}. Use admin Google account (mdesaali391@gmail.com) for cloud writes.`);
+      }
+    } catch (err: any) {
+      showToast(`Google Sign-In error: ${err?.message || 'Popup closed or blocked'}`);
+    } finally {
+      setIsConnectingCloud(false);
+    }
+  };
 
   const handleOpenQuickAddPdf = (post: AdminPost) => {
     setQuickPdfPost(post);
@@ -274,32 +300,14 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
           resolvedName = uploaded.fileName || f.name;
           resolvedSize = uploaded.sizeStr || f.size;
         } else if (uploadedUrl && uploadedUrl.startsWith('data:')) {
-          const upRes = await fetch('/api/upload-file', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fileName: f.name,
-              fileData: uploadedUrl,
-              type: f.type,
-            }),
-          });
-          if (!upRes.ok) {
-            const errJson = await upRes.json().catch(() => ({}));
-            throw new Error(errJson.error || `File upload failed (${upRes.status})`);
-          }
-          const upJson = await upRes.json();
-          if (!upJson.fileUrl) {
-            throw new Error('Server did not return uploaded file URL');
-          }
-          uploadedUrl = upJson.fileUrl;
+          uploadedUrl = await uploadDataUrlDocument(f.name, uploadedUrl, f.type);
         }
 
         if (!uploadedUrl) {
           throw new Error(`No valid file content for "${f.name}"`);
         }
 
-        setQuickUploadStatus(`Saving ${i + 1} of ${total} to central database...`);
-        bumpPostsMutationEpoch();
+        setQuickUploadStatus(`Saving ${i + 1} of ${total} to cloud database...`);
 
         const newDoc: AttachedDoc = {
           id: `att-au-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -312,39 +320,27 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
           uploadDate: new Date().toISOString().split('T')[0],
         };
 
-        const addRes = await fetch('/api/posts/add-attached-doc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            postId: quickPdfPost.id,
-            refNumber: targetRef,
-            candidateName: quickPdfPost.candidateName,
-            passportNumber: quickPdfPost.passportNumber,
-            fullPost: quickPdfPost,
-            doc: newDoc,
-          }),
+        latestServerPosts = await addAttachedDocToPostAsync({
+          postId: quickPdfPost.id,
+          refNumber: targetRef,
+          candidateName: quickPdfPost.candidateName,
+          passportNumber: quickPdfPost.passportNumber,
+          fullPost: quickPdfPost,
+          doc: newDoc,
         });
-
-        const addJson = await addRes.json().catch(() => ({}));
-        if (!addRes.ok || addJson.error) {
-          throw new Error(addJson.error || `Database save failed (${addRes.status})`);
-        }
-        if (Array.isArray(addJson.posts)) {
-          latestServerPosts = addJson.posts;
-          setAdminPostsCache(addJson.posts, true);
-          setPosts(addJson.posts);
+        if (latestServerPosts) {
+          setPosts(latestServerPosts);
         }
       }
 
       if (latestServerPosts) {
-        setAdminPostsCache(latestServerPosts, true);
         setPosts(latestServerPosts);
       } else {
         const synced = await syncAdminPostsFromServer();
         setPosts(synced);
       }
       showToast(
-        `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved to central database.`
+        `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved across all devices.`
       );
       setQuickPdfPost(null);
       setQuickSelectedFiles([]);
@@ -375,14 +371,24 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
       setCategories(getStoredMenuItems());
       setPosts(getStoredAdminPosts());
     };
+    const handleFirebaseAuth = () => {
+      const ready = isFirebaseAdminReady();
+      setCloudReady(ready);
+      if (ready) {
+        syncAdminPostsFromServer().then(setPosts).catch(() => {});
+        syncMenuItemsFromServer().then(setCategories).catch(() => {});
+      }
+    };
 
     window.addEventListener(MENU_ITEMS_UPDATED_EVENT, handleCatUpdate);
     window.addEventListener('bhp_posts_updated', handlePostsUpdate);
     window.addEventListener('storage', handleStorage);
+    window.addEventListener(BHP_FIREBASE_AUTH_EVENT, handleFirebaseAuth);
     return () => {
       window.removeEventListener(MENU_ITEMS_UPDATED_EVENT, handleCatUpdate);
       window.removeEventListener('bhp_posts_updated', handlePostsUpdate);
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener(BHP_FIREBASE_AUTH_EVENT, handleFirebaseAuth);
     };
   }, []);
 
@@ -609,29 +615,20 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
           let latestPosts: AdminPost[] | null = null;
           for (const nd of newDocs) {
             try {
-              bumpPostsMutationEpoch();
-              const addRes = await fetch('/api/posts/add-attached-doc', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  postId: editingPostId,
-                  refNumber: targetRef,
-                  candidateName: postForm.candidateName || editingRecord.candidateName,
-                  passportNumber: postForm.passportNumber || editingRecord.passportNumber,
-                  fullPost: { ...editingRecord, ...postForm, id: editingPostId },
-                  doc: nd,
-                }),
+              latestPosts = await addAttachedDocToPostAsync({
+                postId: editingPostId,
+                refNumber: targetRef,
+                candidateName: postForm.candidateName || editingRecord.candidateName,
+                passportNumber: postForm.passportNumber || editingRecord.passportNumber,
+                fullPost: { ...editingRecord, ...postForm, id: editingPostId },
+                doc: nd,
               });
-              const addJson = await addRes.json().catch(() => ({}));
-              if (addRes.ok && Array.isArray(addJson.posts)) {
-                latestPosts = addJson.posts;
-              }
-            } catch (err) {
+            } catch (err: any) {
               console.warn('Auto-persist Australia edit upload error:', err);
+              lastError = err?.message || lastError;
             }
           }
           if (latestPosts) {
-            setAdminPostsCache(latestPosts, true);
             setPosts(latestPosts);
           }
         }
@@ -1779,6 +1776,25 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
               </div>
             </div>
 
+            {!cloudReady && (
+              <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-start gap-2 text-amber-200">
+                  <Cloud className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    সব ডিভাইসে পিডিএফ সেভ করতে Admin Google Account (<strong>mdesaali391@gmail.com</strong>) কানেক্ট করুন।
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isConnectingCloud}
+                  onClick={handleConnectGoogleCloud}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] shrink-0 cursor-pointer transition-colors"
+                >
+                  {isConnectingCloud ? 'Connecting...' : 'Connect Google Cloud'}
+                </button>
+              </div>
+            )}
+
             {/* Section Selection */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-white flex items-center gap-1.5">
@@ -1901,9 +1917,26 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
             </div>
 
             {quickUploadError && (
-              <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                <span className="break-words">{quickUploadError}</span>
+              <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <span className="break-words">{quickUploadError}</span>
+                </div>
+                {quickUploadError.includes('CLOUD_AUTH_REQUIRED') && (
+                  <button
+                    type="button"
+                    disabled={isConnectingCloud}
+                    onClick={handleConnectGoogleCloud}
+                    className="w-full py-2 px-3 rounded-lg bg-white text-gray-900 hover:bg-gray-100 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Cloud className="w-4 h-4 text-blue-600" />
+                    <span>
+                      {isConnectingCloud
+                        ? 'Signing in with Google...'
+                        : 'Sign In with Google (mdesaali391@gmail.com) & Retry'}
+                    </span>
+                  </button>
+                )}
               </div>
             )}
 

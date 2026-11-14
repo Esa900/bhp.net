@@ -31,6 +31,35 @@ import { CanadaDocumentRecord } from '../types/canada';
 import { ApplicantProfile } from '../types/portal';
 import { PdfCanvasRenderer } from './PdfCanvasRenderer';
 import { OfficialAttachedPdfSheet } from './OfficialAttachedPdfSheet';
+import { isFirestorePdfUrl, resolveFirestorePdfBlobUrl } from '../utils/firebaseCloud';
+
+const ResolvedDocImage: React.FC<{
+  src: string;
+  alt: string;
+  style?: React.CSSProperties;
+  className?: string;
+}> = ({ src, alt, style, className }) => {
+  const [resolved, setResolved] = useState<string>(isFirestorePdfUrl(src) ? '' : src);
+  useEffect(() => {
+    let active = true;
+    if (!isFirestorePdfUrl(src)) {
+      setResolved(src);
+      return;
+    }
+    resolveFirestorePdfBlobUrl(src)
+      .then((blobUrl) => {
+        if (active && blobUrl) setResolved(blobUrl);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [src]);
+  if (!resolved) {
+    return <div className="py-12 text-xs text-gray-400">Loading image from cloud...</div>;
+  }
+  return <img src={resolved} alt={alt} style={style} className={className} />;
+};
 
 export interface UnifiedDocumentData {
   id: string;
@@ -360,10 +389,21 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
   const handleZoomOut = () => setZoom((z) => Math.max(z - 25, 50));
   const handleZoomReset = () => setZoom(100);
 
-  // Check if real attached uploads exist (not empty or dummy '#')
-  const validAttachedDocs = (document.attachedDocuments || []).filter(
+  // Check if real attached uploads exist (not empty or dummy '#'), placing primary/section-matched first
+  const rawValidAttachedDocs = (document.attachedDocuments || []).filter(
     (d) => d.dataUrl && d.dataUrl !== '#' && d.dataUrl.length > 5
   );
+  const validAttachedDocs = [...rawValidAttachedDocs].sort((a, b) => {
+    const aSec = targetSectionTag
+      ? isSectionMatch(a.sectionTag, targetSectionTag) || isSectionMatch(a.name, targetSectionTag)
+      : false;
+    const bSec = targetSectionTag
+      ? isSectionMatch(b.sectionTag, targetSectionTag) || isSectionMatch(b.name, targetSectionTag)
+      : false;
+    if (aSec !== bSec) return aSec ? -1 : 1;
+    if (Boolean(a.isPrimary) !== Boolean(b.isPrimary)) return a.isPrimary ? -1 : 1;
+    return 0;
+  });
   const hasRealAttachedDocs = validAttachedDocs.length > 0;
 
   // Auto-scroll to matching section if targetSectionTag is provided
@@ -651,14 +691,28 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                       {doc.size || 'Verified Record'}
                     </span>
                     {doc.dataUrl && (
-                      <a
-                        href={doc.dataUrl}
-                        download={doc.name || `Document_${idx + 1}.pdf`}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const href = isFirestorePdfUrl(doc.dataUrl)
+                              ? (await resolveFirestorePdfBlobUrl(doc.dataUrl)) || doc.dataUrl
+                              : doc.dataUrl;
+                            const a = window.document.createElement('a');
+                            a.href = href;
+                            a.download = doc.name || `Document_${idx + 1}.pdf`;
+                            window.document.body.appendChild(a);
+                            a.click();
+                            window.document.body.removeChild(a);
+                          } catch (err) {
+                            console.warn('Download error:', err);
+                          }
+                        }}
                         className="p-1.5 rounded-lg bg-[#222733] hover:bg-[#2C3344] text-gray-300 hover:text-white transition-colors cursor-pointer"
                         title="Download PDF"
                       >
                         <Download className="w-3.5 h-3.5" />
-                      </a>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -675,7 +729,7 @@ export const FullPdfDocumentViewer: React.FC<FullPdfDocumentViewerProps> = ({
                     </div>
                   ) : isImage ? (
                     <div className="p-3 sm:p-6 flex items-center justify-center w-full max-w-[900px] bg-[#14161C] rounded-2xl border-2 border-[#2B2F38] shadow-2xl">
-                      <img
+                      <ResolvedDocImage
                         src={doc.dataUrl}
                         alt={doc.name}
                         style={{

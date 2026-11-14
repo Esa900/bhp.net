@@ -1,5 +1,6 @@
-import { getStoredAdminPosts, findAdminPostByQuery, syncAdminPostsFromServer, POSTS_STORAGE_KEY } from './postsStorage';
+import { getStoredAdminPosts, syncAdminPostsFromServer, POSTS_STORAGE_KEY } from './postsStorage';
 import { getStoredCanadaDocuments, syncCanadaDocumentsFromServer, CANADA_STORAGE_KEY } from './canadaStorage';
+import { lookupVerificationIndexInFirestore } from './firebaseCloud';
 import { SAMPLE_PROFILES } from '../data/portalData';
 import {
   UnifiedDocumentData,
@@ -154,7 +155,10 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
         (u.attachedDocuments || []).forEach(pushDoc);
       });
 
-      baseUnified.attachedDocuments = combinedAttached.length > 0 ? combinedAttached : baseUnified.attachedDocuments;
+      const primaryCombined = combinedAttached.filter((d) => d.isPrimary);
+      const nonPrimaryCombined = combinedAttached.filter((d) => !d.isPrimary);
+      const sortedCombined = [...primaryCombined, ...nonPrimaryCombined];
+      baseUnified.attachedDocuments = sortedCombined.length > 0 ? sortedCombined : baseUnified.attachedDocuments;
 
       return {
         document: baseUnified,
@@ -198,78 +202,114 @@ export function searchUniversalDocument(rawQuery: string): UniversalSearchResult
   return null;
 }
 
+function cacheRemoteSearchRecord(source: 'australia' | 'canada' | 'portal', record: any) {
+  try {
+    if (typeof window === 'undefined' || !record) return;
+    if (source === 'australia') {
+      const currentPosts = getStoredAdminPosts();
+      const existsIdx = currentPosts.findIndex((p) => p.id === record.id);
+      const updatedList =
+        existsIdx !== -1
+          ? currentPosts.map((p, i) => (i === existsIdx ? record : p))
+          : [record, ...currentPosts];
+      (window as any).__bhp_admin_posts_cache = updatedList;
+      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(updatedList));
+    } else if (source === 'canada') {
+      const currentDocs = getStoredCanadaDocuments();
+      const existsIdx = currentDocs.findIndex((c) => c.id === record.id);
+      const updatedList =
+        existsIdx !== -1
+          ? currentDocs.map((c, i) => (i === existsIdx ? record : c))
+          : [record, ...currentDocs];
+      (window as any).__bhp_canada_documents_cache = updatedList;
+      localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(updatedList));
+    }
+  } catch (_) {}
+}
+
+function buildSearchResultFromRecord(
+  source: 'australia' | 'canada' | 'portal',
+  record: any
+): UniversalSearchResult {
+  if (source === 'australia') {
+    const docData = postToUnifiedDoc(record, 'australia');
+    if (Array.isArray(docData.attachedDocuments)) {
+      docData.attachedDocuments = [
+        ...docData.attachedDocuments.filter((d) => d.isPrimary),
+        ...docData.attachedDocuments.filter((d) => !d.isPrimary),
+      ];
+    }
+    return { document: docData, source: 'australia', rawRecord: record };
+  }
+  if (source === 'canada') {
+    const docData = canadaRecordToUnifiedDoc(record);
+    if (Array.isArray(docData.attachedDocuments)) {
+      docData.attachedDocuments = [
+        ...docData.attachedDocuments.filter((d) => d.isPrimary),
+        ...docData.attachedDocuments.filter((d) => !d.isPrimary),
+      ];
+    }
+    return { document: docData, source: 'canada', rawRecord: record };
+  }
+  return {
+    document: profileToUnifiedDoc(record),
+    source: 'portal',
+    rawRecord: record,
+  };
+}
+
 /**
- * Asynchronous Universal Search with live server sync fallback.
- * Guarantees that documents newly added by admin on another phone/device
- * will be retrieved and displayed to the customer immediately.
+ * Asynchronous Universal Search with live Cloud (Firestore) + Express server lookup.
+ * Guarantees documents & PDFs added by admin on any phone/device are retrieved immediately on all devices.
  */
 export async function searchUniversalDocumentAsync(
   rawQuery: string,
   targetSection?: string,
   preferredSource?: 'australia' | 'canada'
 ): Promise<UniversalSearchResult | null> {
-  // 1. Prioritize querying live central server database for real-time worldwide access
-  try {
-    const params = new URLSearchParams({ q: rawQuery });
-    if (targetSection) params.set('section', targetSection);
-    if (preferredSource) params.set('source', preferredSource);
+  const fetchExpressSearch = async (): Promise<{ source: 'australia' | 'canada' | 'portal'; record: any } | null> => {
+    try {
+      const params = new URLSearchParams({ q: rawQuery });
+      if (targetSection) params.set('section', targetSection);
+      if (preferredSource) params.set('source', preferredSource);
 
-    const res = await fetch(`/api/search?${params.toString()}`, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
+      const res = await fetch(`/api/search?${params.toString()}`, { cache: 'no-store' });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null);
       if (data && data.found && data.record) {
-        if (data.source === 'australia') {
-          try {
-            const currentPosts = getStoredAdminPosts();
-            const existsIdx = currentPosts.findIndex((p) => p.id === data.record.id);
-            const updatedList = existsIdx !== -1
-              ? currentPosts.map((p, i) => (i === existsIdx ? data.record : p))
-              : [data.record, ...currentPosts];
-            if (typeof window !== 'undefined') {
-              (window as any).__bhp_admin_posts_cache = updatedList;
-              localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(updatedList));
-            }
-          } catch (_) {}
-          return {
-            document: postToUnifiedDoc(data.record, 'australia'),
-            source: 'australia',
-            rawRecord: data.record,
-          };
-        } else if (data.source === 'canada') {
-          try {
-            const currentDocs = getStoredCanadaDocuments();
-            const existsIdx = currentDocs.findIndex((c) => c.id === data.record.id);
-            const updatedList = existsIdx !== -1
-              ? currentDocs.map((c, i) => (i === existsIdx ? data.record : c))
-              : [data.record, ...currentDocs];
-            if (typeof window !== 'undefined') {
-              (window as any).__bhp_canada_documents_cache = updatedList;
-              localStorage.setItem(CANADA_STORAGE_KEY, JSON.stringify(updatedList));
-            }
-          } catch (_) {}
-          return {
-            document: canadaRecordToUnifiedDoc(data.record),
-            source: 'canada',
-            rawRecord: data.record,
-          };
-        } else if (data.source === 'portal') {
-          return {
-            document: profileToUnifiedDoc(data.record),
-            source: 'portal',
-            rawRecord: data.record,
-          };
-        }
+        return { source: data.source || 'canada', record: data.record };
       }
+    } catch (err) {
+      console.warn('Express server search skipped:', err);
     }
-  } catch (err) {
-    console.warn('Server search endpoint error:', err);
+    return null;
+  };
+
+  // 1. Query both live Firestore Cloud Index & Express Server in parallel
+  const [cloudResult, expressResult] = await Promise.all([
+    lookupVerificationIndexInFirestore(rawQuery).catch(() => null),
+    fetchExpressSearch(),
+  ]);
+
+  let chosen: { source: 'australia' | 'canada' | 'portal'; record: any } | null = null;
+  if (cloudResult && expressResult) {
+    const cloudTs = Number((cloudResult.record as any)?.updatedAt || 0);
+    const expressTs = Number((expressResult.record as any)?.updatedAt || 0);
+    chosen = cloudTs >= expressTs ? cloudResult : expressResult;
+  } else {
+    chosen = cloudResult || expressResult;
+  }
+
+  if (chosen && chosen.record) {
+    cacheRemoteSearchRecord(chosen.source, chosen.record);
+    return buildSearchResultFromRecord(chosen.source, chosen.record);
   }
 
   // 2. Fallback to local cache if network offline
   const localMatch = searchUniversalDocument(rawQuery);
   if (localMatch) return localMatch;
 
-  // 3. Fallback: full server sync of posts and canada docs, then retry search
+  // 3. Fallback: full sync of posts and canada docs, then retry search
   try {
     await Promise.allSettled([
       syncAdminPostsFromServer(),

@@ -1,5 +1,17 @@
+import { AttachedDoc } from '../types';
 import { CanadaDocumentRecord, CanadaMenuItemConfig } from '../types/canada';
-import { setLargeItem, getLargeItem } from './pdfIndexedDb';
+import { setLargeItem } from './pdfIndexedDb';
+import { isFirebaseAdminReady } from './firebaseClient';
+import {
+  deleteCanadaDocFromFirestore,
+  fetchCanadaDocsFromFirestoreForAdmin,
+  fetchMenuConfigFromFirestore,
+  saveMenuConfigToFirestore,
+  syncLocalRecordsToFirestoreIfEmpty,
+  upsertCanadaDocToFirestore,
+} from './firebaseCloud';
+import { getStoredAdminPosts } from './postsStorage';
+import { uploadDataUrlDocument } from './fileUpload';
 
 export const CANADA_STORAGE_KEY = 'bhp_canada_documents';
 export const CANADA_DOCUMENTS_UPDATED_EVENT = 'bhp_canada_documents_updated';
@@ -239,12 +251,38 @@ export async function syncCanadaDocumentsFromServer(): Promise<CanadaDocumentRec
           ).catch(console.error);
         }
 
+        if (isFirebaseAdminReady()) {
+          syncLocalRecordsToFirestoreIfEmpty(getStoredAdminPosts(), mergedList).catch(() => {});
+        }
+
         window.dispatchEvent(new CustomEvent(CANADA_DOCUMENTS_UPDATED_EVENT, { detail: mergedList }));
         return mergedList;
       }
     }
   } catch (err) {
-    console.warn('Network sync for Canada documents skipped:', err);
+    console.warn('Network sync for Canada documents skipped (offline or static host):', err);
+  }
+
+  // Fallback to Firestore Admin Cloud Sync (works on Vercel / static hosts / separate devices)
+  if (isFirebaseAdminReady()) {
+    try {
+      const cloudDocs = await fetchCanadaDocsFromFirestoreForAdmin();
+      if (canadaMutationEpoch !== startEpoch) {
+        return getStoredCanadaDocuments();
+      }
+      if (cloudDocs && cloudDocs.length > 0) {
+        const cleaned = cloudDocs.filter((d) => d && !isDemoCanadaDoc(d));
+        updateLocalCanadaCache(cleaned);
+        return cleaned;
+      } else if (cloudDocs && cloudDocs.length === 0) {
+        const local = getStoredCanadaDocuments();
+        if (local.length > 0) {
+          syncLocalRecordsToFirestoreIfEmpty(getStoredAdminPosts(), local).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.warn('Firestore admin Canada docs sync note:', err);
+    }
   }
 
   return getStoredCanadaDocuments();
@@ -300,41 +338,17 @@ async function sanitizeAndUploadCanadaDocFiles(doc: CanadaDocumentRecord): Promi
 
   if (cleanDoc.candidatePhotoUrl && cleanDoc.candidatePhotoUrl.startsWith('data:')) {
     try {
-      const upRes = await fetch('/api/upload-file', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: 'candidate_photo.png',
-          fileData: cleanDoc.candidatePhotoUrl,
-          type: 'image',
-        }),
-      });
-      if (upRes.ok) {
-        const upJson = await upRes.json();
-        if (upJson.fileUrl) {
-          cleanDoc.candidatePhotoUrl = upJson.fileUrl;
-        }
-      }
+      cleanDoc.candidatePhotoUrl = await uploadDataUrlDocument('candidate_photo.png', cleanDoc.candidatePhotoUrl, 'image');
     } catch (_) {}
   }
 
   if (cleanDoc.documentFileUrl && cleanDoc.documentFileUrl.startsWith('data:')) {
     try {
-      const upRes = await fetch('/api/upload-file', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: cleanDoc.documentFileName || 'Canada_Document.pdf',
-          fileData: cleanDoc.documentFileUrl,
-          type: 'pdf',
-        }),
-      });
-      if (upRes.ok) {
-        const upJson = await upRes.json();
-        if (upJson.fileUrl) {
-          cleanDoc.documentFileUrl = upJson.fileUrl;
-        }
-      }
+      cleanDoc.documentFileUrl = await uploadDataUrlDocument(
+        cleanDoc.documentFileName || 'Canada_Document.pdf',
+        cleanDoc.documentFileUrl,
+        'pdf'
+      );
     } catch (_) {}
   }
 
@@ -350,26 +364,17 @@ async function sanitizeAndUploadCanadaDocFiles(doc: CanadaDocumentRecord): Promi
 
         if (att.dataUrl && att.dataUrl.startsWith('data:')) {
           try {
-            const upRes = await fetch('/api/upload-file', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fileName: att.name || 'Attached_Document.pdf',
-                fileData: att.dataUrl,
-                type: nextType,
-              }),
-            });
-            if (upRes.ok) {
-              const upJson = await upRes.json();
-              if (upJson.fileUrl) {
-                return {
-                  ...att,
-                  type: nextType,
-                  sectionTag: fallbackSection,
-                  dataUrl: upJson.fileUrl,
-                };
-              }
-            }
+            const uploadedUrl = await uploadDataUrlDocument(
+              att.name || 'Attached_Document.pdf',
+              att.dataUrl,
+              nextType
+            );
+            return {
+              ...att,
+              type: nextType,
+              sectionTag: fallbackSection,
+              dataUrl: uploadedUrl,
+            };
           } catch (_) {}
         }
         return {
@@ -419,6 +424,12 @@ export async function upsertCanadaDocumentAsync(doc: CanadaDocumentRecord): Prom
   updateLocalCanadaCache(nextList);
 
   if (typeof window !== 'undefined') {
+    if (isFirebaseAdminReady()) {
+      await upsertCanadaDocToFirestore(sanitized, getStoredAdminPosts(), nextList).catch((err) =>
+        console.warn('Firestore Canada doc upsert note:', err)
+      );
+    }
+
     try {
       const res = await fetch('/api/canada-documents/upsert', {
         method: 'POST',
@@ -434,7 +445,93 @@ export async function upsertCanadaDocumentAsync(doc: CanadaDocumentRecord): Prom
         }
       }
     } catch (err) {
-      console.warn('Failed to upsert Canada doc on server:', err);
+      console.warn('Failed to upsert Canada doc on Express server:', err);
+    }
+  }
+
+  return nextList;
+}
+
+/**
+ * Attach a new PDF directly to a Canada client record (works across Firestore + Express + Static hosts with zero 404 failure)
+ */
+export async function addAttachedDocToCanadaAsync(params: {
+  docId: string;
+  referenceNo?: string;
+  candidateName?: string;
+  passportNumber?: string;
+  fullDocument?: CanadaDocumentRecord;
+  doc: AttachedDoc;
+}): Promise<CanadaDocumentRecord[]> {
+  canadaMutationEpoch += 1;
+  const { docId, referenceNo, candidateName, passportNumber, fullDocument, doc: newDoc } = params;
+
+  const current = getStoredCanadaDocuments();
+  let targetIdx = current.findIndex((d) => d.id === docId);
+  if (targetIdx === -1 && fullDocument) {
+    current.unshift(fullDocument);
+    targetIdx = 0;
+  }
+
+  let updatedRecord: CanadaDocumentRecord | null = null;
+  let nextList = [...current];
+  if (targetIdx !== -1) {
+    const existing = current[targetIdx];
+    const existingAttached = Array.isArray(existing.attachedDocuments) ? [...existing.attachedDocuments] : [];
+    if (newDoc.isPrimary) {
+      existingAttached.forEach((d) => {
+        d.isPrimary = false;
+      });
+    }
+    const filtered = existingAttached.filter((d) => d.id !== newDoc.id);
+    const orderedAttached = newDoc.isPrimary ? [newDoc, ...filtered] : [...filtered, newDoc];
+    updatedRecord = {
+      ...existing,
+      attachedDocuments: orderedAttached,
+      documentFileName: newDoc.isPrimary || !existing.documentFileUrl ? newDoc.name : existing.documentFileName,
+      documentFileUrl: newDoc.isPrimary || !existing.documentFileUrl ? newDoc.dataUrl : existing.documentFileUrl,
+      updatedAt: Date.now(),
+    };
+    nextList = current.map((d, i) => (i === targetIdx ? updatedRecord! : d));
+    updateLocalCanadaCache(nextList);
+  }
+
+  let savedRemote = false;
+  if (isFirebaseAdminReady() && updatedRecord) {
+    await upsertCanadaDocToFirestore(updatedRecord, getStoredAdminPosts(), nextList);
+    savedRemote = true;
+  }
+
+  try {
+    const addRes = await fetch('/api/canada-documents/add-attached-doc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        docId,
+        referenceNo,
+        candidateName,
+        passportNumber,
+        fullDocument,
+        doc: newDoc,
+      }),
+    });
+    const addJson = await addRes.json().catch(() => ({}));
+    if (addRes.ok && Array.isArray(addJson.documents)) {
+      canadaMutationEpoch += 1;
+      nextList = addJson.documents;
+      updateLocalCanadaCache(nextList);
+      savedRemote = true;
+    } else if (!savedRemote && !addRes.ok) {
+      if (addRes.status === 404) {
+        throw new Error(
+          'CLOUD_AUTH_REQUIRED: ক্লাউড ডাটাবেজে সেভ করতে প্রথমে Google দিয়ে Admin Sign-In করুন।'
+        );
+      }
+      throw new Error(addJson?.error || `Database save failed (HTTP ${addRes.status})`);
+    }
+  } catch (err) {
+    if (!savedRemote) {
+      throw err;
     }
   }
 
@@ -447,6 +544,13 @@ export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Pr
   updateLocalCanadaCache(sanitizedDocs);
 
   if (typeof window !== 'undefined') {
+    if (isFirebaseAdminReady()) {
+      const allPosts = getStoredAdminPosts();
+      Promise.allSettled(
+        sanitizedDocs.map((d) => upsertCanadaDocToFirestore(d, allPosts, sanitizedDocs))
+      ).catch(() => {});
+    }
+
     try {
       const res = await fetch('/api/canada-documents', {
         method: 'POST',
@@ -460,10 +564,10 @@ export async function saveCanadaDocumentsAsync(docs: CanadaDocumentRecord[]): Pr
           updateLocalCanadaCache(json.documents);
         }
       }
-      return res.ok;
+      return res.ok || isFirebaseAdminReady();
     } catch (err) {
       console.warn('Failed to push Canada documents to server API:', err);
-      return false;
+      return isFirebaseAdminReady();
     }
   }
   return true;
@@ -515,10 +619,17 @@ export function updateCanadaDocument(id: string, updates: Partial<CanadaDocument
 export async function deleteCanadaDocumentAsync(id: string): Promise<CanadaDocumentRecord[]> {
   canadaMutationEpoch += 1;
   const current = getStoredCanadaDocuments();
+  const targetDoc = current.find((d) => d.id === id);
   const filtered = current.filter((d) => d.id !== id);
   updateLocalCanadaCache(filtered);
 
   if (typeof window !== 'undefined') {
+    if (isFirebaseAdminReady()) {
+      await deleteCanadaDocFromFirestore(id, targetDoc, getStoredAdminPosts(), filtered).catch((err) =>
+        console.warn('Firestore delete Canada doc note:', err)
+      );
+    }
+
     try {
       const res = await fetch(`/api/canada-documents/${encodeURIComponent(id)}`, {
         method: 'DELETE',
@@ -657,6 +768,17 @@ export async function syncCanadaMenuConfigsFromServer(): Promise<CanadaMenuItemC
   } catch (err) {
     console.warn('Network sync for canada menu items skipped:', err);
   }
+
+  // Fallback: public Firestore menu configuration (works across all devices & static hosts)
+  try {
+    const cloudMenu = await fetchMenuConfigFromFirestore<CanadaMenuItemConfig>('canada_menu');
+    if (cloudMenu && cloudMenu.length > 0) {
+      localStorage.setItem(CANADA_MENU_CONFIGS_KEY, JSON.stringify(cloudMenu));
+      window.dispatchEvent(new CustomEvent(CANADA_MENU_CONFIGS_UPDATED_EVENT, { detail: cloudMenu }));
+      return cloudMenu;
+    }
+  } catch (_) {}
+
   return getStoredCanadaMenuConfigs();
 }
 
@@ -665,6 +787,11 @@ export function saveStoredCanadaMenuConfigs(configs: CanadaMenuItemConfig[]): vo
     localStorage.setItem(CANADA_MENU_CONFIGS_KEY, JSON.stringify(configs));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(CANADA_MENU_CONFIGS_UPDATED_EVENT, { detail: configs }));
+      if (isFirebaseAdminReady()) {
+        saveMenuConfigToFirestore('canada_menu', configs).catch((err) =>
+          console.warn('Firestore save canada menu note:', err)
+        );
+      }
       fetch('/api/canada-menu-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -16,6 +16,7 @@ import {
   ExternalLink,
   AlertCircle,
   FileText,
+  Cloud,
 } from 'lucide-react';
 import { useAdminData, AdminRole } from '../../context/AdminDataContext';
 import { AdminJobCircularManager } from './AdminJobCircularManager';
@@ -24,6 +25,14 @@ import { AdminAustraliaManager } from './AdminAustraliaManager';
 import { AdminCanadaManager } from './AdminCanadaManager';
 import { getRegisteredUsers, BHP_USERS_UPDATED_EVENT } from '../../utils/authStorage';
 import { getStoredJobCategories, JOB_CATEGORIES_UPDATED_EVENT } from '../../utils/jobCircularStorage';
+import {
+  auth,
+  BHP_FIREBASE_AUTH_EVENT,
+  isFirebaseAdminReady,
+  signInWithFirebaseGoogle,
+} from '../../utils/firebaseClient';
+import { syncAdminPostsFromServer } from '../../utils/postsStorage';
+import { syncCanadaDocumentsFromServer } from '../../utils/canadaStorage';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -61,8 +70,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
   const [siteForm, setSiteForm] = useState(siteSettings);
   const [seoForm, setSeoForm] = useState(seoSettings);
   const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const [cloudAdminReady, setCloudAdminReady] = useState<boolean>(() => isFirebaseAdminReady());
+  const [cloudEmail, setCloudEmail] = useState<string>(() => auth.currentUser?.email || '');
+  const [isConnectingCloud, setIsConnectingCloud] = useState(false);
 
-  // Sync user and job circular counters
+  // Sync user, job circular counters & Firebase cloud status
   useEffect(() => {
     const handleUsersChange = () => {
       setRegisteredUsersCount(getRegisteredUsers().length);
@@ -74,14 +86,25 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
       setRegisteredUsersCount(getRegisteredUsers().length);
       setJobCategoriesCount(getStoredJobCategories().length);
     };
+    const handleFirebaseAuth = () => {
+      const ready = isFirebaseAdminReady();
+      setCloudAdminReady(ready);
+      setCloudEmail(auth.currentUser?.email || '');
+      if (ready) {
+        syncAdminPostsFromServer().catch(() => {});
+        syncCanadaDocumentsFromServer().catch(() => {});
+      }
+    };
 
     window.addEventListener(BHP_USERS_UPDATED_EVENT, handleUsersChange);
     window.addEventListener(JOB_CATEGORIES_UPDATED_EVENT, handleJobsChange);
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener(BHP_FIREBASE_AUTH_EVENT, handleFirebaseAuth);
     return () => {
       window.removeEventListener(BHP_USERS_UPDATED_EVENT, handleUsersChange);
       window.removeEventListener(JOB_CATEGORIES_UPDATED_EVENT, handleJobsChange);
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener(BHP_FIREBASE_AUTH_EVENT, handleFirebaseAuth);
     };
   }, []);
 
@@ -231,6 +254,54 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Firebase Cloud Sync Button */}
+            <button
+              type="button"
+              disabled={isConnectingCloud}
+              onClick={async () => {
+                setIsConnectingCloud(true);
+                try {
+                  const res = await signInWithFirebaseGoogle();
+                  setCloudAdminReady(res.isAdmin);
+                  setCloudEmail(res.user.email || '');
+                  if (res.isAdmin) {
+                    showToast(`Cloud Sync Connected (${res.user.email})! All devices are now synced.`);
+                    await Promise.allSettled([
+                      syncAdminPostsFromServer(),
+                      syncCanadaDocumentsFromServer(),
+                    ]);
+                  } else {
+                    showToast(
+                      `Signed in as ${res.user.email}. Use bootstrapped admin Google account (mdesaali391@gmail.com) for cloud admin writes.`
+                    );
+                  }
+                } catch (err: any) {
+                  showToast(`Google Cloud Sign-In error: ${err?.message || 'Popup closed or blocked'}`);
+                } finally {
+                  setIsConnectingCloud(false);
+                }
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-bold cursor-pointer transition-colors ${
+                cloudAdminReady
+                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/70'
+                  : 'bg-amber-950/60 border-amber-500/50 text-amber-300 hover:bg-amber-900/70 animate-pulse'
+              }`}
+              title={
+                cloudAdminReady
+                  ? `Connected to Firebase Cloud (${cloudEmail})`
+                  : 'Click to sign in with Admin Google Account for worldwide cross-device cloud PDF uploads'
+              }
+            >
+              <Cloud className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">
+                {isConnectingCloud
+                  ? 'Connecting...'
+                  : cloudAdminReady
+                  ? 'Cloud Synced'
+                  : 'Connect Google Cloud'}
+              </span>
+            </button>
+
             {/* Active Role Selector Badge */}
             <div className="flex items-center gap-1.5 bg-[#23262D] px-2.5 py-1.5 rounded-md border border-[#373B45] text-xs">
               <ShieldCheck className="w-3.5 h-3.5 text-[#F25C05]" />

@@ -1382,7 +1382,9 @@ async function startServer() {
       if (dSig === newSig && d.dataUrl === attachedDoc.dataUrl) return false;
       return true;
     });
-    const updatedAttached = deduplicateAttachedDocs([...filteredExisting, attachedDoc]);
+    const updatedAttached = deduplicateAttachedDocs(
+      attachedDoc.isPrimary ? [attachedDoc, ...filteredExisting] : [...filteredExisting, attachedDoc]
+    );
 
     docs[targetIdx] = {
       ...currentDoc,
@@ -1484,7 +1486,9 @@ async function startServer() {
       if (dSig === newSig && d.dataUrl === attachedDoc.dataUrl) return false;
       return true;
     });
-    const updatedAttached = deduplicateAttachedDocs([...filteredExisting, attachedDoc]);
+    const updatedAttached = deduplicateAttachedDocs(
+      attachedDoc.isPrimary ? [attachedDoc, ...filteredExisting] : [...filteredExisting, attachedDoc]
+    );
 
     posts[targetIdx] = {
       ...currentPost,

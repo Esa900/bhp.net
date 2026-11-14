@@ -1,4 +1,6 @@
 import { DocumentMenuItem, DOCUMENT_MENU_ITEMS } from '../data/menuNavigationItems';
+import { isFirebaseAdminReady } from './firebaseClient';
+import { fetchMenuConfigFromFirestore, saveMenuConfigToFirestore } from './firebaseCloud';
 
 const STORAGE_KEY = 'bhp_custom_menu_items_v3';
 export const MENU_ITEMS_UPDATED_EVENT = 'bhp_menu_items_updated';
@@ -47,10 +49,19 @@ export function getStoredMenuItems(): DocumentMenuItem[] {
 }
 
 /**
- * Fetch latest menu items from server for multi-device sync
+ * Fetch latest menu items from cloud Firestore and/or server for multi-device sync
  */
 export async function syncMenuItemsFromServer(): Promise<DocumentMenuItem[]> {
   if (typeof window === 'undefined') return getStoredMenuItems();
+
+  try {
+    const cloudItems = await fetchMenuConfigFromFirestore<DocumentMenuItem>('australia_menu');
+    if (cloudItems && cloudItems.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudItems));
+      window.dispatchEvent(new CustomEvent(MENU_ITEMS_UPDATED_EVENT, { detail: cloudItems }));
+      return cloudItems;
+    }
+  } catch (_) {}
 
   try {
     const res = await fetch('/api/menu-items', { cache: 'no-store' });
@@ -70,18 +81,23 @@ export async function syncMenuItemsFromServer(): Promise<DocumentMenuItem[]> {
 }
 
 /**
- * Save menu items list to localStorage and dispatch update event & push to server
+ * Save menu items list to localStorage and push to Firestore + server
  */
 export function saveStoredMenuItems(items: DocumentMenuItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(MENU_ITEMS_UPDATED_EVENT, { detail: items }));
+      if (isFirebaseAdminReady()) {
+        saveMenuConfigToFirestore('australia_menu', items).catch((err) =>
+          console.warn('Firestore menu save note:', err)
+        );
+      }
       fetch('/api/menu-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(items),
-      }).catch((err) => console.warn('Failed to push menu items to server:', err));
+      }).catch(() => {});
     }
   } catch (err) {
     console.error('Failed to save menu items to localStorage:', err);

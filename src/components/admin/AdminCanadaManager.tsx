@@ -27,17 +27,17 @@ import {
   DollarSign,
   Briefcase,
   ArrowLeft,
+  Cloud,
 } from 'lucide-react';
 import { AttachedDoc } from '../../types';
 import { CanadaDocumentRecord, CanadaMenuItemConfig, CanadaCategoryType } from '../../types/canada';
 import {
   getStoredCanadaDocuments,
   upsertCanadaDocumentAsync,
+  addAttachedDocToCanadaAsync,
   deleteCanadaDocumentAsync,
   deleteAllCanadaDocumentsAsync,
   syncCanadaDocumentsFromServer,
-  setCanadaDocumentsCache,
-  bumpCanadaMutationEpoch,
   CANADA_DOCUMENTS_UPDATED_EVENT,
   getStoredCanadaMenuConfigs,
   addStoredCanadaMenuConfig,
@@ -47,7 +47,12 @@ import {
   syncCanadaMenuConfigsFromServer,
   CANADA_MENU_CONFIGS_UPDATED_EVENT,
 } from '../../utils/canadaStorage';
-import { uploadBinaryDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
+import { uploadBinaryDocument, uploadDataUrlDocument, inferDocumentType, formatFileSize } from '../../utils/fileUpload';
+import {
+  BHP_FIREBASE_AUTH_EVENT,
+  isFirebaseAdminReady,
+  signInWithFirebaseGoogle,
+} from '../../utils/firebaseClient';
 import {
   FullPdfDocumentViewer,
   canadaRecordToUnifiedDoc,
@@ -165,7 +170,28 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
   const [isUploadingQuickPdf, setIsUploadingQuickPdf] = useState<boolean>(false);
   const [quickUploadError, setQuickUploadError] = useState<string | null>(null);
   const [quickUploadStatus, setQuickUploadStatus] = useState<string | null>(null);
+  const [cloudReady, setCloudReady] = useState<boolean>(() => isFirebaseAdminReady());
+  const [isConnectingCloud, setIsConnectingCloud] = useState<boolean>(false);
   const quickFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleConnectGoogleCloud = async () => {
+    setIsConnectingCloud(true);
+    try {
+      const res = await signInWithFirebaseGoogle();
+      setCloudReady(res.isAdmin);
+      if (res.isAdmin) {
+        setQuickUploadError(null);
+        showToast(`Cloud Sync Connected (${res.user.email})! You can now upload PDFs from any device.`);
+        syncCanadaDocumentsFromServer().then(setDocuments).catch(() => {});
+      } else {
+        showToast(`Signed in as ${res.user.email}. Use admin Google account (mdesaali391@gmail.com) for cloud writes.`);
+      }
+    } catch (err: any) {
+      showToast(`Google Sign-In error: ${err?.message || 'Popup closed or blocked'}`);
+    } finally {
+      setIsConnectingCloud(false);
+    }
+  };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -196,14 +222,24 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       setDocuments(getStoredCanadaDocuments());
       setMenuConfigs(getStoredCanadaMenuConfigs());
     };
+    const handleFirebaseAuth = () => {
+      const ready = isFirebaseAdminReady();
+      setCloudReady(ready);
+      if (ready) {
+        syncCanadaDocumentsFromServer().then(setDocuments).catch(() => {});
+        syncCanadaMenuConfigsFromServer().then(setMenuConfigs).catch(() => {});
+      }
+    };
 
     window.addEventListener(CANADA_DOCUMENTS_UPDATED_EVENT, handleDocsUpdate);
     window.addEventListener(CANADA_MENU_CONFIGS_UPDATED_EVENT, handleConfigsUpdate);
     window.addEventListener('storage', handleStorage);
+    window.addEventListener(BHP_FIREBASE_AUTH_EVENT, handleFirebaseAuth);
     return () => {
       window.removeEventListener(CANADA_DOCUMENTS_UPDATED_EVENT, handleDocsUpdate);
       window.removeEventListener(CANADA_MENU_CONFIGS_UPDATED_EVENT, handleConfigsUpdate);
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener(BHP_FIREBASE_AUTH_EVENT, handleFirebaseAuth);
     };
   }, []);
 
@@ -470,7 +506,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       }
 
       if (newDocs.length > 0) {
-        // If editing an existing saved client, persist newly uploaded PDFs immediately to central server
+        // If editing an existing saved client, persist newly uploaded PDFs immediately to central database (Firestore + Express)
         const editingRecord = editingDocId ? documents.find((d) => d.id === editingDocId) : null;
         if (editingDocId && editingRecord) {
           const targetRef =
@@ -482,29 +518,20 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
           let latestDocs: CanadaDocumentRecord[] | null = null;
           for (const nd of newDocs) {
             try {
-              bumpCanadaMutationEpoch();
-              const addRes = await fetch('/api/canada-documents/add-attached-doc', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  docId: editingDocId,
-                  referenceNo: targetRef,
-                  candidateName: docForm.candidateName || editingRecord.candidateName,
-                  passportNumber: docForm.passportNumber || editingRecord.passportNumber,
-                  fullDocument: { ...editingRecord, ...docForm, id: editingDocId },
-                  doc: nd,
-                }),
+              latestDocs = await addAttachedDocToCanadaAsync({
+                docId: editingDocId,
+                referenceNo: targetRef,
+                candidateName: docForm.candidateName || editingRecord.candidateName,
+                passportNumber: docForm.passportNumber || editingRecord.passportNumber,
+                fullDocument: { ...editingRecord, ...docForm, id: editingDocId },
+                doc: nd,
               });
-              const addJson = await addRes.json().catch(() => ({}));
-              if (addRes.ok && Array.isArray(addJson.documents)) {
-                latestDocs = addJson.documents;
-              }
-            } catch (err) {
+            } catch (err: any) {
               console.warn('Auto-persist edit upload error:', err);
+              lastError = err?.message || lastError;
             }
           }
           if (latestDocs) {
-            setCanadaDocumentsCache(latestDocs, true);
             setDocuments(latestDocs);
           }
         }
@@ -629,32 +656,14 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
           resolvedName = uploaded.fileName || f.name;
           resolvedSize = uploaded.sizeStr || f.size;
         } else if (uploadedUrl && uploadedUrl.startsWith('data:')) {
-          const upRes = await fetch('/api/upload-file', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fileName: f.name,
-              fileData: uploadedUrl,
-              type: f.type,
-            }),
-          });
-          if (!upRes.ok) {
-            const errJson = await upRes.json().catch(() => ({}));
-            throw new Error(errJson.error || `File upload failed (${upRes.status})`);
-          }
-          const upJson = await upRes.json();
-          if (!upJson.fileUrl) {
-            throw new Error('Server did not return uploaded file URL');
-          }
-          uploadedUrl = upJson.fileUrl;
+          uploadedUrl = await uploadDataUrlDocument(f.name, uploadedUrl, f.type);
         }
 
         if (!uploadedUrl) {
           throw new Error(`No valid file content for "${f.name}"`);
         }
 
-        setQuickUploadStatus(`Saving ${i + 1} of ${total} to central database...`);
-        bumpCanadaMutationEpoch();
+        setQuickUploadStatus(`Saving ${i + 1} of ${total} to cloud database...`);
 
         const newDoc: AttachedDoc = {
           id: `att-ca-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -667,32 +676,20 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
           uploadDate: new Date().toISOString().split('T')[0],
         };
 
-        const addRes = await fetch('/api/canada-documents/add-attached-doc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            docId: quickPdfDoc.id,
-            referenceNo: targetRef,
-            candidateName: quickPdfDoc.candidateName,
-            passportNumber: quickPdfDoc.passportNumber,
-            fullDocument: quickPdfDoc,
-            doc: newDoc,
-          }),
+        latestServerDocs = await addAttachedDocToCanadaAsync({
+          docId: quickPdfDoc.id,
+          referenceNo: targetRef,
+          candidateName: quickPdfDoc.candidateName,
+          passportNumber: quickPdfDoc.passportNumber,
+          fullDocument: quickPdfDoc,
+          doc: newDoc,
         });
-
-        const addJson = await addRes.json().catch(() => ({}));
-        if (!addRes.ok || addJson.error) {
-          throw new Error(addJson.error || `Database save failed (${addRes.status})`);
-        }
-        if (Array.isArray(addJson.documents)) {
-          latestServerDocs = addJson.documents;
-          setCanadaDocumentsCache(addJson.documents, true);
-          setDocuments(addJson.documents);
+        if (latestServerDocs) {
+          setDocuments(latestServerDocs);
         }
       }
 
       if (latestServerDocs) {
-        setCanadaDocumentsCache(latestServerDocs, true);
         setDocuments(latestServerDocs);
       } else {
         const syncedDocs = await syncCanadaDocumentsFromServer();
@@ -700,7 +697,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       }
 
       showToast(
-        `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved to central database.`
+        `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved across all devices.`
       );
       setQuickPdfDoc(null);
       setQuickSelectedFiles([]);
@@ -1828,6 +1825,25 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
               </div>
             </div>
 
+            {!cloudReady && (
+              <div className="p-3 rounded-xl bg-amber-950/50 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-start gap-2 text-amber-200">
+                  <Cloud className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    সব ডিভাইসে পিডিএফ সেভ করতে Admin Google Account (<strong>mdesaali391@gmail.com</strong>) কানেক্ট করুন।
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isConnectingCloud}
+                  onClick={handleConnectGoogleCloud}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] shrink-0 cursor-pointer transition-colors"
+                >
+                  {isConnectingCloud ? 'Connecting...' : 'Connect Google Cloud'}
+                </button>
+              </div>
+            )}
+
             {/* Section Selection */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-white flex items-center gap-1.5">
@@ -1938,9 +1954,26 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
             </div>
 
             {quickUploadError && (
-              <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                <span className="break-words">{quickUploadError}</span>
+              <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <span className="break-words">{quickUploadError}</span>
+                </div>
+                {quickUploadError.includes('CLOUD_AUTH_REQUIRED') && (
+                  <button
+                    type="button"
+                    disabled={isConnectingCloud}
+                    onClick={handleConnectGoogleCloud}
+                    className="w-full py-2 px-3 rounded-lg bg-white text-gray-900 hover:bg-gray-100 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Cloud className="w-4 h-4 text-blue-600" />
+                    <span>
+                      {isConnectingCloud
+                        ? 'Signing in with Google...'
+                        : 'Sign In with Google (mdesaali391@gmail.com) & Retry'}
+                    </span>
+                  </button>
+                )}
               </div>
             )}
 

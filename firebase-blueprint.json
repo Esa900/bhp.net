@@ -1,0 +1,531 @@
+{
+  "entities": {
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized administrator account mapped to Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "PdfFileMeta": {
+      "title": "PdfFileMeta",
+      "description": "Metadata for an uploaded PDF or document stored in chunked Firestore documents.",
+      "type": "object",
+      "properties": {
+        "fileId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fileName": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "mimeType": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "docType": {
+          "type": "string",
+          "enum": ["pdf", "image", "other"]
+        },
+        "totalBytes": {
+          "type": "integer"
+        },
+        "chunkCount": {
+          "type": "integer"
+        },
+        "isPublicAccessible": {
+          "type": "boolean"
+        },
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "fileId",
+        "fileName",
+        "mimeType",
+        "docType",
+        "totalBytes",
+        "chunkCount",
+        "isPublicAccessible",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "PdfFileChunk": {
+      "title": "PdfFileChunk",
+      "description": "Single base64 chunk of an uploaded PDF or image document.",
+      "type": "object",
+      "properties": {
+        "fileId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "chunkIndex": {
+          "type": "integer"
+        },
+        "chunkData": {
+          "type": "string",
+          "maxLength": 550000
+        },
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["fileId", "chunkIndex", "chunkData", "authorUid", "createdAt"]
+    },
+    "AdminPostDoc": {
+      "title": "AdminPostDoc",
+      "description": "Australia and general corporate verification post record with attached PDFs.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "refNumber": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "category": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "author": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "date": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Published", "Draft"]
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 200000
+        },
+        "candidatePhotoUrl": {
+          "type": "string",
+          "maxLength": 200000
+        },
+        "galleryImages": {
+          "type": "array"
+        },
+        "attachedDocuments": {
+          "type": "array"
+        },
+        "readTime": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "badges": {
+          "type": "array"
+        },
+        "candidateName": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "passportNumber": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "nationality": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "jobTitle": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "employerName": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "workLocation": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "salaryPackage": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "visaSubclass": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "issueDate": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "expiryDate": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "verificationIdNo": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "refNumber",
+        "category",
+        "status",
+        "attachedDocuments",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CanadaDocumentDoc": {
+      "title": "CanadaDocumentDoc",
+      "description": "Canada immigration & work permit verification record with attached PDFs.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "categoryType": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "mainTitle": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "subMenu": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "tinOrRef": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "idNumber": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "verificationIdNo": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "transitionIdNo": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "referenceNo": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "candidateName": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "candidatePhotoUrl": {
+          "type": "string",
+          "maxLength": 200000
+        },
+        "passportNumber": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "nationality": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "jobTitle": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "employerName": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "workLocation": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "hourlyWageOrSalary": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "workingHours": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Verified", "Pending", "Approved", "Active"]
+        },
+        "issueDate": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "expiryDate": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "officialDocNumber": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "lmiaNumber": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "documentFileName": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "documentFileUrl": {
+          "type": "string",
+          "maxLength": 200000
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "attachedDocuments": {
+          "type": "array"
+        },
+        "recordCreatedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "categoryType",
+        "mainTitle",
+        "candidateName",
+        "status",
+        "attachedDocuments",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "VerificationIndexDoc": {
+      "title": "VerificationIndexDoc",
+      "description": "Exact-key verification lookup index allowing verified document retrieval by exact reference number, ID, or passport number.",
+      "type": "object",
+      "properties": {
+        "lookupKey": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "source": {
+          "type": "string",
+          "enum": ["australia", "canada"]
+        },
+        "recordId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "referenceNumber": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "candidateName": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "passportNumber": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "recordData": {
+          "type": "object"
+        },
+        "isPublished": {
+          "type": "boolean"
+        },
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "lookupKey",
+        "source",
+        "recordId",
+        "recordData",
+        "isPublished",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MenuConfigDoc": {
+      "title": "MenuConfigDoc",
+      "description": "Stored navigation category menu configuration for Australia or Canada verification menus.",
+      "type": "object",
+      "properties": {
+        "configId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "items": {
+          "type": "array"
+        },
+        "isPublicMenu": {
+          "type": "boolean"
+        },
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["configId", "items", "isPublicMenu", "authorUid", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{userId}": {
+      "schema": {
+        "$ref": "#/entities/AdminRecord"
+      },
+      "description": "Authorized admin accounts."
+    },
+    "/pdf_files/{fileId}": {
+      "schema": {
+        "$ref": "#/entities/PdfFileMeta"
+      },
+      "description": "Metadata for uploaded PDFs and document scans."
+    },
+    "/pdf_files/{fileId}/chunks/{chunkId}": {
+      "schema": {
+        "$ref": "#/entities/PdfFileChunk"
+      },
+      "description": "Base64 chunks of uploaded PDF files."
+    },
+    "/posts/{postId}": {
+      "schema": {
+        "$ref": "#/entities/AdminPostDoc"
+      },
+      "description": "Australia and corporate verification posts."
+    },
+    "/canada_documents/{docId}": {
+      "schema": {
+        "$ref": "#/entities/CanadaDocumentDoc"
+      },
+      "description": "Canada work permit and employment verification documents."
+    },
+    "/verification_index/{lookupKey}": {
+      "schema": {
+        "$ref": "#/entities/VerificationIndexDoc"
+      },
+      "description": "Exact-key public verification lookup documents indexed by normalized reference/passport/ID."
+    },
+    "/menu_configs/{configId}": {
+      "schema": {
+        "$ref": "#/entities/MenuConfigDoc"
+      },
+      "description": "Menu navigation configurations for Australia and Canada."
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { Loader2, FileText, ShieldCheck } from 'lucide-react';
+import { isFirestorePdfUrl, resolveFirestorePdfBytes } from '../utils/firebaseCloud';
 
 // Cached dynamic loader for PDF.js Legacy build (compatible across all mobile Chrome/Safari and desktop browsers without Map.prototype.getOrInsertComputed)
 let pdfjsPromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null;
@@ -33,7 +34,7 @@ interface PdfCanvasRendererProps {
 }
 
 /**
- * Converts a data URI, Base64, or binary URL to a Uint8Array safely on both mobile & desktop.
+ * Converts a Firestore URL, data URI, Base64, or binary URL to a Uint8Array safely on both mobile & desktop.
  */
 async function extractPdfBytes(dataUrl: string): Promise<Uint8Array | null> {
   if (!dataUrl || dataUrl === '#' || dataUrl.length < 10) return null;
@@ -41,6 +42,19 @@ async function extractPdfBytes(dataUrl: string): Promise<Uint8Array | null> {
   let normalized = dataUrl.trim();
   if (normalized.startsWith('data:application/octet-stream;base64,JVBERi')) {
     normalized = normalized.replace('data:application/octet-stream', 'data:application/pdf');
+  }
+
+  // 0. Resolve Firebase Firestore chunked PDF URLs (works across Vercel, AI Studio & all phones)
+  if (isFirestorePdfUrl(normalized)) {
+    try {
+      const cloudBytes = await resolveFirestorePdfBytes(normalized);
+      if (cloudBytes && cloudBytes.length > 0) {
+        return cloudBytes;
+      }
+    } catch (err) {
+      console.warn('Firestore PDF resolve failed:', err);
+    }
+    return null;
   }
 
   // 1. Try native fetch API for blob:, http(s) URLs, and relative paths (/uploads/...)

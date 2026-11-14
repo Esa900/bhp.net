@@ -1,0 +1,381 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Global Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'mdesaali391@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // 3. Entity Validation Blueprints (No existing() or diff() inside validation helpers)
+    function isValidAdminRecord(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'createdAt']) &&
+        isValidId(data.uid) &&
+        data.uid == userId &&
+        data.uid == request.auth.uid &&
+        data.email is string &&
+        data.email.size() >= 3 &&
+        data.email.size() <= 200 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidPdfFileMeta(data, fileId) {
+      return data.keys().hasAll([
+          'fileId', 'fileName', 'mimeType', 'docType',
+          'totalBytes', 'chunkCount', 'isPublicAccessible',
+          'authorUid', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'fileId', 'fileName', 'mimeType', 'docType',
+          'totalBytes', 'chunkCount', 'isPublicAccessible',
+          'authorUid', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.fileId) &&
+        data.fileId == fileId &&
+        data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 300 &&
+        data.mimeType is string && data.mimeType.size() >= 1 && data.mimeType.size() <= 120 &&
+        data.docType in ['pdf', 'image', 'other'] &&
+        data.totalBytes is int && data.totalBytes > 0 && data.totalBytes <= 40000000 &&
+        data.chunkCount is int && data.chunkCount >= 1 && data.chunkCount <= 120 &&
+        data.isPublicAccessible is bool &&
+        isValidId(data.authorUid) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPdfFileChunk(data, fileId) {
+      return data.keys().hasAll(['fileId', 'chunkIndex', 'chunkData', 'authorUid', 'createdAt']) &&
+        data.keys().hasOnly(['fileId', 'chunkIndex', 'chunkData', 'authorUid', 'createdAt']) &&
+        isValidId(data.fileId) &&
+        data.fileId == fileId &&
+        data.chunkIndex is int && data.chunkIndex >= 0 && data.chunkIndex < 120 &&
+        data.chunkData is string && data.chunkData.size() >= 1 && data.chunkData.size() <= 550000 &&
+        isValidId(data.authorUid) &&
+        data.authorUid == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidAdminPostDoc(data, postId) {
+      return data.keys().hasAll([
+          'id', 'title', 'refNumber', 'category', 'status',
+          'attachedDocuments', 'authorUid', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'title', 'refNumber', 'content', 'category', 'author', 'date',
+          'status', 'imageUrl', 'candidatePhotoUrl', 'galleryImages',
+          'attachedDocuments', 'readTime', 'badges', 'candidateName',
+          'passportNumber', 'nationality', 'dateOfBirth', 'jobTitle',
+          'employerName', 'workLocation', 'salaryPackage', 'visaSubclass',
+          'issueDate', 'expiryDate', 'verificationIdNo',
+          'authorUid', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == postId &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 400 &&
+        data.refNumber is string && data.refNumber.size() >= 1 && data.refNumber.size() <= 128 &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 300 &&
+        data.status in ['Published', 'Draft'] &&
+        data.attachedDocuments is list &&
+        data.attachedDocuments.size() <= 50 &&
+        (data.attachedDocuments.size() == 0 || (
+          data.attachedDocuments[0] is map &&
+          data.attachedDocuments[0].name is string &&
+          data.attachedDocuments[0].dataUrl is string
+        )) &&
+        (!('content' in data) || (data.content is string && data.content.size() <= 20000)) &&
+        (!('author' in data) || (data.author is string && data.author.size() <= 200)) &&
+        (!('date' in data) || (data.date is string && data.date.size() <= 64)) &&
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 200000)) &&
+        (!('candidatePhotoUrl' in data) || (data.candidatePhotoUrl is string && data.candidatePhotoUrl.size() <= 200000)) &&
+        (!('galleryImages' in data) || (data.galleryImages is list && data.galleryImages.size() <= 30 && (data.galleryImages.size() == 0 || data.galleryImages[0] is string))) &&
+        (!('readTime' in data) || (data.readTime is string && data.readTime.size() <= 64)) &&
+        (!('badges' in data) || (data.badges is list && data.badges.size() <= 20 && (data.badges.size() == 0 || data.badges[0] is string))) &&
+        (!('candidateName' in data) || (data.candidateName is string && data.candidateName.size() <= 300)) &&
+        (!('passportNumber' in data) || (data.passportNumber is string && data.passportNumber.size() <= 100)) &&
+        (!('nationality' in data) || (data.nationality is string && data.nationality.size() <= 120)) &&
+        (!('dateOfBirth' in data) || (data.dateOfBirth is string && data.dateOfBirth.size() <= 64)) &&
+        (!('jobTitle' in data) || (data.jobTitle is string && data.jobTitle.size() <= 300)) &&
+        (!('employerName' in data) || (data.employerName is string && data.employerName.size() <= 300)) &&
+        (!('workLocation' in data) || (data.workLocation is string && data.workLocation.size() <= 300)) &&
+        (!('salaryPackage' in data) || (data.salaryPackage is string && data.salaryPackage.size() <= 150)) &&
+        (!('visaSubclass' in data) || (data.visaSubclass is string && data.visaSubclass.size() <= 200)) &&
+        (!('issueDate' in data) || (data.issueDate is string && data.issueDate.size() <= 64)) &&
+        (!('expiryDate' in data) || (data.expiryDate is string && data.expiryDate.size() <= 64)) &&
+        (!('verificationIdNo' in data) || (data.verificationIdNo is string && data.verificationIdNo.size() <= 128)) &&
+        isValidId(data.authorUid) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCanadaDocumentDoc(data, docId) {
+      return data.keys().hasAll([
+          'id', 'categoryType', 'mainTitle', 'candidateName',
+          'status', 'attachedDocuments', 'authorUid', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'categoryType', 'mainTitle', 'subMenu', 'tinOrRef',
+          'idNumber', 'verificationIdNo', 'transitionIdNo', 'referenceNo',
+          'candidateName', 'candidatePhotoUrl', 'passportNumber', 'nationality',
+          'dateOfBirth', 'jobTitle', 'employerName', 'workLocation',
+          'hourlyWageOrSalary', 'workingHours', 'status', 'issueDate',
+          'expiryDate', 'officialDocNumber', 'lmiaNumber', 'documentFileName',
+          'documentFileUrl', 'notes', 'attachedDocuments', 'recordCreatedAt',
+          'authorUid', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        data.categoryType is string && data.categoryType.size() >= 1 && data.categoryType.size() <= 128 &&
+        data.mainTitle is string && data.mainTitle.size() >= 1 && data.mainTitle.size() <= 400 &&
+        data.candidateName is string && data.candidateName.size() <= 300 &&
+        data.status in ['Verified', 'Pending', 'Approved', 'Active'] &&
+        data.attachedDocuments is list &&
+        data.attachedDocuments.size() <= 50 &&
+        (data.attachedDocuments.size() == 0 || (
+          data.attachedDocuments[0] is map &&
+          data.attachedDocuments[0].name is string &&
+          data.attachedDocuments[0].dataUrl is string
+        )) &&
+        (!('subMenu' in data) || (data.subMenu is string && data.subMenu.size() <= 400)) &&
+        (!('tinOrRef' in data) || (data.tinOrRef is string && data.tinOrRef.size() <= 128)) &&
+        (!('idNumber' in data) || (data.idNumber is string && data.idNumber.size() <= 128)) &&
+        (!('verificationIdNo' in data) || (data.verificationIdNo is string && data.verificationIdNo.size() <= 128)) &&
+        (!('transitionIdNo' in data) || (data.transitionIdNo is string && data.transitionIdNo.size() <= 128)) &&
+        (!('referenceNo' in data) || (data.referenceNo is string && data.referenceNo.size() <= 128)) &&
+        (!('candidatePhotoUrl' in data) || (data.candidatePhotoUrl is string && data.candidatePhotoUrl.size() <= 200000)) &&
+        (!('passportNumber' in data) || (data.passportNumber is string && data.passportNumber.size() <= 100)) &&
+        (!('nationality' in data) || (data.nationality is string && data.nationality.size() <= 120)) &&
+        (!('dateOfBirth' in data) || (data.dateOfBirth is string && data.dateOfBirth.size() <= 64)) &&
+        (!('jobTitle' in data) || (data.jobTitle is string && data.jobTitle.size() <= 300)) &&
+        (!('employerName' in data) || (data.employerName is string && data.employerName.size() <= 300)) &&
+        (!('workLocation' in data) || (data.workLocation is string && data.workLocation.size() <= 300)) &&
+        (!('hourlyWageOrSalary' in data) || (data.hourlyWageOrSalary is string && data.hourlyWageOrSalary.size() <= 150)) &&
+        (!('workingHours' in data) || (data.workingHours is string && data.workingHours.size() <= 100)) &&
+        (!('issueDate' in data) || (data.issueDate is string && data.issueDate.size() <= 64)) &&
+        (!('expiryDate' in data) || (data.expiryDate is string && data.expiryDate.size() <= 64)) &&
+        (!('officialDocNumber' in data) || (data.officialDocNumber is string && data.officialDocNumber.size() <= 150)) &&
+        (!('lmiaNumber' in data) || (data.lmiaNumber is string && data.lmiaNumber.size() <= 150)) &&
+        (!('documentFileName' in data) || (data.documentFileName is string && data.documentFileName.size() <= 300)) &&
+        (!('documentFileUrl' in data) || (data.documentFileUrl is string && data.documentFileUrl.size() <= 200000)) &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 20000)) &&
+        (!('recordCreatedAt' in data) || (data.recordCreatedAt is string && data.recordCreatedAt.size() <= 64)) &&
+        isValidId(data.authorUid) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidVerificationIndexDoc(data, lookupKey) {
+      return data.keys().hasAll([
+          'lookupKey', 'source', 'recordId', 'recordData',
+          'isPublished', 'authorUid', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'lookupKey', 'source', 'recordId', 'referenceNumber',
+          'candidateName', 'passportNumber', 'recordData',
+          'isPublished', 'authorUid', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.lookupKey) &&
+        data.lookupKey == lookupKey &&
+        data.source in ['australia', 'canada'] &&
+        isValidId(data.recordId) &&
+        (!('referenceNumber' in data) || (data.referenceNumber is string && data.referenceNumber.size() <= 128)) &&
+        (!('candidateName' in data) || (data.candidateName is string && data.candidateName.size() <= 300)) &&
+        (!('passportNumber' in data) || (data.passportNumber is string && data.passportNumber.size() <= 100)) &&
+        data.recordData is map &&
+        data.isPublished is bool &&
+        isValidId(data.authorUid) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMenuConfigDoc(data, configId) {
+      return data.keys().hasAll(['configId', 'items', 'isPublicMenu', 'authorUid', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['configId', 'items', 'isPublicMenu', 'authorUid', 'createdAt', 'updatedAt']) &&
+        isValidId(data.configId) &&
+        data.configId == configId &&
+        data.items is list &&
+        data.items.size() <= 50 &&
+        (data.items.size() == 0 || data.items[0] is map) &&
+        data.isPublicMenu is bool &&
+        isValidId(data.authorUid) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 4. Collection Rules
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isVerifiedUser() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) &&
+        isVerifiedUser() &&
+        request.auth.uid == userId &&
+        (request.auth.token.email == 'mdesaali391@gmail.com' || isAdmin()) &&
+        isValidAdminRecord(incoming(), userId) &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(userId) && isAdmin() && userId != request.auth.uid;
+    }
+
+    match /pdf_files/{fileId} {
+      allow get: if isValidId(fileId) && (isAdmin() || resource == null || existing().isPublicAccessible == true);
+      allow list: if isAdmin();
+      allow create: if isValidId(fileId) &&
+        isAdmin() &&
+        isValidPdfFileMeta(incoming(), fileId) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(fileId) &&
+        isAdmin() &&
+        isValidPdfFileMeta(incoming(), fileId) &&
+        incoming().fileId == existing().fileId &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['isPublicAccessible', 'fileName', 'updatedAt']);
+      allow delete: if isValidId(fileId) && isAdmin();
+
+      match /chunks/{chunkId} {
+        allow get: if isValidId(fileId) &&
+          isValidId(chunkId) &&
+          (isAdmin() || get(/databases/$(database)/documents/pdf_files/$(fileId)).data.isPublicAccessible == true);
+        allow list: if isValidId(fileId) && isAdmin();
+        allow create: if isValidId(fileId) &&
+          isValidId(chunkId) &&
+          isAdmin() &&
+          isValidPdfFileChunk(incoming(), fileId) &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/pdf_files/$(fileId));
+        allow update: if false;
+        allow delete: if isValidId(fileId) && isValidId(chunkId) && isAdmin();
+      }
+    }
+
+    match /posts/{postId} {
+      allow get: if isValidId(postId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(postId) &&
+        isAdmin() &&
+        isValidAdminPostDoc(incoming(), postId) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(postId) &&
+        isAdmin() &&
+        isValidAdminPostDoc(incoming(), postId) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'refNumber', 'content', 'category', 'author', 'date',
+          'status', 'imageUrl', 'candidatePhotoUrl', 'galleryImages',
+          'attachedDocuments', 'readTime', 'badges', 'candidateName',
+          'passportNumber', 'nationality', 'dateOfBirth', 'jobTitle',
+          'employerName', 'workLocation', 'salaryPackage', 'visaSubclass',
+          'issueDate', 'expiryDate', 'verificationIdNo', 'updatedAt'
+        ]);
+      allow delete: if isValidId(postId) && isAdmin();
+    }
+
+    match /canada_documents/{docId} {
+      allow get: if isValidId(docId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(docId) &&
+        isAdmin() &&
+        isValidCanadaDocumentDoc(incoming(), docId) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(docId) &&
+        isAdmin() &&
+        isValidCanadaDocumentDoc(incoming(), docId) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'categoryType', 'mainTitle', 'subMenu', 'tinOrRef',
+          'idNumber', 'verificationIdNo', 'transitionIdNo', 'referenceNo',
+          'candidateName', 'candidatePhotoUrl', 'passportNumber', 'nationality',
+          'dateOfBirth', 'jobTitle', 'employerName', 'workLocation',
+          'hourlyWageOrSalary', 'workingHours', 'status', 'issueDate',
+          'expiryDate', 'officialDocNumber', 'lmiaNumber', 'documentFileName',
+          'documentFileUrl', 'notes', 'attachedDocuments', 'recordCreatedAt', 'updatedAt'
+        ]);
+      allow delete: if isValidId(docId) && isAdmin();
+    }
+
+    match /verification_index/{lookupKey} {
+      allow get: if isValidId(lookupKey) && (isAdmin() || resource == null || existing().isPublished == true);
+      allow list: if isAdmin();
+      allow create: if isValidId(lookupKey) &&
+        isAdmin() &&
+        isValidVerificationIndexDoc(incoming(), lookupKey) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(lookupKey) &&
+        isAdmin() &&
+        isValidVerificationIndexDoc(incoming(), lookupKey) &&
+        incoming().lookupKey == existing().lookupKey &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'source', 'recordId', 'referenceNumber', 'candidateName',
+          'passportNumber', 'recordData', 'isPublished', 'updatedAt'
+        ]);
+      allow delete: if isValidId(lookupKey) && isAdmin();
+    }
+
+    match /menu_configs/{configId} {
+      allow get: if isValidId(configId) && (isAdmin() || resource == null || existing().isPublicMenu == true);
+      allow list: if isAdmin();
+      allow create: if isValidId(configId) &&
+        isAdmin() &&
+        isValidMenuConfigDoc(incoming(), configId) &&
+        incoming().authorUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(configId) &&
+        isAdmin() &&
+        isValidMenuConfigDoc(incoming(), configId) &&
+        incoming().configId == existing().configId &&
+        incoming().authorUid == existing().authorUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['items', 'isPublicMenu', 'updatedAt']);
+      allow delete: if isValidId(configId) && isAdmin();
+    }
+  }
+}

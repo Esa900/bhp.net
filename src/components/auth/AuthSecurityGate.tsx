@@ -256,7 +256,10 @@ export const AuthSecurityGate: React.FC<AuthSecurityGateProps> = ({ onAuthentica
 
                 <button
                   type="button"
-                  onClick={() => alert('Please contact administrator or re-register with a new username/password.')}
+                  onClick={() => {
+                    setSuccessMsg('');
+                    setErrorMsg('Please contact administrator or re-register with a new username/password.');
+                  }}
                   className="text-purple-400 hover:text-purple-300 hover:underline cursor-pointer"
                 >
                   Forgot Password?
