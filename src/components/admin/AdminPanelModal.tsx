@@ -17,6 +17,7 @@ import {
   AlertCircle,
   FileText,
   Cloud,
+  Copy,
 } from 'lucide-react';
 import { useAdminData, AdminRole } from '../../context/AdminDataContext';
 import { AdminJobCircularManager } from './AdminJobCircularManager';
@@ -28,6 +29,7 @@ import { getStoredJobCategories, JOB_CATEGORIES_UPDATED_EVENT } from '../../util
 import {
   auth,
   BHP_FIREBASE_AUTH_EVENT,
+  getFirebaseDomainAuthGuide,
   isFirebaseAdminReady,
   signInWithFirebaseGoogle,
 } from '../../utils/firebaseClient';
@@ -74,6 +76,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
   const [cloudAdminReady, setCloudAdminReady] = useState<boolean>(() => isFirebaseAdminReady());
   const [cloudEmail, setCloudEmail] = useState<string>(() => auth.currentUser?.email || '');
   const [isConnectingCloud, setIsConnectingCloud] = useState(false);
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(
+    () => getFirebaseDomainAuthGuide().unauthorizedDomain
+  );
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
   // Sync user, job circular counters & Firebase cloud status
   useEffect(() => {
@@ -87,13 +93,17 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
       setRegisteredUsersCount(getRegisteredUsers().length);
       setJobCategoriesCount(getStoredJobCategories().length);
     };
-    const handleFirebaseAuth = () => {
+    const handleFirebaseAuth = (e?: Event) => {
       const ready = isFirebaseAdminReady();
       setCloudAdminReady(ready);
       setCloudEmail(auth.currentUser?.email || '');
+      const detail = (e as CustomEvent | undefined)?.detail;
       if (ready) {
+        setUnauthorizedDomain(null);
         syncAdminPostsFromServer().catch(() => {});
         syncCanadaDocumentsFromServer().catch(() => {});
+      } else if (detail && 'unauthorizedDomain' in detail) {
+        setUnauthorizedDomain(detail.unauthorizedDomain || null);
       }
     };
 
@@ -237,6 +247,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   const res = await signInWithFirebaseGoogle();
                   setCloudAdminReady(res.isAdmin);
                   setCloudEmail(res.user.email || '');
+                  setUnauthorizedDomain(null);
                   if (res.isAdmin) {
                     unlockAdminSession();
                     showToast(`Admin Google Cloud unlocked (${res.user.email})!`);
@@ -250,6 +261,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     );
                   }
                 } catch (err: any) {
+                  if (err?.code === 'auth/unauthorized-domain' || String(err?.message || '').includes('unauthorized-domain')) {
+                    setUnauthorizedDomain(getFirebaseDomainAuthGuide().hostname);
+                  }
                   setAuthError(err?.message || 'Google Sign-In cancelled or blocked.');
                 } finally {
                   setIsConnectingCloud(false);
@@ -264,6 +278,40 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   : 'Sign in with Admin Google (Direct Cloud Unlock)'}
               </span>
             </button>
+
+            {unauthorizedDomain && (
+              <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-500/40 text-left space-y-2">
+                <div className="text-[11px] font-bold text-amber-200">
+                  Firebase Authorized Domain প্রয়োজন:
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <code className="flex-1 bg-black/50 border border-amber-500/30 rounded px-2 py-1 text-[11px] font-mono text-amber-100 truncate">
+                    {unauthorizedDomain}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(unauthorizedDomain);
+                      setCopiedDomain(true);
+                      setTimeout(() => setCopiedDomain(false), 2000);
+                    }}
+                    className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 rounded text-[11px] font-bold text-amber-100 flex items-center gap-1 shrink-0 cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>{copiedDomain ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <a
+                  href={getFirebaseDomainAuthGuide().authSettingsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-300 hover:text-blue-200 underline"
+                >
+                  <span>Firebase Console → Authorized domains-এ Add করুন</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
 
             <button
               type="button"
@@ -309,6 +357,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                   const res = await signInWithFirebaseGoogle();
                   setCloudAdminReady(res.isAdmin);
                   setCloudEmail(res.user.email || '');
+                  setUnauthorizedDomain(null);
                   if (res.isAdmin) {
                     showToast(`Cloud Sync Connected (${res.user.email})! All devices are now synced.`);
                     await Promise.allSettled([
@@ -321,6 +370,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
                     );
                   }
                 } catch (err: any) {
+                  if (err?.code === 'auth/unauthorized-domain' || String(err?.message || '').includes('unauthorized-domain')) {
+                    setUnauthorizedDomain(getFirebaseDomainAuthGuide().hostname);
+                  }
                   showToast(`Google Cloud Sign-In error: ${err?.message || 'Popup closed or blocked'}`);
                 } finally {
                   setIsConnectingCloud(false);
@@ -433,6 +485,51 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({ isOpen, onClos
               type="button"
               onClick={() => setToastMessage(null)}
               className="text-gray-300 hover:text-white shrink-0 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Actionable Firebase Authorized Domain Banner (shown only if browser hits auth/unauthorized-domain) */}
+        {unauthorizedDomain && !cloudAdminReady && (
+          <div className="px-4 sm:px-6 py-2.5 bg-amber-950/50 border-b border-amber-500/40 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-amber-100 font-semibold">
+                Google Cloud চালু করতে Firebase Authorized domains-এ এই ডোমেইনটি Add করুন:
+              </span>
+              <code className="bg-black/50 border border-amber-500/40 rounded px-2 py-0.5 font-mono text-amber-200 text-[11px]">
+                {unauthorizedDomain}
+              </code>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(unauthorizedDomain);
+                  setCopiedDomain(true);
+                  setTimeout(() => setCopiedDomain(false), 2000);
+                  showToast(`Domain copied: ${unauthorizedDomain}`);
+                }}
+                className="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 rounded text-[11px] font-bold text-amber-100 flex items-center gap-1 cursor-pointer"
+              >
+                <Copy className="w-3 h-3" />
+                <span>{copiedDomain ? 'Copied' : 'Copy Domain'}</span>
+              </button>
+              <a
+                href={getFirebaseDomainAuthGuide().authSettingsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-[11px] flex items-center gap-1"
+              >
+                <span>Open Firebase Settings</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUnauthorizedDomain(null)}
+              className="text-amber-200 hover:text-white p-1 cursor-pointer"
+              aria-label="Dismiss domain notice"
             >
               <X className="w-4 h-4" />
             </button>

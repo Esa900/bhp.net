@@ -28,6 +28,8 @@ import {
   Briefcase,
   ArrowLeft,
   Cloud,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { AttachedDoc } from '../../types';
 import { CanadaDocumentRecord, CanadaMenuItemConfig, CanadaCategoryType } from '../../types/canada';
@@ -51,6 +53,7 @@ import { uploadBinaryDocument, uploadDataUrlDocument, inferDocumentType, formatF
 import {
   BHP_FIREBASE_AUTH_EVENT,
   ensureFirebaseCloudAdmin,
+  getFirebaseDomainAuthGuide,
   isFirebaseAdminReady,
   signInWithFirebaseGoogle,
 } from '../../utils/firebaseClient';
@@ -446,17 +449,14 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
 
     setIsSavingPost(true);
     try {
-      if (!isFirebaseAdminReady()) {
-        await ensureFirebaseCloudAdmin().catch((authErr) => {
-          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
-        });
-      }
+      const hasCloudAuth = isFirebaseAdminReady() || (await ensureFirebaseCloudAdmin());
 
       const syncedDocs = await upsertCanadaDocumentAsync(recordToSave);
+      const targetDest = hasCloudAuth ? 'Cloud Database' : 'Server Database';
       if (editingDocId) {
-        showToast(`Canada post for "${candidateName}" saved to Cloud with ${normalizedAttached.length} PDF(s).`);
+        showToast(`Canada post for "${candidateName}" saved to ${targetDest} with ${normalizedAttached.length} PDF(s).`);
       } else {
-        showToast(`Canada post saved to Cloud with ${normalizedAttached.length} PDF(s)! Ref: "${postPayload.tinOrRef}"`);
+        showToast(`Canada post saved to ${targetDest} with ${normalizedAttached.length} PDF(s)! Ref: "${postPayload.tinOrRef}"`);
       }
 
       setDocuments(syncedDocs);
@@ -499,9 +499,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
 
     try {
       if (!isFirebaseAdminReady()) {
-        await ensureFirebaseCloudAdmin().catch((authErr) => {
-          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
-        });
+        await ensureFirebaseCloudAdmin();
       }
 
       for (const file of filesList) {
@@ -572,6 +570,8 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       } else if (lastError) {
         showToast(`Upload failed: ${lastError}`);
       }
+    } catch (err: any) {
+      showToast(`Upload failed: ${err?.message || 'Cloud authentication required'}`);
     } finally {
       if (inputEl) inputEl.value = '';
     }
@@ -656,11 +656,7 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       quickPdfDoc.id;
 
     try {
-      if (!isFirebaseAdminReady()) {
-        await ensureFirebaseCloudAdmin().catch((authErr) => {
-          console.warn('Cloud sign-in skipped or cancelled:', authErr?.message || authErr);
-        });
-      }
+      const hasCloudAuth = isFirebaseAdminReady() || (await ensureFirebaseCloudAdmin());
 
       let latestServerDocs: CanadaDocumentRecord[] | null = null;
       const total = quickSelectedFiles.length;
@@ -722,7 +718,9 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
       }
 
       showToast(
-        `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved across all devices.`
+        `Added ${quickSelectedFiles.length} PDF(s) to #${targetRef} (${finalSection})! Saved in ${
+          hasCloudAuth ? 'Cloud Database' : 'Server Database'
+        }.`
       );
       setQuickPdfDoc(null);
       setQuickSelectedFiles([]);
@@ -1975,20 +1973,50 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
                     {quickUploadError.replace(/^CLOUD_AUTH_REQUIRED:\s*/i, '')}
                   </span>
                 </div>
-                {quickUploadError.includes('CLOUD_AUTH_REQUIRED') && (
-                  <button
-                    type="button"
-                    disabled={isConnectingCloud}
-                    onClick={handleConnectGoogleCloud}
-                    className="w-full py-2 px-3 rounded-lg bg-white text-gray-900 hover:bg-gray-100 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Cloud className="w-4 h-4 text-blue-600" />
-                    <span>
-                      {isConnectingCloud
-                        ? 'Signing in with Google...'
-                        : 'Sign In with Google & Retry'}
-                    </span>
-                  </button>
+                {(quickUploadError.includes('CLOUD_AUTH_REQUIRED') || quickUploadError.includes('unauthorized-domain')) && (
+                  <div className="space-y-2">
+                    {quickUploadError.includes('unauthorized-domain') && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        <code className="bg-black/50 border border-red-400/30 rounded px-2 py-0.5 text-[11px] font-mono text-amber-200">
+                          {getFirebaseDomainAuthGuide().hostname}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const host = getFirebaseDomainAuthGuide().hostname;
+                            navigator.clipboard.writeText(host);
+                            showToast(`Copied domain: ${host}`);
+                          }}
+                          className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 border border-amber-400/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Copy</span>
+                        </button>
+                        <a
+                          href={getFirebaseDomainAuthGuide().authSettingsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold inline-flex items-center gap-1"
+                        >
+                          <span>Firebase Settings</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      disabled={isConnectingCloud}
+                      onClick={handleConnectGoogleCloud}
+                      className="w-full py-2 px-3 rounded-lg bg-white text-gray-900 hover:bg-gray-100 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Cloud className="w-4 h-4 text-blue-600" />
+                      <span>
+                        {isConnectingCloud
+                          ? 'Signing in with Google...'
+                          : 'Sign In with Google & Retry'}
+                      </span>
+                    </button>
+                  </div>
                 )}
               </div>
             )}

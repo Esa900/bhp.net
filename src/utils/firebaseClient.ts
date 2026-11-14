@@ -78,7 +78,42 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
+export interface FirebaseDomainAuthGuide {
+  hostname: string;
+  projectId: string;
+  authSettingsUrl: string;
+  unauthorizedDomain: string | null;
+}
+
 let isAdminStatusCached = false;
+let lastUnauthorizedDomain: string | null = null;
+let expressAvailableCached: boolean | null = null;
+
+export function getFirebaseDomainAuthGuide(): FirebaseDomainAuthGuide {
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const projectId = firebaseConfig.projectId;
+  return {
+    hostname,
+    projectId,
+    authSettingsUrl: `https://console.firebase.google.com/project/${projectId}/authentication/settings`,
+    unauthorizedDomain: lastUnauthorizedDomain,
+  };
+}
+
+export async function checkExpressBackendAvailable(forceRefresh = false): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  if (!forceRefresh && expressAvailableCached !== null) {
+    return expressAvailableCached;
+  }
+  try {
+    const res = await fetch('/api/posts', { method: 'GET', cache: 'no-store' });
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    expressAvailableCached = res.ok && ct.includes('application/json');
+  } catch {
+    expressAvailableCached = false;
+  }
+  return expressAvailableCached;
+}
 
 export function isFirebaseAdminReady(): boolean {
   const user = auth.currentUser;
@@ -129,20 +164,61 @@ export async function signInWithFirebaseGoogle(): Promise<{
   user: User;
   isAdmin: boolean;
 }> {
-  const result = await signInWithPopup(auth, googleProvider);
-  const user = result.user;
-  const isAdmin = await verifyAndSyncAdminStatus(user);
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(BHP_FIREBASE_AUTH_EVENT, { detail: { user, isAdmin } }));
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    lastUnauthorizedDomain = null;
+    const user = result.user;
+    const isAdmin = await verifyAndSyncAdminStatus(user);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent(BHP_FIREBASE_AUTH_EVENT, {
+          detail: { user, isAdmin, unauthorizedDomain: null },
+        })
+      );
+    }
+    return { user, isAdmin };
+  } catch (err: any) {
+    const code = err?.code || '';
+    const msg = err?.message || '';
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+
+    if (code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
+      lastUnauthorizedDomain = hostname;
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(BHP_FIREBASE_AUTH_EVENT, {
+            detail: { user: auth.currentUser, isAdmin: isFirebaseAdminReady(), unauthorizedDomain: hostname },
+          })
+        );
+      }
+      const friendly = new Error(
+        `Domain "${hostname}" Firebase Auth-এ যুক্ত নেই (auth/unauthorized-domain)। Firebase Console > Authentication > Settings > Authorized domains-এ "${hostname}" যোগ করুন।`
+      ) as Error & { code?: string };
+      friendly.code = 'auth/unauthorized-domain';
+      throw friendly;
+    }
+
+    if (code === 'auth/popup-blocked') {
+      const friendly = new Error(
+        'ব্রাউজারে Google Sign-In পপআপ ব্লক হয়েছে। দয়া করে Popups Allow করে আবার ক্লিক করুন।'
+      ) as Error & { code?: string };
+      friendly.code = 'auth/popup-blocked';
+      throw friendly;
+    }
+
+    throw err;
   }
-  return { user, isAdmin };
 }
 
 export async function signOutFirebase(): Promise<void> {
   isAdminStatusCached = false;
   await signOut(auth);
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(BHP_FIREBASE_AUTH_EVENT, { detail: { user: null, isAdmin: false } }));
+    window.dispatchEvent(
+      new CustomEvent(BHP_FIREBASE_AUTH_EVENT, {
+        detail: { user: null, isAdmin: false, unauthorizedDomain: lastUnauthorizedDomain },
+      })
+    );
   }
 }
 
@@ -163,13 +239,28 @@ export async function ensureFirebaseCloudAdmin(): Promise<boolean> {
   if (isFirebaseAdminReady()) {
     return true;
   }
-  const res = await signInWithFirebaseGoogle();
-  if (!res.isAdmin) {
-    throw new Error(
-      `Signed in as ${res.user.email || 'user'}. Please select the Admin Google Account (${BOOTSTRAPPED_ADMIN_EMAIL}) to save to Cloud.`
-    );
+
+  // If Express backend is running on this host and Google domain is already known unauthorized,
+  // avoid triggering repeated failing popups on every save/upload click.
+  const expressOnline = await checkExpressBackendAvailable();
+  if (lastUnauthorizedDomain && expressOnline) {
+    return false;
   }
-  return true;
+
+  try {
+    const res = await signInWithFirebaseGoogle();
+    if (!res.isAdmin) {
+      throw new Error(
+        `Signed in as ${res.user.email || 'user'}. Please select the Admin Google Account (${BOOTSTRAPPED_ADMIN_EMAIL}) to save to Cloud.`
+      );
+    }
+    return true;
+  } catch (err) {
+    if (expressOnline) {
+      return false;
+    }
+    throw err;
+  }
 }
 
 if (typeof window !== 'undefined') {
