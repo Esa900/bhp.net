@@ -66,6 +66,7 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
   const [isPortalOpen, setIsPortalOpen] = useState(false);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('australia-work-permit');
   const [isDocSearchOpen, setIsDocSearchOpen] = useState(false);
+  const [docSearchInitialQuery, setDocSearchInitialQuery] = useState<string>('');
   const [selectedDocItem, setSelectedDocItem] = useState<DocumentMenuItem>(() => {
     const items = getStoredMenuItems();
     return items[0] || DOCUMENT_MENU_ITEMS[0];
@@ -75,6 +76,7 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
   const [isRightDrawerOpen, setIsRightDrawerOpen] = useState(false);
   const [selectedCanadaConfig, setSelectedCanadaConfig] = useState<CanadaMenuItemConfig>(() => CANADA_MENU_CONFIGS[0]);
   const [isCanadaSearchOpen, setIsCanadaSearchOpen] = useState(false);
+  const [canadaSearchInitialQuery, setCanadaSearchInitialQuery] = useState<string>('');
 
   // Check URL route for /admin or #/admin
   const checkIsAdminRoute = useCallback(() => {
@@ -202,15 +204,18 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
   }, []);
 
   const handleSelectMenuItem = (menuItemId: string, initialQuery?: string) => {
-    // Directly open the designated document search option modal in BHP's theme
+    // Open the designated document search modal cleanly without auto-loading sample records
     const allItems = getStoredMenuItems();
     const item = allItems.find((d) => d.id === menuItemId) || allItems[0] || DOCUMENT_MENU_ITEMS[0];
-    if (initialQuery) {
-      setSelectedDocItem({ ...item, sampleValue: initialQuery });
-    } else {
-      setSelectedDocItem(item);
-    }
+    setSelectedDocItem(item);
+    setDocSearchInitialQuery(initialQuery ? initialQuery.trim() : '');
     setIsDocSearchOpen(true);
+  };
+
+  const handleOpenCanadaSearch = (cfg?: CanadaMenuItemConfig, initialQuery?: string) => {
+    setSelectedCanadaConfig(cfg || CANADA_MENU_CONFIGS[0]);
+    setCanadaSearchInitialQuery(initialQuery ? initialQuery.trim() : '');
+    setIsCanadaSearchOpen(true);
   };
 
   const handleClosePortal = () => {
@@ -272,8 +277,7 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
         onPortalClick={() => handleOpenPortal()}
         onSelectMenuItem={handleSelectMenuItem}
         onSelectCanadaItem={(cfg) => {
-          setSelectedCanadaConfig(cfg);
-          setIsCanadaSearchOpen(true);
+          handleOpenCanadaSearch(cfg);
         }}
         currentUser={currentUser}
         onJobCategoryClick={(category) => {
@@ -288,8 +292,7 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
           onOpenRightMenu={() => setIsRightDrawerOpen(true)}
           onSelectAustraliaItem={handleSelectMenuItem}
           onSelectCanadaItem={(cfg) => {
-            setSelectedCanadaConfig(cfg);
-            setIsCanadaSearchOpen(true);
+            handleOpenCanadaSearch(cfg);
           }}
           onJobCategoryClick={(category) => {
             setSelectedJobCategory(category);
@@ -392,6 +395,9 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
             onOpenDocumentSearch={(menuItemId, queryText) => {
               handleSelectMenuItem(menuItemId || 'australia-work-permit', queryText);
             }}
+            onOpenCanadaSearch={(queryText) => {
+              handleOpenCanadaSearch(CANADA_MENU_CONFIGS[0], queryText);
+            }}
           />
         )}
 
@@ -406,8 +412,12 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
         {isDocSearchOpen && (
           <DocumentSearchModal
             isOpen={isDocSearchOpen}
-            onClose={() => setIsDocSearchOpen(false)}
+            onClose={() => {
+              setIsDocSearchOpen(false);
+              setDocSearchInitialQuery('');
+            }}
             activeItem={selectedDocItem}
+            initialQuery={docSearchInitialQuery}
           />
         )}
 
@@ -426,8 +436,7 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
             isOpen={isRightDrawerOpen}
             onClose={() => setIsRightDrawerOpen(false)}
             onSelectCanadaItem={(cfg) => {
-              setSelectedCanadaConfig(cfg);
-              setIsCanadaSearchOpen(true);
+              handleOpenCanadaSearch(cfg);
             }}
             onSelectAustraliaItem={(menuItemId) => {
               handleSelectMenuItem(menuItemId);
@@ -443,8 +452,12 @@ function MainWebsiteContent({ currentUser }: { currentUser?: AuthUser | null }) 
         {isCanadaSearchOpen && (
           <CanadaDocumentSearchModal
             isOpen={isCanadaSearchOpen}
-            onClose={() => setIsCanadaSearchOpen(false)}
+            onClose={() => {
+              setIsCanadaSearchOpen(false);
+              setCanadaSearchInitialQuery('');
+            }}
             activeConfig={selectedCanadaConfig}
+            initialQuery={canadaSearchInitialQuery}
           />
         )}
 

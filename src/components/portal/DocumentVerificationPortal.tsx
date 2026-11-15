@@ -162,7 +162,7 @@ export const DocumentVerificationPortal: React.FC<DocumentVerificationPortalProp
         );
       } else {
         setSearchNotification(
-          `Query "${query}" verified. Displaying matched DVS registry record for: ${SAMPLE_PROFILES[0].fullName}`
+          `No matching record found for "${query}". Please verify your Reference Number, Passport, or Verification ID.`
         );
       }
     } catch (err) {

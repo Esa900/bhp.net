@@ -21,12 +21,14 @@ interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenDocumentSearch?: (menuItemId?: string, queryText?: string) => void;
+  onOpenCanadaSearch?: (queryText?: string) => void;
 }
 
 export const SearchModal: React.FC<SearchModalProps> = ({
   isOpen,
   onClose,
   onOpenDocumentSearch,
+  onOpenCanadaSearch,
 }) => {
   const [query, setQuery] = useState('');
   const [adminPosts, setAdminPosts] = useState<AdminPost[]>([]);
@@ -205,14 +207,19 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 
   const handleSelectCanadaDoc = (doc: CanadaDocumentRecord) => {
     onClose();
-    if (onOpenDocumentSearch) {
-      onOpenDocumentSearch('australia-work-permit', doc.tinOrRef || doc.referenceNo || doc.idNumber || doc.id);
+    const q = doc.tinOrRef || doc.referenceNo || doc.idNumber || doc.id;
+    if (onOpenCanadaSearch) {
+      onOpenCanadaSearch(q);
+    } else if (onOpenDocumentSearch) {
+      onOpenDocumentSearch('australia-work-permit', q);
     }
   };
 
   const handleSelectServerResult = (res: UniversalSearchResult) => {
     onClose();
-    if (onOpenDocumentSearch) {
+    if (res.source === 'canada' && onOpenCanadaSearch) {
+      onOpenCanadaSearch(res.document.referenceNumber);
+    } else if (onOpenDocumentSearch) {
       onOpenDocumentSearch('australia-work-permit', res.document.referenceNumber);
     }
   };
@@ -222,8 +229,10 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     const q = query.trim();
     if (!q) return;
     onClose();
-    if (onOpenDocumentSearch) {
-      const target = serverResult?.document?.referenceNumber || q;
+    const target = serverResult?.document?.referenceNumber || q;
+    if (serverResult?.source === 'canada' && onOpenCanadaSearch) {
+      onOpenCanadaSearch(target);
+    } else if (onOpenDocumentSearch) {
       onOpenDocumentSearch('australia-work-permit', target);
     }
   };

@@ -38,6 +38,7 @@ interface CanadaDocumentSearchModalProps {
   onClose: () => void;
   activeConfig: CanadaMenuItemConfig | null;
   onSelectConfig?: (config: CanadaMenuItemConfig) => void;
+  initialQuery?: string;
 }
 
 export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps> = ({
@@ -45,6 +46,7 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
   onClose,
   activeConfig,
   onSelectConfig,
+  initialQuery = '',
 }) => {
   const [currentConfig, setCurrentConfig] = useState<CanadaMenuItemConfig>(
     activeConfig || CANADA_MENU_CONFIGS[0]
@@ -68,37 +70,52 @@ export const CanadaDocumentSearchModal: React.FC<CanadaDocumentSearchModalProps>
     }
   }, [activeConfig]);
 
-  // When modal opens or config changes, reset query & search state
+  // When modal opens or config changes, reset query or run explicit initialQuery
   useEffect(() => {
     if (isOpen) {
-      searchSeqRef.current++;
-      lastExecutedQueryRef.current = '';
       syncCanadaDocumentsFromServer().catch(() => {});
-      setQuery('');
-      setHasSearched(false);
-      setIsSearching(false);
-      setMatchedUniversalDoc(null);
-      setMatchedRecord(null);
-      setMatchedAdminPost(null);
-      setTimeout(() => inputRef.current?.focus(), 80);
+      const explicitQuery = (initialQuery || '').trim();
+      if (explicitQuery) {
+        setQuery(explicitQuery);
+        handleSearch(explicitQuery);
+      } else {
+        searchSeqRef.current++;
+        lastExecutedQueryRef.current = '';
+        setQuery('');
+        setHasSearched(false);
+        setIsSearching(false);
+        setMatchedUniversalDoc(null);
+        setMatchedRecord(null);
+        setMatchedAdminPost(null);
+        setTimeout(() => inputRef.current?.focus(), 80);
+      }
     } else {
       searchSeqRef.current++;
       lastExecutedQueryRef.current = '';
     }
-  }, [isOpen, currentConfig]);
+  }, [isOpen, currentConfig, initialQuery]);
 
   // Listen to storage update events in case admin updates records in another tab
   useEffect(() => {
     const handleUpdate = () => {
       if (hasSearched && query.trim()) {
-        const found = searchCanadaDocument(query, currentConfig.id);
-        setMatchedRecord(found);
+        const refreshed = searchUniversalDocument(query);
+        if (refreshed) {
+          setMatchedUniversalDoc(refreshed.document);
+          if (refreshed.source === 'canada') setMatchedRecord(refreshed.rawRecord);
+        } else {
+          const found = searchCanadaDocument(query, currentConfig.id);
+          setMatchedRecord(found);
+          if (found) setMatchedUniversalDoc(canadaRecordToUnifiedDoc(found));
+        }
       }
     };
     window.addEventListener(CANADA_DOCUMENTS_UPDATED_EVENT, handleUpdate);
+    window.addEventListener('bhp_posts_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
     return () => {
       window.removeEventListener(CANADA_DOCUMENTS_UPDATED_EVENT, handleUpdate);
+      window.removeEventListener('bhp_posts_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
   }, [hasSearched, query, currentConfig]);

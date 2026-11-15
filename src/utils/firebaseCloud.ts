@@ -328,6 +328,13 @@ function orderAttachmentsPrimaryFirst(docs: AttachedDoc[]): AttachedDoc[] {
   return [...primary, ...rest];
 }
 
+function clampMediaForIndex(val: unknown): string {
+  if (typeof val !== 'string') return '';
+  // Never store giant inline base64 blobs inside verification_index documents (1 MiB Firestore cap)
+  if (val.startsWith('data:') && val.length > 100000) return '';
+  return val.slice(0, 200000);
+}
+
 function buildCombinedClientPayload(
   source: 'australia' | 'canada',
   baseRecord: AdminPost | CanadaDocumentRecord,
@@ -370,17 +377,38 @@ function buildCombinedClientPayload(
     if (Array.isArray(p.attachedDocuments)) combinedAttachments.push(...p.attachedDocuments);
   });
 
-  const ordered = orderAttachmentsPrimaryFirst(combinedAttachments);
-  return {
+  const ordered = sanitizeAttachedDocsList(orderAttachmentsPrimaryFirst(combinedAttachments)).map((att) => ({
+    ...att,
+    dataUrl: att.dataUrl.startsWith('data:') && att.dataUrl.length > 100000 ? '' : att.dataUrl,
+  })).filter((att) => Boolean(att.dataUrl));
+
+  const nowTs = Date.now();
+  const baseSanitized: Record<string, unknown> = {
     ...baseRecord,
+    candidatePhotoUrl: clampMediaForIndex((baseRecord as AdminPost).candidatePhotoUrl),
+    updatedAt: typeof (baseRecord as { updatedAt?: number }).updatedAt === 'number'
+      ? (baseRecord as { updatedAt?: number }).updatedAt
+      : nowTs,
     attachedDocuments: ordered,
-    ...(source === 'canada' && ordered[0]
-      ? {
-          documentFileName: ordered[0].name,
-          documentFileUrl: ordered[0].dataUrl,
-        }
-      : {}),
   };
+
+  if ('imageUrl' in baseRecord) {
+    baseSanitized.imageUrl = clampMediaForIndex((baseRecord as AdminPost).imageUrl);
+  }
+  if ('galleryImages' in baseRecord && Array.isArray((baseRecord as AdminPost).galleryImages)) {
+    baseSanitized.galleryImages = (baseRecord as AdminPost).galleryImages
+      .map(clampMediaForIndex)
+      .filter(Boolean)
+      .slice(0, 20);
+  }
+  if (source === 'canada' && ordered[0]) {
+    baseSanitized.documentFileName = ordered[0].name;
+    baseSanitized.documentFileUrl = ordered[0].dataUrl;
+  } else if ('documentFileUrl' in baseRecord) {
+    baseSanitized.documentFileUrl = clampMediaForIndex((baseRecord as CanadaDocumentRecord).documentFileUrl);
+  }
+
+  return baseSanitized as unknown as AdminPost | CanadaDocumentRecord;
 }
 
 async function upsertVerificationKeysForRecord(
@@ -486,13 +514,27 @@ export async function lookupVerificationIndexInFirestore(
       if (snap.exists()) {
         const data = snap.data() as {
           source?: 'australia' | 'canada';
-          recordData?: AdminPost | CanadaDocumentRecord;
+          recordData?: (AdminPost | CanadaDocumentRecord) & { updatedAt?: unknown };
           isPublished?: boolean;
+          updatedAt?: unknown;
         };
         if (data && data.recordData && (data.isPublished !== false || isFirebaseAdminReady())) {
+          const resolveMillis = (val: unknown): number => {
+            if (typeof val === 'number' && Number.isFinite(val)) return val;
+            if (val instanceof Timestamp) return val.toMillis();
+            if (val && typeof val === 'object' && typeof (val as { seconds?: number }).seconds === 'number') {
+              return (val as { seconds: number }).seconds * 1000;
+            }
+            return 0;
+          };
+          const normalizedUpdatedAt =
+            resolveMillis(data.recordData.updatedAt) || resolveMillis(data.updatedAt) || Date.now();
           return {
             source: data.source || 'canada',
-            record: data.recordData,
+            record: {
+              ...data.recordData,
+              updatedAt: normalizedUpdatedAt,
+            },
           };
         }
       }
@@ -551,6 +593,8 @@ function formatPostForFirestore(post: AdminPost, authorUid: string, existingCrea
 function formatCanadaDocForFirestore(docRec: CanadaDocumentRecord, authorUid: string, existingCreatedAt: unknown) {
   const validStatus = ['Verified', 'Pending', 'Approved', 'Active'].includes(docRec.status)
     ? docRec.status
+    : docRec.status === 'Under Review'
+    ? 'Pending'
     : 'Verified';
   return stripUndefinedDeep({
     id: sanitizeDocId(docRec.id),
@@ -847,18 +891,36 @@ export async function syncLocalRecordsToFirestoreIfEmpty(
       getDocs(collection(db, 'canada_documents')),
     ]);
 
-    const existingPostIds = new Set(remotePostsSnap.docs.map((d) => d.id));
-    const existingCanadaIds = new Set(remoteCanadaSnap.docs.map((d) => d.id));
+    const remotePostsById = new Map(
+      remotePostsSnap.docs.map((d) => [d.id, firestoreDocToAdminPost(d.data() as Record<string, unknown>)])
+    );
+    const remoteCanadaById = new Map(
+      remoteCanadaSnap.docs.map((d) => [d.id, firestoreDocToCanadaRecord(d.data() as Record<string, unknown>)])
+    );
 
     for (const p of localPosts) {
       if (!p?.id || deletedSet.has(p.id)) continue;
-      if (!existingPostIds.has(sanitizeDocId(p.id))) {
+      const remote = remotePostsById.get(sanitizeDocId(p.id));
+      const localCount = Array.isArray(p.attachedDocuments) ? p.attachedDocuments.length : 0;
+      const remoteCount = Array.isArray(remote?.attachedDocuments) ? remote!.attachedDocuments.length : 0;
+      const shouldPush =
+        !remote ||
+        Number(p.updatedAt || 0) > Number(remote.updatedAt || 0) ||
+        localCount > remoteCount;
+      if (shouldPush) {
         await upsertPostToFirestore(p, localPosts, localCanadaDocs);
       }
     }
     for (const c of localCanadaDocs) {
       if (!c?.id || deletedSet.has(c.id)) continue;
-      if (!existingCanadaIds.has(sanitizeDocId(c.id))) {
+      const remote = remoteCanadaById.get(sanitizeDocId(c.id));
+      const localCount = Array.isArray(c.attachedDocuments) ? c.attachedDocuments.length : 0;
+      const remoteCount = Array.isArray(remote?.attachedDocuments) ? remote!.attachedDocuments.length : 0;
+      const shouldPush =
+        !remote ||
+        Number(c.updatedAt || 0) > Number(remote.updatedAt || 0) ||
+        localCount > remoteCount;
+      if (shouldPush) {
         await upsertCanadaDocToFirestore(c, localPosts, localCanadaDocs);
       }
     }

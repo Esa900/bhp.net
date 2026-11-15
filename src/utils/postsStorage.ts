@@ -409,27 +409,41 @@ export const addAttachedDocToPostAsync = async (params: {
   doc: AttachedDoc;
 }): Promise<AdminPost[]> => {
   postsMutationEpoch += 1;
-  const { postId, refNumber, candidateName, passportNumber, fullPost, doc: newDoc } = params;
+  const { postId, refNumber, candidateName, passportNumber, fullPost, doc: rawNewDoc } = params;
+
+  let sanitizedNewDoc: AttachedDoc = { ...rawNewDoc };
+  if (sanitizedNewDoc.dataUrl && sanitizedNewDoc.dataUrl.startsWith('data:')) {
+    const uploadedUrl = await uploadDataUrlDocument(
+      sanitizedNewDoc.name || 'document.pdf',
+      sanitizedNewDoc.dataUrl,
+      sanitizedNewDoc.type === 'image' || sanitizedNewDoc.type === 'other' ? sanitizedNewDoc.type : 'pdf'
+    );
+    sanitizedNewDoc = { ...sanitizedNewDoc, dataUrl: uploadedUrl };
+  }
+
+  const cleanFullPost = fullPost ? await sanitizeAndUploadPostFiles(fullPost) : undefined;
 
   const current = getStoredAdminPosts();
   let targetIdx = current.findIndex((p) => p.id === postId);
-  if (targetIdx === -1 && fullPost) {
-    current.unshift(fullPost);
+  if (targetIdx === -1 && cleanFullPost) {
+    current.unshift(cleanFullPost);
     targetIdx = 0;
   }
 
   let updatedPost: AdminPost | null = null;
   let nextList = [...current];
   if (targetIdx !== -1) {
-    const existing = current[targetIdx];
+    const existing = await sanitizeAndUploadPostFiles(current[targetIdx]);
     const existingAttached = Array.isArray(existing.attachedDocuments) ? [...existing.attachedDocuments] : [];
-    if (newDoc.isPrimary) {
+    if (sanitizedNewDoc.isPrimary) {
       existingAttached.forEach((d) => {
         d.isPrimary = false;
       });
     }
-    const filtered = existingAttached.filter((d) => d.id !== newDoc.id);
-    const orderedAttached = newDoc.isPrimary ? [newDoc, ...filtered] : [...filtered, newDoc];
+    const filtered = existingAttached.filter((d) => d.id !== sanitizedNewDoc.id);
+    const orderedAttached = sanitizedNewDoc.isPrimary
+      ? [sanitizedNewDoc, ...filtered]
+      : [...filtered, sanitizedNewDoc];
     updatedPost = {
       ...existing,
       attachedDocuments: orderedAttached,
@@ -454,8 +468,8 @@ export const addAttachedDocToPostAsync = async (params: {
         refNumber,
         candidateName,
         passportNumber,
-        fullPost,
-        doc: newDoc,
+        fullPost: updatedPost || cleanFullPost,
+        doc: sanitizedNewDoc,
       }),
     });
     const addJson = await addRes.json().catch(() => ({}));

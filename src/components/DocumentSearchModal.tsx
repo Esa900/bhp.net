@@ -40,12 +40,14 @@ interface DocumentSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   activeItem: DocumentMenuItem | null;
+  initialQuery?: string;
 }
 
 export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
   isOpen,
   onClose,
   activeItem,
+  initialQuery = '',
 }) => {
   const [query, setQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
@@ -67,7 +69,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
   const searchSeqRef = useRef<number>(0);
   const lastExecutedQueryRef = useRef<string>('');
 
-  // Load and subscribe to admin posts updates
+  // Load and subscribe to admin posts & Canada document updates
   useEffect(() => {
     const loadPosts = () => {
       const posts = getStoredAdminPosts();
@@ -78,18 +80,27 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
 
     const handlePostsUpdated = () => {
       loadPosts();
+      if (hasSearched && query.trim()) {
+        const refreshed = searchUniversalDocument(query);
+        if (refreshed) {
+          setMatchedUniversalDoc(refreshed.document);
+          if (refreshed.source === 'australia') setMatchedAdminPost(refreshed.rawRecord);
+        }
+      }
     };
 
     window.addEventListener('bhp_posts_updated', handlePostsUpdated);
+    window.addEventListener('bhp_canada_documents_updated', handlePostsUpdated);
     window.addEventListener('storage', handlePostsUpdated);
 
     return () => {
       window.removeEventListener('bhp_posts_updated', handlePostsUpdated);
+      window.removeEventListener('bhp_canada_documents_updated', handlePostsUpdated);
       window.removeEventListener('storage', handlePostsUpdated);
     };
-  }, []);
+  }, [hasSearched, query]);
 
-  // When activeItem changes or modal opens, reset search and focus input
+  // When activeItem changes or modal opens, reset search cleanly (never auto-search sampleValue)
   useEffect(() => {
     if (isOpen) {
       const fresh = getStoredAdminPosts();
@@ -100,10 +111,10 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       setPreviewZoom(100);
       setPreviewMaximized(false);
 
-      // If opened with a specific search query (e.g. from header search or post selection)
-      if (activeItem?.sampleValue && activeItem.sampleValue.trim()) {
-        setQuery(activeItem.sampleValue);
-        handleSearch(activeItem.sampleValue);
+      const explicitQuery = (initialQuery || '').trim();
+      if (explicitQuery) {
+        setQuery(explicitQuery);
+        handleSearch(explicitQuery);
       } else {
         searchSeqRef.current++;
         lastExecutedQueryRef.current = '';
@@ -118,7 +129,7 @@ export const DocumentSearchModal: React.FC<DocumentSearchModalProps> = ({
       searchSeqRef.current++;
       lastExecutedQueryRef.current = '';
     }
-  }, [isOpen, activeItem]);
+  }, [isOpen, activeItem, initialQuery]);
 
   // Auto-search as customer types their reference number or ID (debounced 260ms)
   useEffect(() => {

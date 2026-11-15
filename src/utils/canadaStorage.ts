@@ -472,32 +472,49 @@ export async function addAttachedDocToCanadaAsync(params: {
   doc: AttachedDoc;
 }): Promise<CanadaDocumentRecord[]> {
   canadaMutationEpoch += 1;
-  const { docId, referenceNo, candidateName, passportNumber, fullDocument, doc: newDoc } = params;
+  const { docId, referenceNo, candidateName, passportNumber, fullDocument, doc: rawNewDoc } = params;
+
+  // Ensure data URLs inside the new PDF attachment are uploaded first before saving
+  let sanitizedNewDoc: AttachedDoc = { ...rawNewDoc };
+  if (sanitizedNewDoc.dataUrl && sanitizedNewDoc.dataUrl.startsWith('data:')) {
+    const uploadedUrl = await uploadDataUrlDocument(
+      sanitizedNewDoc.name || 'Attached_Document.pdf',
+      sanitizedNewDoc.dataUrl,
+      sanitizedNewDoc.type === 'image' || sanitizedNewDoc.type === 'other' ? sanitizedNewDoc.type : 'pdf'
+    );
+    sanitizedNewDoc = { ...sanitizedNewDoc, dataUrl: uploadedUrl };
+  }
+
+  const cleanFullDocument = fullDocument ? await sanitizeAndUploadCanadaDocFiles(fullDocument) : undefined;
 
   const current = getStoredCanadaDocuments();
   let targetIdx = current.findIndex((d) => d.id === docId);
-  if (targetIdx === -1 && fullDocument) {
-    current.unshift(fullDocument);
+  if (targetIdx === -1 && cleanFullDocument) {
+    current.unshift(cleanFullDocument);
     targetIdx = 0;
   }
 
   let updatedRecord: CanadaDocumentRecord | null = null;
   let nextList = [...current];
   if (targetIdx !== -1) {
-    const existing = current[targetIdx];
+    const existing = await sanitizeAndUploadCanadaDocFiles(current[targetIdx]);
     const existingAttached = Array.isArray(existing.attachedDocuments) ? [...existing.attachedDocuments] : [];
-    if (newDoc.isPrimary) {
+    if (sanitizedNewDoc.isPrimary) {
       existingAttached.forEach((d) => {
         d.isPrimary = false;
       });
     }
-    const filtered = existingAttached.filter((d) => d.id !== newDoc.id);
-    const orderedAttached = newDoc.isPrimary ? [newDoc, ...filtered] : [...filtered, newDoc];
+    const filtered = existingAttached.filter((d) => d.id !== sanitizedNewDoc.id);
+    const orderedAttached = sanitizedNewDoc.isPrimary
+      ? [sanitizedNewDoc, ...filtered]
+      : [...filtered, sanitizedNewDoc];
     updatedRecord = {
       ...existing,
       attachedDocuments: orderedAttached,
-      documentFileName: newDoc.isPrimary || !existing.documentFileUrl ? newDoc.name : existing.documentFileName,
-      documentFileUrl: newDoc.isPrimary || !existing.documentFileUrl ? newDoc.dataUrl : existing.documentFileUrl,
+      documentFileName:
+        sanitizedNewDoc.isPrimary || !existing.documentFileUrl ? sanitizedNewDoc.name : existing.documentFileName,
+      documentFileUrl:
+        sanitizedNewDoc.isPrimary || !existing.documentFileUrl ? sanitizedNewDoc.dataUrl : existing.documentFileUrl,
       updatedAt: Date.now(),
     };
     nextList = current.map((d, i) => (i === targetIdx ? updatedRecord! : d));
@@ -519,8 +536,8 @@ export async function addAttachedDocToCanadaAsync(params: {
         referenceNo,
         candidateName,
         passportNumber,
-        fullDocument,
-        doc: newDoc,
+        fullDocument: updatedRecord || cleanFullDocument,
+        doc: sanitizedNewDoc,
       }),
     });
     const addJson = await addRes.json().catch(() => ({}));

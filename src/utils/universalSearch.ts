@@ -295,7 +295,44 @@ export async function searchUniversalDocumentAsync(
   if (cloudResult && expressResult) {
     const cloudTs = Number((cloudResult.record as any)?.updatedAt || 0);
     const expressTs = Number((expressResult.record as any)?.updatedAt || 0);
-    chosen = cloudTs >= expressTs ? cloudResult : expressResult;
+    const primary = expressTs > cloudTs ? expressResult : cloudResult;
+    const secondary = primary === expressResult ? cloudResult : expressResult;
+
+    const mergedDocs: any[] = [];
+    const seenIds = new Set<string>();
+    const seenSigs = new Set<string>();
+    const pushAttachment = (att: any) => {
+      if (!att || !att.dataUrl || att.dataUrl === '#') return;
+      if (att.id && seenIds.has(att.id)) return;
+      const sig = `${(att.sectionTag || 'default').toLowerCase()}::${(att.name || '').toLowerCase()}::${att.dataUrl}`;
+      if (seenSigs.has(sig)) return;
+      if (att.id) seenIds.add(att.id);
+      seenSigs.add(sig);
+      mergedDocs.push(att);
+    };
+
+    (Array.isArray(primary.record?.attachedDocuments) ? primary.record.attachedDocuments : []).forEach(pushAttachment);
+    (Array.isArray(secondary.record?.attachedDocuments) ? secondary.record.attachedDocuments : []).forEach(pushAttachment);
+
+    if (mergedDocs.length === 0 && primary.record?.documentFileUrl) {
+      pushAttachment({
+        id: `att-fallback-${primary.record.id || 'doc'}`,
+        name: primary.record.documentFileName || 'Official Document.pdf',
+        size: 'Official PDF',
+        type: 'pdf',
+        dataUrl: primary.record.documentFileUrl,
+        isPrimary: true,
+      });
+    }
+
+    chosen = {
+      source: primary.source,
+      record: {
+        ...secondary.record,
+        ...primary.record,
+        attachedDocuments: mergedDocs.length > 0 ? mergedDocs : primary.record?.attachedDocuments || [],
+      },
+    };
   } else {
     chosen = cloudResult || expressResult;
   }

@@ -247,8 +247,6 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
     };
   }, [dataUrl]);
 
-  const activeDocUrl = blobUrl || dataUrl;
-
   return (
     <div
       ref={containerRef}
@@ -305,8 +303,8 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
         </div>
       )}
 
-      {/* AUTOMATIC DIRECT-OPEN INLINE EMBEDDED VIEWER FALLBACK (NEVER STUCK ON SPINNER) */}
-      {!isLoading && useIframeFallback && activeDocUrl && activeDocUrl !== '#' && (
+      {/* AUTOMATIC DIRECT-OPEN INLINE EMBEDDED VIEWER FALLBACK (ONLY WHEN REAL PDF BLOB/STREAM IS LOADED) */}
+      {!isLoading && useIframeFallback && blobUrl && (
         <div
           className="w-full max-w-[900px] min-h-[650px] sm:min-h-[850px] rounded-xl overflow-hidden bg-white border border-[#2B2F38] shadow-2xl transition-transform origin-top"
           style={{
@@ -315,16 +313,27 @@ export const PdfCanvasRenderer: React.FC<PdfCanvasRendererProps> = ({
           }}
         >
           <object
-            data={`${activeDocUrl}#view=FitH&toolbar=0&navpanes=0`}
+            data={`${blobUrl}#view=FitH&toolbar=0&navpanes=0`}
             type="application/pdf"
             className="w-full h-[650px] sm:h-[850px] rounded-xl border-0 bg-white"
           >
             <iframe
-              src={`${activeDocUrl}#view=FitH&toolbar=0&navpanes=0`}
+              src={`${blobUrl}#view=FitH&toolbar=0&navpanes=0`}
               title={docName}
               className="w-full h-[650px] sm:h-[850px] border-0 bg-white"
             />
           </object>
+        </div>
+      )}
+
+      {!isLoading && useIframeFallback && !blobUrl && (
+        <div className="w-full max-w-[900px] p-8 rounded-xl bg-[#12141A] border border-red-500/30 text-center space-y-2">
+          <p className="text-sm font-bold text-red-400">
+            Unable to load PDF preview ({docName})
+          </p>
+          <p className="text-xs text-gray-400">
+            এই পিডিএফ ফাইলটি লোড করা যায়নি। Admin Panel থেকে ফাইলটি পুনরায় আপলোড বা Cloud Sync করে সেভ করুন।
+          </p>
         </div>
       )}
     </div>

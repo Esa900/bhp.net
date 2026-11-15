@@ -102,8 +102,8 @@ export function getFirebaseDomainAuthGuide(): FirebaseDomainAuthGuide {
 
 export async function checkExpressBackendAvailable(forceRefresh = false): Promise<boolean> {
   if (typeof window === 'undefined') return false;
-  if (!forceRefresh && expressAvailableCached !== null) {
-    return expressAvailableCached;
+  if (!forceRefresh && expressAvailableCached === true) {
+    return true;
   }
   try {
     const res = await fetch('/api/posts', { method: 'GET', cache: 'no-store' });
@@ -240,10 +240,11 @@ export async function ensureFirebaseCloudAdmin(): Promise<boolean> {
     return true;
   }
 
-  // If Express backend is running on this host and Google domain is already known unauthorized,
-  // avoid triggering repeated failing popups on every save/upload click.
-  const expressOnline = await checkExpressBackendAvailable();
-  if (lastUnauthorizedDomain && expressOnline) {
+  // If the Express backend is reachable on this host, save directly to Express without
+  // popping up a surprise Google OAuth dialog that can be blocked by mobile/iframe browsers.
+  // Admin can still connect Google Cloud manually anytime via the "Google Cloud" button.
+  const expressOnline = await checkExpressBackendAvailable(true);
+  if (expressOnline) {
     return false;
   }
 
@@ -256,9 +257,6 @@ export async function ensureFirebaseCloudAdmin(): Promise<boolean> {
     }
     return true;
   } catch (err) {
-    if (expressOnline) {
-      return false;
-    }
     throw err;
   }
 }

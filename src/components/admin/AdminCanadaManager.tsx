@@ -196,18 +196,30 @@ export const AdminCanadaManager: React.FC<AdminCanadaManagerProps> = ({ showToas
     }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputEl = e.currentTarget;
+    const file = inputEl.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
+    try {
+      const uploaded = await uploadBinaryDocument(file, 'image');
       setDocForm((prev) => ({
         ...prev,
-        candidatePhotoUrl: reader.result as string,
+        candidatePhotoUrl: uploaded.fileUrl,
       }));
       showToast(`Candidate photo "${file.name}" uploaded successfully.`);
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setDocForm((prev) => ({
+          ...prev,
+          candidatePhotoUrl: reader.result as string,
+        }));
+        showToast(`Candidate photo "${file.name}" attached.`);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      if (inputEl) inputEl.value = '';
+    }
   };
 
   // Sync event listeners & initial server fetch

@@ -172,21 +172,33 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
   const candidatePhotoInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleCandidatePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleCandidatePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputEl = e.currentTarget;
+    const file = inputEl.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
+    try {
+      const uploaded = await uploadBinaryDocument(file, 'image');
       setPostForm((prev) => ({
         ...prev,
-        candidatePhotoUrl: dataUrl,
-        imageUrl: dataUrl,
+        candidatePhotoUrl: uploaded.fileUrl,
+        imageUrl: uploaded.fileUrl,
       }));
       showToast(`Candidate photo "${file.name}" uploaded successfully.`);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        setPostForm((prev) => ({
+          ...prev,
+          candidatePhotoUrl: dataUrl,
+          imageUrl: dataUrl,
+        }));
+        showToast(`Candidate photo "${file.name}" attached.`);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      if (inputEl) inputEl.value = '';
+    }
   };
 
   // Quick PDF Add States for Australia Post
@@ -686,24 +698,33 @@ export const AdminAustraliaManager: React.FC<AdminAustraliaManagerProps> = ({ sh
   };
 
   // Gallery image upload
-  const handleGalleryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    (Array.from(files) as File[]).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setPostForm((prev) => ({
-            ...prev,
-            galleryImages: [...prev.galleryImages, reader.result as string],
-          }));
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    const filesList = Array.from(files) as File[];
+    for (const file of filesList) {
+      try {
+        const uploaded = await uploadBinaryDocument(file, 'image');
+        setPostForm((prev) => ({
+          ...prev,
+          galleryImages: [...prev.galleryImages, uploaded.fileUrl],
+        }));
+      } catch {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            setPostForm((prev) => ({
+              ...prev,
+              galleryImages: [...prev.galleryImages, reader.result as string],
+            }));
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    }
     if (galleryInputRef.current) galleryInputRef.current.value = '';
-    showToast('Gallery image added.');
+    showToast('Gallery image(s) added.');
   };
 
   const handleRemoveGalleryImage = (idx: number) => {
